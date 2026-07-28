@@ -729,3 +729,553 @@ body.leslie-modern #preloader::before {
         animation-iteration-count: 1 !important;
     }
 }
+
+/* -------------------------------------------------------------------------
+ * Unified control colors
+ *
+ * SillyTavern's advanced panels historically mix theme variables with fixed
+ * black/white values. These semantic tokens keep nested tabs, form controls,
+ * popup menus and extensions legible in both light and dark system themes.
+ * ---------------------------------------------------------------------- */
+
+body.leslie-modern {
+    --leslie-panel: #ffffff;
+    --leslie-panel-glass: rgba(255, 255, 255, 0.98);
+    --leslie-panel-muted: #f5f8fb;
+    --leslie-panel-strong: #e9eff5;
+    --leslie-input: #f8fafc;
+    --leslie-control: #f2f6fa;
+    --leslie-control-hover: #e6effb;
+    --leslie-control-active: #dbeaff;
+    --leslie-divider: #e5ecf3;
+    --leslie-track: #c6d2df;
+    --leslie-thumb-ring: #ffffff;
+    --leslie-disabled: #edf2f6;
+    --leslie-disabled-text: #98a6b6;
+    --leslie-code: #eef3f8;
+    --leslie-menu-shadow: 0 18px 48px rgba(31, 56, 88, 0.16);
+    --leslie-backdrop: rgba(28, 45, 66, 0.34);
+    --leslie-scrollbar: #b9c7d5;
+    --leslie-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2365758b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    color-scheme: light;
+}
+
+body.leslie-modern ::-webkit-scrollbar-thumb:vertical,
+body.leslie-modern ::-webkit-scrollbar-thumb:horizontal {
+    background-color: var(--leslie-scrollbar);
+}
+
+/* Nested surfaces and section headers */
+body.leslie-modern .drawer-content,
+body.leslie-modern .popup,
+body.leslie-modern .options-content,
+body.leslie-modern #options,
+body.leslie-modern #extensionsMenu,
+body.leslie-modern .list-group,
+body.leslie-modern .ui-menu,
+body.leslie-modern .ui-autocomplete,
+body.leslie-modern .ui-widget-content,
+body.leslie-modern .select2-dropdown,
+body.leslie-modern #character_context_menu ul {
+    color: var(--leslie-text);
+    background-color: var(--leslie-panel-glass);
+    border-color: var(--leslie-border);
+    text-shadow: none;
+}
+
+body.leslie-modern .drawer-content,
+body.leslie-modern .popup,
+body.leslie-modern .select2-dropdown,
+body.leslie-modern .ui-menu,
+body.leslie-modern .ui-autocomplete,
+body.leslie-modern #character_context_menu ul {
+    box-shadow: var(--leslie-menu-shadow);
+}
+
+body.leslie-modern .drawer-content :is(h1, h2, h3, h4, h5, h6, legend, label),
+body.leslie-modern .popup :is(h1, h2, h3, h4, h5, h6, legend, label),
+body.leslie-modern .range-block-title,
+body.leslie-modern .range-block-counter,
+body.leslie-modern .checkbox_label,
+body.leslie-modern .radio_label {
+    color: var(--leslie-text);
+    text-shadow: none;
+}
+
+body.leslie-modern .drawer-content :is(.text_muted, .text-muted, .toggle-description, small),
+body.leslie-modern .popup :is(.text_muted, .text-muted, .toggle-description, small),
+body.leslie-modern .select2-selection__placeholder {
+    color: var(--leslie-text-soft);
+    opacity: 1;
+}
+
+body.leslie-modern #extensions_settings .inline-drawer-toggle.inline-drawer-header,
+body.leslie-modern #extensions_settings2 .inline-drawer-toggle.inline-drawer-header,
+body.leslie-modern #user-settings-block h4,
+body.leslie-modern .standoutHeader,
+body.leslie-modern .ui-widget-header,
+body.leslie-modern .ui-tabs-nav {
+    color: var(--leslie-text);
+    background: var(--leslie-panel-strong);
+    border-color: var(--leslie-border);
+    text-shadow: none;
+}
+
+body.leslie-modern .standoutHeader ~ .inline-drawer-content,
+body.leslie-modern .settingsSectionWrap,
+body.leslie-modern details,
+body.leslie-modern .prompt_order > div,
+body.leslie-modern #rm_print_characters_block .inline-drawer-content {
+    color: var(--leslie-text);
+    background: var(--leslie-panel-muted);
+    border-color: var(--leslie-border);
+    text-shadow: none;
+}
+
+body.leslie-modern .inline-drawer-header:hover,
+body.leslie-modern .standoutHeader.inline-drawer-header:hover {
+    color: var(--leslie-accent-strong);
+    background: var(--leslie-control-hover);
+    filter: none;
+}
+
+body.leslie-modern hr {
+    background: var(--leslie-divider);
+    opacity: 1;
+}
+
+/* Tabs and tab-like icon rows */
+body.leslie-modern :is(.ui-tabs-tab, .ui-state-default, [role="tab"]) {
+    color: var(--leslie-text-soft);
+    background: var(--leslie-control);
+    border-color: var(--leslie-border);
+}
+
+body.leslie-modern :is(.ui-tabs-tab.ui-tabs-active, .ui-state-active, [role="tab"][aria-selected="true"]) {
+    color: var(--leslie-accent-strong);
+    background: var(--leslie-control-active);
+    border-color: color-mix(in srgb, var(--leslie-accent) 45%, var(--leslie-border));
+}
+
+body.leslie-modern .drawer-content .right_menu_button {
+    color: var(--leslie-text-soft);
+    border-radius: 9px;
+    filter: none;
+}
+
+body.leslie-modern .drawer-content .right_menu_button:is(:hover, .active, .selected-right-tab),
+body.leslie-modern .drawer-content .selected-right-tab {
+    color: var(--leslie-accent);
+    background: var(--leslie-control-hover);
+    filter: none;
+}
+
+/* Text fields, dropdowns and Select2 */
+body.leslie-modern :is(textarea:not(#send_textarea), input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, .text_pole, .neo-range-input),
+body.leslie-modern .select2-container :is(.select2-selection--single, .select2-selection--multiple, .select2-search__field) {
+    color: var(--leslie-text);
+    background: var(--leslie-input);
+    border-color: var(--leslie-border);
+    box-shadow: none;
+    text-shadow: none;
+}
+
+body.leslie-modern select {
+    background-image: var(--leslie-select-arrow);
+    background-repeat: no-repeat;
+    background-position: right 7px center;
+    background-size: 10px 6px;
+}
+
+body.leslie-modern select option,
+body.leslie-modern select option:not(:checked),
+body.leslie-modern .select2-results__option,
+body.leslie-modern .select2-results .select2-results__option--group,
+body.leslie-modern .select2-results .select2-results__option--selectable {
+    color: var(--leslie-text);
+    background: var(--leslie-panel);
+}
+
+body.leslie-modern .select2-container .select2-selection--single .select2-selection__rendered,
+body.leslie-modern .select2-selection__rendered,
+body.leslie-modern .select2-container .select2-selection .select2-selection__clear,
+body.leslie-modern .select2-container .select2-selection__choice,
+body.leslie-modern .select2-container .select2-selection__choice__remove {
+    color: var(--leslie-text);
+}
+
+body.leslie-modern .select2-container .select2-selection__choice {
+    background: var(--leslie-control);
+    border-color: var(--leslie-border);
+}
+
+body.leslie-modern .select2-results .select2-results__option--selectable {
+    opacity: 0.78;
+}
+
+body.leslie-modern .select2-results .select2-results__option--highlighted.select2-results__option--selectable,
+body.leslie-modern .select2-results__option--selected {
+    color: var(--leslie-accent-strong);
+    background: var(--leslie-control-hover);
+    opacity: 1;
+}
+
+body.leslie-modern .select2-results__option::before {
+    background: var(--leslie-input);
+    border-color: var(--leslie-border);
+}
+
+body.leslie-modern :is(textarea, input, select)::placeholder,
+body.leslie-modern .select2-search__field::placeholder {
+    color: var(--leslie-disabled-text);
+    opacity: 1;
+}
+
+body.leslie-modern :is(textarea, input, select):disabled,
+body.leslie-modern :is(textarea, input, select)[readonly] {
+    color: var(--leslie-disabled-text);
+    background-color: var(--leslie-disabled);
+    border-color: var(--leslie-divider);
+    opacity: 1;
+}
+
+/* Buttons, menus and secondary actions */
+body.leslie-modern .menu_button,
+body.leslie-modern button:not(.toast-close-button),
+body.leslie-modern .options-content a,
+body.leslie-modern .list-group-item,
+body.leslie-modern #character_context_menu button {
+    color: var(--leslie-text);
+    background: var(--leslie-control);
+    border-color: var(--leslie-border);
+    box-shadow: none;
+    text-shadow: none;
+    filter: none;
+}
+
+body.leslie-modern .menu_button:not(.disabled):not([disabled]):hover,
+body.leslie-modern button:not(.toast-close-button):not(:disabled):hover,
+body.leslie-modern .options-content a:hover,
+body.leslie-modern .list-group-item:hover,
+body.leslie-modern #character_context_menu button:hover {
+    color: var(--leslie-accent-strong);
+    background: var(--leslie-control-hover);
+    border-color: color-mix(in srgb, var(--leslie-accent) 35%, var(--leslie-border));
+    filter: none;
+}
+
+body.leslie-modern .menu_button:is(.active, .toggled, .toggleEnabled),
+body.leslie-modern button[aria-pressed="true"] {
+    color: var(--leslie-accent-strong);
+    background: var(--leslie-control-active);
+    border-color: color-mix(in srgb, var(--leslie-accent) 45%, var(--leslie-border));
+}
+
+body.leslie-modern :is(.menu_button, button).disabled,
+body.leslie-modern :is(.menu_button, button):disabled {
+    color: var(--leslie-disabled-text);
+    background: var(--leslie-disabled);
+    border-color: var(--leslie-divider);
+    filter: none;
+    opacity: 0.72;
+}
+
+/* Sliders */
+body.leslie-modern input[type="range"],
+body.leslie-modern .neo-range-slider {
+    height: 6px;
+    color: var(--leslie-accent);
+    background: var(--leslie-track) !important;
+    background-image: none !important;
+    border: 0;
+    border-radius: 999px;
+    box-shadow: inset 0 1px 2px rgba(31, 56, 88, 0.14);
+    filter: none;
+}
+
+body.leslie-modern input[type="range"]:hover,
+body.leslie-modern .neo-range-slider:hover {
+    filter: none;
+}
+
+body.leslie-modern input[type="range"]::-webkit-slider-thumb,
+body.leslie-modern .neo-range-slider::-webkit-slider-thumb {
+    width: 17px;
+    height: 17px;
+    background: var(--leslie-accent) !important;
+    border: 3px solid var(--leslie-thumb-ring) !important;
+    box-shadow: 0 2px 7px rgba(26, 75, 140, 0.28);
+}
+
+body.leslie-modern input[type="range"]::-moz-range-track,
+body.leslie-modern .neo-range-slider::-moz-range-track {
+    height: 6px;
+    background: var(--leslie-track);
+    border-radius: 999px;
+}
+
+body.leslie-modern input[type="range"]::-moz-range-progress,
+body.leslie-modern .neo-range-slider::-moz-range-progress {
+    height: 6px;
+    background: var(--leslie-accent);
+    border-radius: 999px;
+}
+
+body.leslie-modern input[type="range"]::-moz-range-thumb,
+body.leslie-modern .neo-range-slider::-moz-range-thumb {
+    width: 13px;
+    height: 13px;
+    background: var(--leslie-accent);
+    border: 3px solid var(--leslie-thumb-ring);
+    border-radius: 50%;
+    box-shadow: 0 2px 7px rgba(26, 75, 140, 0.28);
+}
+
+/* Checkboxes and radio buttons */
+body.leslie-modern input[type="checkbox"],
+body.leslie-modern input[type="radio"] {
+    color: var(--leslie-text);
+    background: var(--leslie-input);
+    border: 1px solid var(--leslie-border);
+    outline: none;
+    box-shadow: inset 0 1px 2px rgba(31, 56, 88, 0.09);
+    filter: none;
+}
+
+body.leslie-modern input[type="checkbox"]:checked,
+body.leslie-modern input[type="radio"]:checked {
+    background: var(--leslie-accent);
+    border-color: var(--leslie-accent);
+}
+
+body.leslie-modern input[type="checkbox"]::before {
+    box-shadow: inset 1em 1em #ffffff;
+}
+
+body.leslie-modern input[type="checkbox"]:disabled,
+body.leslie-modern input[type="radio"]:disabled {
+    background: var(--leslie-disabled);
+    border-color: var(--leslie-divider);
+    opacity: 0.7;
+}
+
+body.leslie-modern :is(button, .menu_button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--leslie-accent) 72%, transparent);
+    outline-offset: 2px;
+}
+
+body.leslie-modern :is(#tooltip, .ui-tooltip, [role="tooltip"], .tippy-box) {
+    color: var(--leslie-text);
+    background: var(--leslie-panel-strong);
+    border: 1px solid var(--leslie-border);
+    box-shadow: var(--leslie-menu-shadow);
+    text-shadow: none;
+}
+
+/* Tables, code blocks and utility overlays */
+body.leslie-modern :is(table, th, td) {
+    border-color: var(--leslie-border);
+}
+
+body.leslie-modern :is(pre, code, kbd, samp) {
+    color: var(--leslie-text);
+    background-color: var(--leslie-code);
+    border-color: var(--leslie-border);
+    text-shadow: none;
+}
+
+body.leslie-modern .popup[open]::backdrop,
+body.leslie-modern #shadow_popup {
+    background-color: var(--leslie-backdrop);
+}
+
+/* Re-apply the semantic surfaces to core layout elements. */
+body.leslie-modern #top-settings-holder,
+body.leslie-modern #sheld,
+body.leslie-modern #leslie-chat-header,
+body.leslie-modern #form_sheld {
+    color: var(--leslie-text);
+    background: var(--leslie-panel-glass);
+    border-color: var(--leslie-border);
+}
+
+body.leslie-modern #send_form {
+    color: var(--leslie-text);
+    background: var(--leslie-input) !important;
+    border-color: var(--leslie-border);
+}
+
+body.leslie-modern #chat {
+    color: var(--leslie-text);
+    background:
+        linear-gradient(color-mix(in srgb, var(--leslie-panel-muted) 92%, transparent), color-mix(in srgb, var(--leslie-panel-muted) 96%, transparent)),
+        radial-gradient(circle at 1px 1px, var(--leslie-divider) 1px, transparent 0);
+    background-size: auto, 22px 22px;
+}
+
+body.leslie-modern #chat > .mes .mes_block {
+    color: var(--leslie-text);
+    background: var(--leslie-panel);
+    border-color: var(--leslie-border);
+}
+
+/* Dark palette selected by the active SillyTavern theme. */
+body.leslie-modern[data-leslie-color-scheme="dark"] {
+    --leslie-accent: #6ca8ff;
+    --leslie-accent-strong: #91bdff;
+    --leslie-accent-soft: #172b46;
+    --leslie-mint: #183e34;
+    --leslie-mint-strong: #214c40;
+    --leslie-canvas: #0e151e;
+    --leslie-surface: rgba(20, 29, 40, 0.96);
+    --leslie-surface-solid: #141d28;
+    --leslie-surface-subtle: #18232f;
+    --leslie-text: #e8eef6;
+    --leslie-text-soft: #aebbd0;
+    --leslie-border: #334252;
+    --leslie-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+    --leslie-shadow-soft: 0 10px 36px rgba(0, 0, 0, 0.32);
+    --leslie-panel: #141d28;
+    --leslie-panel-glass: rgba(20, 29, 40, 0.98);
+    --leslie-panel-muted: #18232f;
+    --leslie-panel-strong: #202d3a;
+    --leslie-input: #101922;
+    --leslie-control: #202c38;
+    --leslie-control-hover: #283a4e;
+    --leslie-control-active: #203d63;
+    --leslie-divider: #293746;
+    --leslie-track: #465667;
+    --leslie-thumb-ring: #17212c;
+    --leslie-disabled: #1b2530;
+    --leslie-disabled-text: #708094;
+    --leslie-code: #0d151e;
+    --leslie-menu-shadow: 0 20px 58px rgba(0, 0, 0, 0.48);
+    --leslie-backdrop: rgba(2, 7, 12, 0.62);
+    --leslie-scrollbar: #4a5a6b;
+    --leslie-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23aebbd0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    color-scheme: dark;
+    background: var(--leslie-canvas);
+}
+
+body.leslie-modern[data-leslie-color-scheme="dark"] #bg1 {
+    background:
+        radial-gradient(circle at 15% 12%, rgba(73, 136, 238, 0.16), transparent 30%),
+        radial-gradient(circle at 86% 84%, rgba(53, 166, 121, 0.11), transparent 29%),
+        linear-gradient(145deg, #111b27 0%, #0e151e 52%, #111923 100%);
+}
+
+body.leslie-modern[data-leslie-color-scheme="dark"] #top-settings-holder {
+    box-shadow: var(--leslie-shadow-soft);
+}
+
+body.leslie-modern[data-leslie-color-scheme="dark"] #top-settings-holder::after {
+    color: #8bd7b6;
+    background: #183a30;
+}
+
+body.leslie-modern[data-leslie-color-scheme="dark"] .mes .avatar img {
+    border-color: #263646;
+    box-shadow: 0 5px 16px rgba(0, 0, 0, 0.36);
+}
+
+body.leslie-modern[data-leslie-color-scheme="dark"] #chat > .mes[is_user="true"] .mes_block {
+    color: #e4f6ed;
+    background: linear-gradient(145deg, var(--leslie-mint), var(--leslie-mint-strong));
+    border-color: #316251;
+}
+
+body.leslie-modern[data-leslie-color-scheme="dark"] #chat > .mes[is_user="true"] .mes_block .ch_name {
+    color: #8bd7b6;
+}
+
+body.leslie-modern[data-leslie-color-scheme="dark"] #chat > .mes[is_system="true"] .mes_block {
+    color: var(--leslie-text-soft);
+    background: #202b37;
+}
+
+body.leslie-modern[data-leslie-color-scheme="dark"] :is(#send_but, #mes_continue) {
+    color: #ffffff;
+    background: linear-gradient(145deg, #5799f6, #2875db);
+}
+
+/* Dark system theme */
+@media (prefers-color-scheme: dark) {
+    body.leslie-modern:not([data-leslie-color-scheme]) {
+        --leslie-accent: #6ca8ff;
+        --leslie-accent-strong: #91bdff;
+        --leslie-accent-soft: #172b46;
+        --leslie-mint: #183e34;
+        --leslie-mint-strong: #214c40;
+        --leslie-canvas: #0e151e;
+        --leslie-surface: rgba(20, 29, 40, 0.96);
+        --leslie-surface-solid: #141d28;
+        --leslie-surface-subtle: #18232f;
+        --leslie-text: #e8eef6;
+        --leslie-text-soft: #aebbd0;
+        --leslie-border: #334252;
+        --leslie-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+        --leslie-shadow-soft: 0 10px 36px rgba(0, 0, 0, 0.32);
+        --leslie-panel: #141d28;
+        --leslie-panel-glass: rgba(20, 29, 40, 0.98);
+        --leslie-panel-muted: #18232f;
+        --leslie-panel-strong: #202d3a;
+        --leslie-input: #101922;
+        --leslie-control: #202c38;
+        --leslie-control-hover: #283a4e;
+        --leslie-control-active: #203d63;
+        --leslie-divider: #293746;
+        --leslie-track: #465667;
+        --leslie-thumb-ring: #17212c;
+        --leslie-disabled: #1b2530;
+        --leslie-disabled-text: #708094;
+        --leslie-code: #0d151e;
+        --leslie-menu-shadow: 0 20px 58px rgba(0, 0, 0, 0.48);
+        --leslie-backdrop: rgba(2, 7, 12, 0.62);
+        --leslie-scrollbar: #4a5a6b;
+        --leslie-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23aebbd0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        color-scheme: dark;
+        background: var(--leslie-canvas);
+    }
+
+    body.leslie-modern:not([data-leslie-color-scheme]) #bg1 {
+        background:
+            radial-gradient(circle at 15% 12%, rgba(73, 136, 238, 0.16), transparent 30%),
+            radial-gradient(circle at 86% 84%, rgba(53, 166, 121, 0.11), transparent 29%),
+            linear-gradient(145deg, #111b27 0%, #0e151e 52%, #111923 100%);
+    }
+
+    body.leslie-modern:not([data-leslie-color-scheme]) #top-settings-holder {
+        box-shadow: var(--leslie-shadow-soft);
+    }
+
+    body.leslie-modern:not([data-leslie-color-scheme]) #top-settings-holder::after {
+        color: #8bd7b6;
+        background: #183a30;
+    }
+
+    body.leslie-modern:not([data-leslie-color-scheme]) .mes .avatar img {
+        border-color: #263646;
+        box-shadow: 0 5px 16px rgba(0, 0, 0, 0.36);
+    }
+
+    body.leslie-modern:not([data-leslie-color-scheme]) #chat > .mes[is_user="true"] .mes_block {
+        color: #e4f6ed;
+        background: linear-gradient(145deg, var(--leslie-mint), var(--leslie-mint-strong));
+        border-color: #316251;
+    }
+
+    body.leslie-modern:not([data-leslie-color-scheme]) #chat > .mes[is_user="true"] .mes_block .ch_name {
+        color: #8bd7b6;
+    }
+
+    body.leslie-modern:not([data-leslie-color-scheme]) #chat > .mes[is_system="true"] .mes_block {
+        color: var(--leslie-text-soft);
+        background: #202b37;
+    }
+
+    body.leslie-modern:not([data-leslie-color-scheme]) #send_but,
+    body.leslie-modern:not([data-leslie-color-scheme]) #mes_continue {
+        color: #ffffff;
+        background: linear-gradient(145deg, #5799f6, #2875db);
+    }
+}
