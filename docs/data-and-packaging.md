@@ -15,7 +15,7 @@ The following are always local and ignored:
 
 ## Local Windows workflow
 
-The root Windows shortcuts call scripts under `packaging/windows-local/`. Paths are resolved relative to the repository, so the project can be moved without editing the scripts. The launcher verifies the actual data root and the localhost listener before reporting success.
+The root Windows shortcuts call scripts under `packaging/windows-local/`. Paths are resolved relative to the repository, so the project can be moved without editing the scripts. The launcher verifies the actual data root and the listener resolved from `Config/config.yaml` before reporting success. If LAN web access is enabled locally, keep an explicit IP allowlist and restrict the Windows firewall rule to the trusted network interface and subnet. Portable builds remain localhost-only.
 
 ## Portable build
 

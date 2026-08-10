@@ -20,7 +20,7 @@ Before changing code, read `README.md`, `docs/project-overview.md`, and `docs/ro
 
 - Run the narrowest relevant tests while developing.
 - Before handing off a repository-level change, run `npm run check:repo`, `npm run lint`, and the relevant unit tests.
-- Desktop and packaging changes should also verify the resolved data root and localhost-only listener.
+- Desktop and packaging changes should also verify the resolved data root and configured listener. Portable builds must remain localhost-only; any local LAN listener must retain an explicit IP allowlist and a trusted-network firewall boundary.
 
 ## Git and documentation
 

@@ -15,6 +15,18 @@ foreach ($required in @($ElectronPath, $AppEntry, $ConfigPath, $DataPath)) {
     }
 }
 
+$configText = Get-Content -LiteralPath $ConfigPath -Raw -Encoding utf8
+$portMatch = [regex]::Match($configText, '(?m)^port:\s*(\d+)\s*$')
+if (-not $portMatch.Success) {
+    throw "Unable to resolve the server port from $ConfigPath"
+}
+$expectedPort = [int]$portMatch.Groups[1].Value
+$listenEnabled = [regex]::IsMatch($configText, '(?m)^listen:\s*true\s*$')
+$listenAddressMatch = [regex]::Match($configText, '(?ms)^listenAddress:\s*\r?\n\s+ipv4:\s*["'']?([^"''#\r\n]+)')
+$configuredIpv4 = if ($listenAddressMatch.Success) { $listenAddressMatch.Groups[1].Value.Trim() } else { '0.0.0.0' }
+$expectedIpv4 = if ($listenEnabled) { $configuredIpv4 } else { '127.0.0.1' }
+$expectedListener = '{0}:{1}' -f $expectedIpv4, $expectedPort
+
 foreach ($directory in @($CachePath, $LogsPath, $RunPath)) {
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
 }
@@ -53,6 +65,7 @@ $process = Start-Process -FilePath $ElectronPath -ArgumentList $arguments -Worki
 [IO.File]::WriteAllText($PidPath, [string]$process.Id, [Text.UTF8Encoding]::new($false))
 
 $started = $false
+$actualListener = $null
 for ($attempt = 0; $attempt -lt 90; $attempt++) {
     Start-Sleep -Milliseconds 500
     $process.Refresh()
@@ -71,7 +84,13 @@ for ($attempt = 0; $attempt -lt 90; $attempt++) {
                 throw "Data-root safety check failed. Actual: $actualDataRoot Expected: $DataPath"
             }
         }
-        if ($logText -match 'SillyTavern is listening on IPv4:\s*127\.0\.0\.1:8127') {
+        if ($logText -match 'SillyTavern is listening on IPv4:\s*([^\s:]+):(\d+)') {
+            $actualListener = '{0}:{1}' -f $Matches[1], $Matches[2]
+            if ($actualListener -ne $expectedListener) {
+                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath $PidPath -Force -ErrorAction SilentlyContinue
+                throw "Listener safety check failed. Actual: $actualListener Expected: $expectedListener"
+            }
             $started = $true
             break
         }
@@ -79,7 +98,39 @@ for ($attempt = 0; $attempt -lt 90; $attempt++) {
 }
 
 if ($started) {
-    Write-Host 'LeslieTavern started. Close its window or run the stop shortcut to exit safely.' -ForegroundColor Green
+    Write-Host "LeslieTavern started on $actualListener. Close its window or run the stop shortcut to exit safely." -ForegroundColor Green
+    if ($expectedIpv4 -eq '0.0.0.0') {
+        $lanUrls = foreach ($networkInterface in [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
+            if ($networkInterface.OperationalStatus -ne [Net.NetworkInformation.OperationalStatus]::Up) {
+                continue
+            }
+            $ipProperties = $networkInterface.GetIPProperties()
+            $hasIpv4Gateway = $ipProperties.GatewayAddresses | Where-Object {
+                $_.Address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork
+            }
+            if (-not $hasIpv4Gateway) {
+                continue
+            }
+            foreach ($unicastAddress in $ipProperties.UnicastAddresses) {
+                $address = $unicastAddress.Address
+                if ($address.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) {
+                    continue
+                }
+                $addressBytes = $address.GetAddressBytes()
+                $isPrivateAddress = $addressBytes[0] -eq 10 -or
+                    ($addressBytes[0] -eq 172 -and $addressBytes[1] -ge 16 -and $addressBytes[1] -le 31) -or
+                    ($addressBytes[0] -eq 192 -and $addressBytes[1] -eq 168)
+                if ($isPrivateAddress) {
+                    'http://{0}:{1}/' -f $address.IPAddressToString, $expectedPort
+                }
+            }
+        }
+        $lanUrls = $lanUrls | Sort-Object -Unique
+        if ($lanUrls) {
+            Write-Host ('LAN URL: ' + ($lanUrls -join '  ')) -ForegroundColor Cyan
+        }
+        Write-Host 'LAN access is limited by Config\config.yaml whitelist and the Windows firewall.' -ForegroundColor Yellow
+    }
 } else {
     Write-Host "LeslieTavern is still initializing. Logs: $LogsPath" -ForegroundColor Yellow
 }

@@ -28,7 +28,7 @@ Browser UI
 - Leslie modules should be optional and fail open.
 - Character cards, JSONL chats, group chats, World Info, swipes, and model adapters must remain usable.
 - User data is local state and is not part of the source repository.
-- LAN access, cloud synchronization, and automatic memory writes require explicit security and approval designs before implementation.
+- Direct LAN web access may be enabled explicitly with an IP allowlist and a trusted-network firewall boundary. Device discovery, data synchronization, cloud synchronization, and automatic memory writes still require separate security and approval designs before implementation.
 
 ## Current maturity
 

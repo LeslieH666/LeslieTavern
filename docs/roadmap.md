@@ -3,7 +3,7 @@
 ## Available in the current prototype
 
 - SillyTavern-compatible chat and character workflows.
-- Electron desktop entry point and localhost-only local launcher.
+- Electron desktop entry point and a listener-aware local launcher; the current workspace can explicitly enable allowlisted LAN web access.
 - Modern desktop chat layout and settings adaptations.
 - First versions of Leslie memory and Persona/storyline identity isolation.
 - Moments publishing and timeline storage prototype.
@@ -23,7 +23,7 @@
 
 - AI-assisted moments interactions with preview and explicit approval.
 - A project/workspace layer for multiple stories or role-play contexts.
-- Secure LAN synchronization with authentication and a documented threat model.
+- Secure LAN device discovery and synchronization with authentication and a documented threat model.
 - Signed installer, update strategy, version migration, and release automation.
 
 ## Not promised yet
