@@ -118,6 +118,14 @@
     ],
     "type": "module",
     "license": "AGPL-3.0",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/LeslieH666/LeslieTavern.git"
+    },
+    "bugs": {
+        "url": "https://github.com/LeslieH666/LeslieTavern/issues"
+    },
+    "homepage": "https://github.com/LeslieH666/LeslieTavern#readme",
     "version": "1.18.0",
     "scripts": {
         "init": "node src/server-init.js",

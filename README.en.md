@@ -2,6 +2,9 @@
 
 English | [简体中文](README.md)
 
+[![CI](https://github.com/LeslieH666/LeslieTavern/actions/workflows/ci.yml/badge.svg)](https://github.com/LeslieH666/LeslieTavern/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+
 LeslieTavern is an experimental desktop-oriented fork of [SillyTavern](https://github.com/SillyTavern/SillyTavern). It preserves the upstream chat and data formats while adding an Electron entry point, a modern chat interface, character memory, identity isolation, a moments prototype, and character voice features.
 
 > The project is a runnable prototype. It is not an official SillyTavern release or a signed production distribution.
@@ -19,7 +22,7 @@ LeslieTavern is an experimental desktop-oriented fork of [SillyTavern](https://g
 Node.js 20 or newer, npm, and Git are required.
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/LeslieH666/LeslieTavern.git
 cd LeslieTavern
 npm ci
 npm ci --prefix src/electron

@@ -2,6 +2,9 @@
 
 [English](README.en.md) | 简体中文
 
+[![CI](https://github.com/LeslieH666/LeslieTavern/actions/workflows/ci.yml/badge.svg)](https://github.com/LeslieH666/LeslieTavern/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+
 LeslieTavern 是基于 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 开发的实验性桌面聊天分支，保留原有聊天兼容性，并增加 Electron 桌面入口、现代聊天界面、角色记忆、身份隔离、朋友圈原型和角色语音功能。
 
 > 当前处于可运行原型阶段，不是 SillyTavern 官方版本，也不是经过签名的正式发行版。
@@ -21,7 +24,7 @@ LeslieTavern 是基于 [SillyTavern](https://github.com/SillyTavern/SillyTavern)
 要求 Node.js 20 或更高版本、npm 和 Git。
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/LeslieH666/LeslieTavern.git
 cd LeslieTavern
 npm ci
 npm ci --prefix src/electron

@@ -6,7 +6,7 @@ LeslieTavern is currently a prototype. Security fixes are applied to the latest 
 
 ## Reporting a vulnerability
 
-Please use GitHub's private vulnerability reporting feature under **Security → Report a vulnerability**. If private reporting is unavailable, contact the repository owner privately before publishing technical details.
+Please use [GitHub private vulnerability reporting](https://github.com/LeslieH666/LeslieTavern/security/advisories/new). If private reporting is unavailable, contact the repository owner privately before publishing technical details.
 
 Do not open a public Issue for vulnerabilities involving authentication bypass, remote code execution, secret exposure, unsafe network listening, or private user data.
 
