@@ -1,85 +1,61 @@
-# How to contribute to SillyTavern
+# Contributing to LeslieTavern
 
-## Setting up the dev environment
+感谢你愿意参与 LeslieTavern。中文或英文均可用于 Issue、Pull Request 和文档；请保持描述清楚、改动可验证。
 
-1. Required software: git and node.
-2. Recommended editor: Visual Studio Code.
-3. You can also use GitHub Codespaces which sets up everything for you.
+## 开始之前
 
-## Getting the code ready
+1. 阅读 [项目概览](docs/project-overview.md)、[路线图](docs/roadmap.md)和 [AGENTS.md](AGENTS.md)。
+2. 从仓库默认分支创建一个短生命周期分支。
+3. 不要提交 `data/`、角色卡、聊天、密钥、日志、运行时、备份或构建产物。
+4. 功能改动应尽量聚焦；不要在同一个 PR 中顺带重写无关模块。
 
-1. Register a GitHub account.
-2. Fork this repository under your account.
-3. Clone the fork onto your machine.
-4. Open the cloned repository in the code editor.
-5. Create a git branch (recommended), review the [git book](https://git-scm.com/book/en/v2/Getting-Started-About-Version-Control) if you haven't.
-6. Make your changes and test them locally.
-7. Commit the changes and push the branch to the remote repo.
-8. Go to GitHub, and open a pull request, targeting the appropriate upstream branch.
+## 开发环境
 
-## Contribution guidelines
+```bash
+npm ci
+npm ci --prefix src/electron
+npm ci --prefix tests
+```
 
-### Maintain code quality
+常用命令：
 
-Our standards are pretty low, but make sure the code is not too ugly:
+```bash
+npm run start:electron  # 启动 Electron 开发环境
+npm run check:repo      # 检查仓库边界和私人文件
+npm run lint            # ESLint
+npm run test:unit       # 单元测试
+```
 
-- Run VS Code's autoformat when you're done.
-- Check with ESLint by running `npm run lint`, then fix the errors.
-- Use common sense and follow existing naming conventions.
+## 兼容性原则
 
-### Use the correct target branch
+- 尽量通过外围模块和扩展实现功能，不破坏 SillyTavern 原有聊天事件和数据格式。
+- 保持现有角色卡、JSONL 聊天、群聊、World Info、Swipe 和模型适配兼容。
+- 记忆、身份、朋友圈和语音功能失败时应允许原聊天主流程继续运行。
+- 修改数据格式时必须提供迁移、回滚和验证方案。
+- 不要把特定用户、角色或本机绝对路径写进公开源码、测试夹具或文档。
 
-Create pull requests for the `staging` branch, 99% of contributions should go there. That way people could test your code before the next stable release.
+## 提交和 Pull Request
 
-You can still send a pull request for `release` in the following scenarios:
+建议使用清晰的约定式提交，例如：
 
-- Updating README.
-- Updating GitHub Actions.
-- Hotfixing a critical bug.
+```text
+feat(memory): add scoped retrieval filter
+fix(tts): cancel stale playback tasks
+docs: clarify portable data boundaries
+```
 
-Project maintainers will test and can change your code before merging. To keep our workflow smooth, please ensure the following:
+Pull Request 应说明：
 
-- The "Allow edits from maintainers" option is checked.
-- Avoid force-pushing your branch once the PR is out of draft state.
+- 为什么需要修改；
+- 实际修改了什么；
+- 如何验证；
+- 是否涉及用户数据格式、网络监听、凭证或上游兼容性；
+- 必要时附上已经脱敏的截图或日志。
 
-### Make contributions small and testable
+## AI 辅助开发
 
-To make sure that your contribution remains testable and reviewable, try not to exceed a soft limit of **200 lines of code** (both additions and deletions) per pull request. If you have more to contribute, split it into multiple pull requests.
+允许使用 AI 编码工具，但提交者仍需理解、审查并测试全部改动。请避免大范围无关格式化、虚构测试结果、泄露提示词中的私人数据，或在没有来源时把模型输出当作事实。
 
-We can also consider creating a separate feature branch for more substantial changes, but please discuss it with the maintainers first. For example:
+## 许可证
 
-- Leave the main larger PR as a draft so it can be used to discuss the implementation.
-- Split each group of functions or features into a ~200 line PR so it can be properly reviewed and merged to staging or a feature branch.
-- If there are large codependent changes that cannot be split, start with the most utilized dependencies and stub dependent functions.
-- Each will be reviewed and tested one by one, merging into the feature branch as they're ready.
-- Do not create all branches in advance, as subsequent changes made in previous commits as a result of test/review may create a lot of merge conflicts.
-
-### Provide clear descriptions of your changes
-
-Write at least somewhat meaningful PR descriptions and commit messages. There's no "right" way to do it, but the following may help with outlining a general structure:
-
-- What is the reason for a change?
-- What did you do to achieve this?
-- How would a reviewer test the change?
-
-### We (likely) don't speak your language
-
-English is the primary language of communication in this project. Please use only English when writing commit messages, PR descriptions, comments and other text. This does not apply to contributions to localization files.
-
-### Legal stuff
-
-Mind the license. Your contributions will be licensed under the GNU Affero General Public License. If you don't know what that implies, consult your lawyer.
-
-## Use of AI coding assistance tools ("Vibe Coding")
-
-We do not prohibit nor encourage the use of AI tools for coding assistance to help you write code, documentation, etc. This includes specialized IDEs, plugins and add-ons, chat interfaces, etc. However, please keep in mind the following:
-
-- No matter who (or what) wrote the code, you are responsible for it. Make sure to carefully review and test everything before committing, and be ready to discuss and fix any issues that may arise during the review.
-- Maintainers can reject reviewing and accepting PRs of very low quality, i.e. if the time to fix the issues exceeds the time to write the code from scratch.
-- Avoid common mistakes attributed to AI tools, such as: adding/removing unrelated comments, excessive logging, unawareness of the project context and conventions, etc.
-- You are allowed, but not required, to trigger AI tools that are added to the project by maintainers (Gemini, Copilot, Codex). Keep in mind that any feedback (comments, suggestions) that these tools generate is not a call to action; make sure to properly assess it before applying.
-
-## Further reading
-
-1. [How to write UI extensions](https://docs.sillytavern.app/for-contributors/writing-extensions/)
-2. [How to write server plugins](https://docs.sillytavern.app/for-contributors/server-plugins)
+提交到本项目的贡献将按 [GNU AGPL-3.0](LICENSE) 发布。请仅提交你有权授权的代码、素材和文档。

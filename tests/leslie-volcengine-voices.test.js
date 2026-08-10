@@ -9,7 +9,7 @@ describe('Leslie Volcengine voice catalog', () => {
 ## 豆包语音合成模型2.0 音色列表
 | 场景 | 音色名称 | voice_type | 语种 |
 | --- | --- | --- | --- |
-| 通用 | 小铃 | zh_female_xiaoling_uranus_bigtts | 中文/英文 |
+| 通用 | 测试音色 | zh_female_testvoice_uranus_bigtts | 中文/英文 |
 ### 情感参数
 | 场景 | 音色名称 | voice_type | 语种 |
 | --- | --- | --- | --- |
@@ -25,7 +25,7 @@ describe('Leslie Volcengine voice catalog', () => {
 `;
         const voices = parseVolcengineVoiceCatalog(markdown);
         expect(voices).toHaveLength(3);
-        expect(voices.find(voice => voice.voice_id.includes('xiaoling'))).toMatchObject({ model: '2.0', resource_id: 'seed-tts-2.0' });
+        expect(voices.find(voice => voice.voice_id.includes('testvoice'))).toMatchObject({ model: '2.0', resource_id: 'seed-tts-2.0' });
         expect(voices.find(voice => voice.voice_id.includes('cancan'))).toMatchObject({ model: '1.0', resource_id: 'volc.service_type.10029' });
         expect(voices.some(voice => voice.voice_id === 'real_time_voice')).toBe(false);
     });

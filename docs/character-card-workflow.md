@@ -1,13 +1,13 @@
 # Leslie / SillyTavern 角色卡制作工作流
 
 > 用途：下次需要新增、复刻或调整角色卡时，直接告诉 Codex：
-> “按 CHARACTER_CARD_WORKFLOW.md 为我制作角色卡，硬设定是……”
+> “按 `docs/character-card-workflow.md` 为我制作角色卡，硬设定是……”
 
 本文记录当前项目已经验证过的角色卡制作方法。目标是在不修改 SillyTavern 聊天内核、不破坏现有数据的前提下，交付可直接使用、可恢复、能绑定专属主角 Persona，并兼容 Leslie 记忆系统的 Character Card V3（CCV3）PNG。
 
 ## 1. 开始前必须确认
 
-1. 完整阅读根目录的 PROJECT_BRIEF.md 与 PROJECT_STATUS.md。
+1. 完整阅读根目录的 `README.md`、`docs/project-overview.md` 与 `docs/roadmap.md`。
 2. 正式数据根目录固定为：
    F:\matth\Documents\sillytavern-leslie\data
 3. 角色卡目录固定为：
@@ -169,7 +169,7 @@
 
 ## 11. 下次调用模板
 
-> 请按 CHARACTER_CARD_WORKFLOW.md 制作并安装一张 SillyTavern CCV3 角色卡。
+> 请按 `docs/character-card-workflow.md` 制作并安装一张 SillyTavern CCV3 角色卡。
 > 必须写死：角色名、年龄/身份、身高/外形、主题核心、与用户的关系、开场地点和事件。
 > 可自由发挥：性格、背景、喜好、矛盾、说话方式。
 > 配套要求：是否需要专属男主 Persona、是否需要群聊、头像来源偏好、是否需要临时对话测试。

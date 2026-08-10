@@ -108,13 +108,16 @@
             "whatwg-url": "^14.0.0"
         }
     },
-    "name": "sillytavern",
+    "name": "leslietavern",
+    "private": true,
+    "description": "An experimental desktop-oriented SillyTavern fork with Leslie memory, identity, moments, and voice features.",
+    "keywords": [
+        "character-chat",
+        "electron",
+        "sillytavern"
+    ],
     "type": "module",
     "license": "AGPL-3.0",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/SillyTavern/SillyTavern.git"
-    },
     "version": "1.18.0",
     "scripts": {
         "init": "node src/server-init.js",
@@ -125,7 +128,11 @@
         "start:deno": "deno run --allow-run --allow-net --allow-read --allow-write --allow-sys --allow-env server.js",
         "start:bun": "bun server.js",
         "start:no-csrf": "node server.js --disableCsrf",
-        "lint": "eslint \"src/**/*.js\" \"public/**/*.js\" ./*.js",
+        "check:repo": "node scripts/check-repository-hygiene.cjs",
+        "test": "npm run test:unit",
+        "test:unit": "npm run test:unit --prefix tests",
+        "validate": "npm run check:repo && npm run lint && npm run test:unit",
+        "lint": "eslint \"src/**/*.js\" \"public/**/*.js\" \"scripts/**/*.cjs\" ./*.js",
         "lint:fix": "eslint \"src/**/*.js\" \"public/**/*.js\" ./*.js --fix",
         "plugins:update": "node plugins update",
         "plugins:install": "node plugins install"

@@ -1,7 +1,7 @@
 /*
  * Leslie Telegram material layer
  *
- * Presentation-only overrides based on design.md. This file intentionally
+ * Presentation-only overrides based on docs/design.md. This file intentionally
  * loads last so the original SillyTavern behavior and Leslie feature code can
  * stay untouched. Light/dark selection is provided by leslie-theme.js.
  */

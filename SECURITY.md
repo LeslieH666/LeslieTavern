@@ -1,25 +1,29 @@
 # Security Policy
 
-We take the security of this project seriously. If you discover any security vulnerabilities or have concerns regarding the security of this repository, please reach out to us immediately. We appreciate your efforts in responsibly disclosing the issue and will make every effort to address it promptly.
+## Supported versions
 
-## Reporting a Vulnerability
+LeslieTavern is currently a prototype. Security fixes are applied to the latest default branch; older snapshots and unofficial portable packages are not guaranteed to receive updates.
 
-To report a security vulnerability, please follow these steps:
+## Reporting a vulnerability
 
-1. Go to the **Security** tab of this repository on GitHub.
-2. Click on **"Report a vulnerability"**.
-3. Provide a clear description of the vulnerability and its potential impact. Be as detailed as possible.
-4. If applicable, include steps or a PoC (Proof of Concept) to reproduce the vulnerability.
-5. Submit the report.
+Please use GitHub's private vulnerability reporting feature under **Security → Report a vulnerability**. If private reporting is unavailable, contact the repository owner privately before publishing technical details.
 
-Once we receive the private report notification, we will promptly investigate and assess the reported vulnerability.
+Do not open a public Issue for vulnerabilities involving authentication bypass, remote code execution, secret exposure, unsafe network listening, or private user data.
 
-Please do not disclose any potential vulnerabilities in public repositories, issue trackers, or forums until we have had a chance to review and address the issue.
+Please include:
 
-## Scope
+- the affected commit or version;
+- the operating mode (Node.js, Electron, or portable package);
+- reproduction steps and expected impact;
+- a minimal proof of concept with all credentials and user content removed.
 
-This security policy applies to all the code and files within this repository and its dependencies actively maintained by us. If you encounter a security issue in a dependency that is not directly maintained by us, please follow responsible disclosure practices and report it to the respective project.
+## Privacy-sensitive reports
 
-While we strive to ensure the security of this project, please note that there may be limitations on resources, response times, and mitigations.
+Never attach real chat JSONL files, character cards, `secrets.json`, API keys, cookies, memory stores, full settings files, or unsanitized logs. Replace private content with a minimal synthetic fixture.
 
-Thank you for your help in making this project more secure.
+## Security boundaries
+
+- The provided desktop configuration is intended to listen on localhost only.
+- Local `data/`, `Config/`, `Runtime/`, logs, caches, and backups are not source-controlled.
+- Enabling LAN or public access requires a separate authentication and threat-model review.
+- Dependency vulnerabilities should also be reported to the relevant upstream maintainer when appropriate.

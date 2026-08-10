@@ -1,39 +1,29 @@
-# 项目协作说明
+# Repository instructions
 
-开始任何开发任务前，必须先完整阅读根目录的 `PROJECT_BRIEF.md` 和 `PROJECT_STATUS.md`。前者是长期需求与固定路径基线，后者是当前代码、测试、风险和后续计划；不得把历史起步建议误当成当前进度。
+Before changing code, read `README.md`, `docs/project-overview.md`, and `docs/roadmap.md`. Local maintainers may also have ignored planning notes under `notes/private/`; use them when present, but never commit their contents.
 
-## 已确认方向
+## Compatibility
 
-- 本项目基于 SillyTavern 开发，不从零重写聊天系统。
-- 保留原有消息生成、提示词、角色卡、World Info、群聊、Swipe、模型适配和 JSONL 数据路径。
-- Electron 是桌面外壳；简单模式是表现层；局域网同步是独立外围模块。
-- 简化优先通过隐藏、分组和重新解释高级功能实现，不通过直接删除底层能力实现。
-- 对核心生成逻辑、数据格式和兼容性有影响的改变，必须先向用户解释并取得确认。
+- Preserve SillyTavern chat behavior, events, character-card compatibility, JSONL chats, group chats, World Info, swipes, and model adapters.
+- Prefer Leslie modules and extension points over invasive changes to the upstream chat core.
+- Memory, identity, moments, and voice features must fail open so ordinary chat remains usable.
+- Any persistent schema change needs migration, validation, and rollback coverage.
 
-## 与用户沟通
+## User data
 
-用户没有软件开发背景。解释技术选择时使用普通中文，并说明：现状、改动、原因、影响、风险、撤回方式和推荐方案。专业术语首次出现时要附带简短解释。
+- Treat `data/`, `Config/`, `Runtime/`, `Cache/`, `Run/`, logs, backups, and `notes/private/` as local-only state.
+- Never commit character cards, chats, credentials, cookies, memories, user settings, generated audio, or real-person fixtures.
+- Do not print secret values or private chat content in logs, tests, documentation, or review output.
+- Use synthetic fixtures for automated tests.
 
-不要只给出多个技术名词让用户自行选择。应给出明确推荐，同时解释推荐理由。
+## Verification
 
-## 开发方式
+- Run the narrowest relevant tests while developing.
+- Before handing off a repository-level change, run `npm run check:repo`, `npm run lint`, and the relevant unit tests.
+- Desktop and packaging changes should also verify the resolved data root and localhost-only listener.
 
-- 小步提交和验证；
-- 优先隔离新增代码；
-- 尽量减少对 SillyTavern 核心文件的修改；
-- 不静默改变或丢弃用户数据；
-- 修改数据格式必须提供迁移和恢复方案；
-- 修改聊天生成结果或提示词顺序前必须获得确认；
-- 简单模式不得破坏高级模式；
-- 同步层不得直接参与模型回复生成。
+## Git and documentation
 
-## 固定数据路径
-
-- 本机唯一正式项目根目录是 `D:\Projects\sillytavern-leslie`，唯一正式数据根目录是其下的 `data`；详细路径清单见 `PROJECT_BRIEF.md` 第 10 节。
-- Electron 必须使用项目服务器入口 `../../server.js`，不得使用会切换到全局数据目录的 `../server-global.js`。
-- 桌面启动器必须显式传入项目的绝对 `configPath` 与 `dataRoot`，并在修改启动方式后核对日志中的 `Using data root`。
-- 旧便携目录、SillyTavern 全局数据目录和任何测试夹具都不是正式数据目录，不得自动合并、覆盖或删除。
-
-## 当前状态
-
-项目已经完成 SillyTavern `release` 基线引入和 Electron 最小启动验证，当前处于现代界面与 Leslie 记忆第一版的原型收口阶段。实际完成度、测试失败项和推荐顺序以 `PROJECT_STATUS.md` 为准。没有完成原型收口、桌面安全与数据恢复验证前，不得直接开始局域网同步或大规模 UI 重构。
+- Keep commits focused and use clear conventional-style messages when practical.
+- Update `docs/roadmap.md` or `CHANGELOG.md` when a change materially affects project status or release behavior.
+- Do not push to the SillyTavern `upstream` remote. Publish only after the maintainer configures a project-owned `origin`.

@@ -1,7 +1,26 @@
+# Dependencies and package-manager state
 node_modules/
-/.codex-*.log
-/.npm-test-cache/
+yarn.lock
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets.json
+whitelist.txt
+/certs/
+
+# Private user data and local planning notes
+/data/*
+!/data/.gitkeep
+/notes/private/
 /character-card-sources/
+*.jsonl
+content.log
+public/settings.json
+public/stats.json
 public/chats/
 public/characters/
 public/User Avatars/
@@ -10,7 +29,6 @@ public/groups/
 public/group chats/
 public/worlds/
 public/user/
-public/css/bg_load.css
 public/themes/
 public/OpenAI Settings/
 public/KoboldAI Settings/
@@ -18,52 +36,57 @@ public/NovelAI Settings/
 public/TextGen Settings/
 public/instruct/
 public/context/
-public/scripts/extensions/third-party/
-public/stats.json
-/uploads/
-*.jsonl
-/config.conf
-/config.yaml
-/config.conf.bak
-/docker/config
-/docker/user
-/docker/extensions
-/docker/data
-/docker/dist
-.DS_Store
-public/settings.json
-/thumbnails
-whitelist.txt
-.vscode/**
-!.vscode/extensions.json
-.idea/
-secrets.json
-/dist
-/backups/
 public/movingUI/
 public/QuickReplies/
-content.log
-cloudflared.exe
 public/assets/
-access.log
-/vectors/
-/cache/
-public/css/user.css
 public/error/
-/plugins/
-/data
+public/css/bg_load.css
+public/css/user.css
+public/scripts/extensions/third-party/
+public/thumbnails/
+public/vectors/
+/uploads/
+/thumbnails/
+/vectors/
+
+# Local desktop runtime and generated state
 /Runtime/
 /Config/
 /Cache/
+/cache/
 /Run/
 /logs/
 /legacy-portable-package/
-/default/scaffold
-public/scripts/extensions/third-party
-/certs
-.aider*
-.env
-/StartDev.bat
-yarn.lock
+/plugins/
+/default/scaffold/
+/docker/config/
+/docker/user/
+/docker/extensions/
+/docker/data/
+/docker/dist/
+/config.yaml
+/config.conf
+/config.conf.bak
+
+# Backups, builds, tests, and logs
+/backups/*
+!/backups/!README.md
+/dist/
+/test-results/
+/tests/test-results/
+/playwright-report/
+/.npm-test-cache/
+/.codex-*.log
+*.log
+access.log
+
+# IDE, OS, and local tooling
+.DS_Store
+.idea/
+.vscode/**
+!.vscode/extensions.json
 *.code-workspace
-test-results/
+.aider*
+/.gemini/
+/StartDev.bat
+cloudflared.exe
