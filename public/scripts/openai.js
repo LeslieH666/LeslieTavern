@@ -81,6 +81,7 @@ import { ToolManager } from './tool-calling.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { COMETAPI_IGNORE_PATTERNS, IGNORE_SYMBOL, MEDIA_DISPLAY, MEDIA_TYPE } from './constants.js';
 import { syncNanoGptProvidersForModel, syncOpenRouterProvidersForModel, updateNanoGptProvidersWarning, updateOpenRouterProvidersWarning } from './textgen-models.js';
+import { getReasoningSafeTokenBudget } from './leslie-reasoning-budget.js';
 
 export {
     openai_messages_count,
@@ -495,7 +496,7 @@ const default_settings = {
     names_behavior: character_names_behavior.DEFAULT,
     continue_postfix: continue_postfix_types.SPACE,
     custom_prompt_post_processing: custom_prompt_post_processing_types.NONE,
-    show_thoughts: true,
+    show_thoughts: false,
     reasoning_effort: reasoning_effort_types.auto,
     verbosity: verbosity_levels.auto,
     enable_web_search: false,
@@ -1555,7 +1556,14 @@ export async function prepareOpenAIMessages({
     if (power_user.console_log_prompts) chatCompletion.enableLogging();
 
     const userSettings = promptManager.serviceSettings;
-    chatCompletion.setTokenBudget(userSettings.openai_max_context, userSettings.openai_max_tokens);
+    const reasoningBudget = getReasoningSafeTokenBudget({
+        chatCompletionSource: userSettings.chat_completion_source,
+        showThoughts: userSettings.show_thoughts,
+        reasoningEffort: userSettings.reasoning_effort,
+        contextTokens: userSettings.openai_max_context,
+        outputTokens: userSettings.openai_max_tokens,
+    });
+    chatCompletion.setTokenBudget(reasoningBudget.contextTokens, reasoningBudget.outputTokens);
 
     try {
         // Merge markers and ordered user prompts with system prompts
@@ -2739,6 +2747,14 @@ export async function createGenerationParameters(settings, model, type, messages
         logit_bias = undefined;
     }
 
+    const reasoningBudget = getReasoningSafeTokenBudget({
+        chatCompletionSource: settings.chat_completion_source,
+        showThoughts: settings.show_thoughts,
+        reasoningEffort: settings.reasoning_effort,
+        contextTokens: settings.openai_max_context,
+        outputTokens: settings.openai_max_tokens,
+    });
+
     const generate_data = {
         'type': type,
         'messages': messages,
@@ -2747,7 +2763,7 @@ export async function createGenerationParameters(settings, model, type, messages
         'frequency_penalty': Number(settings.freq_pen_openai),
         'presence_penalty': Number(settings.pres_pen_openai),
         'top_p': Number(settings.top_p_openai),
-        'max_tokens': settings.openai_max_tokens,
+        'max_tokens': reasoningBudget.outputTokens,
         'stream': stream,
         'logit_bias': logit_bias,
         'stop': getCustomStoppingStrings(openai_max_stop_strings),
@@ -3071,7 +3087,7 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
             let text = '';
             const swipes = [];
             const toolCalls = [];
-            const state = { reasoning: '', images: [], signature: '', toolSignatures: {} };
+            const state = { reasoning: '', images: [], signature: '', toolSignatures: {}, finishReason: null };
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) return;
@@ -3079,6 +3095,10 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
                 if (rawData === '[DONE]') return;
                 tryParseStreamingError(response, rawData);
                 const parsed = JSON.parse(rawData);
+                const finishReason = parsed?.choices?.[0]?.finish_reason;
+                if (typeof finishReason === 'string' && finishReason) {
+                    state.finishReason = finishReason;
+                }
 
                 if (canMultiSwipe && Array.isArray(parsed?.choices) && parsed?.choices?.[0]?.index > 0) {
                     const swipeIndex = parsed.choices[0].index - 1;

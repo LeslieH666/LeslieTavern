@@ -39,6 +39,8 @@ import { ElectronHubTtsProvider } from './electronhub.js';
 import { ChutesTtsProvider } from './chutes.js';
 import { VolcengineTtsProvider } from './volcengine.js';
 import { applyLocale, t } from '/scripts/i18n.js';
+import { SettledTtsScheduler } from '../../leslie-tts-stability.js';
+import { stripParentheticalText } from '../../leslie-tts-text-filter.js';
 
 const UPDATE_INTERVAL = 1000;
 const wrapper = new ModuleWorkerWrapper(moduleWorker);
@@ -51,6 +53,22 @@ let lastMessageHash = null;
 let periodicMessageGenerationTimer = null;
 let lastPositionOfParagraphEnd = -1;
 let currentInitVoiceMapPromise = null;
+let ttsPlaybackRevision = 0;
+
+const settledMessageScheduler = new SettledTtsScheduler((request) => {
+    const context = getContext();
+    if (context.chatId !== request.chatId) return;
+
+    /** @type {TtsMessage} */
+    const message = structuredClone(context.chat[request.messageId]);
+    if (!message || message.is_system || message.mes === '...' || message.mes === '') return;
+    if (message.is_user && !extension_settings.tts.narrate_user) return;
+    if (extension_settings.tts.narrate_translated_only && !message?.extra?.display_text) return;
+
+    console.debug(`Adding settled message from ${message.name} for TTS processing (${message.mes.length} characters)`);
+    processAndQueueTtsMessage(message, request.messageId, { manual: false });
+    setTimeout(() => void wrapper.update(), 0);
+});
 
 const DEFAULT_VOICE_MARKER = '[Default Voice]';
 const DISABLED_VOICE_MARKER = 'disabled';
@@ -219,6 +237,9 @@ async function moduleWorker() {
 }
 
 function resetTtsPlayback() {
+    settledMessageScheduler.cancel();
+    ttsPlaybackRevision += 1;
+
     // Stop system TTS utterance
     cancelTtsPlay();
 
@@ -338,11 +359,14 @@ let audioQueueProcessorReady = true;
 async function playAudioData(audioJob) {
     const { audioBlob, char } = audioJob;
     // Since current audio job can be cancelled, don't playback if it is null
-    if (currentAudioJob == null) {
-        console.log('Cancelled TTS playback because currentAudioJob was null');
+    if (currentAudioJob !== audioJob) {
+        console.debug('Cancelled stale TTS playback job');
+        return;
     }
     if (audioBlob instanceof Blob) {
         const srcUrl = await getBase64Async(audioBlob);
+
+        if (currentAudioJob !== audioJob) return;
 
         // VRM lip sync
         if (extension_settings.vrm?.enabled && typeof globalThis.vrmLipSync === 'function') {
@@ -355,12 +379,29 @@ async function playAudioData(audioJob) {
     } else {
         throw `TTS received invalid audio data type ${typeof audioBlob}`;
     }
-    audioElement.addEventListener('ended', completeCurrentAudioJob);
-    audioElement.addEventListener('canplay', () => {
+    audioElement.onended = () => {
+        audioElement.onerror = null;
+        completeCurrentAudioJob();
+    };
+    audioElement.onerror = () => {
+        if (currentAudioJob !== audioJob) return;
+        const detail = audioElement.error?.message || `media error ${audioElement.error?.code ?? 'unknown'}`;
+        console.error('TTS audio playback failed', detail);
+        toastr.error(`语音已经生成，但音频无法播放：${detail}`);
+        completeCurrentAudioJob();
+    };
+    audioElement.playbackRate = extension_settings.tts.playback_rate;
+    try {
         console.debug('Starting TTS playback');
-        audioElement.playbackRate = extension_settings.tts.playback_rate;
-        audioElement.play();
-    });
+        await audioElement.play();
+    } catch (error) {
+        // play() failures used to be ignored, leaving the queue permanently
+        // busy with no sound and no useful feedback.
+        console.error('Unable to start TTS audio playback', error);
+        toastr.error(`语音已经生成，但播放器启动失败：${error?.message || error}`);
+        audioElement.onerror = null;
+        if (currentAudioJob === audioJob) completeCurrentAudioJob();
+    }
 }
 
 globalThis.tts_preview = function (id) {
@@ -452,11 +493,13 @@ function completeCurrentAudioJob() {
 
 /**
  * Accepts an HTTP response containing audio/mpeg data, and puts the data as a Blob() on the queue for playback
- * @param {Response} response
+ * @param {Response|string} response
  * @param {string} char
- * @returns {Promise<{audioBlob: Blob|string, mimeType: string}>}
+ * @param {object} [options] Queue options.
+ * @param {() => boolean} [options.isCurrent] Whether the response still belongs to the active playback revision.
+ * @returns {Promise<{audioBlob: Blob|string, mimeType: string, enqueued: boolean}>}
  */
-async function addAudioJob(response, char) {
+async function addAudioJob(response, char, { isCurrent = () => true } = {}) {
     let audioBlob, mimeType;
     if (typeof response === 'string') {
         audioBlob = response;
@@ -468,9 +511,11 @@ async function addAudioJob(response, char) {
         }
         mimeType = audioBlob.type;
     }
+    if (!isCurrent()) return { audioBlob, mimeType, enqueued: false };
     audioJobQueue.push({ audioBlob, char });
     console.debug('Pushed audio job to queue.');
-    return { audioBlob, mimeType };
+    setTimeout(() => void wrapper.update(), 0);
+    return { audioBlob, mimeType, enqueued: true };
 }
 
 async function processAudioJobQueue() {
@@ -481,7 +526,7 @@ async function processAudioJobQueue() {
     try {
         audioQueueProcessorReady = false;
         currentAudioJob = audioJobQueue.shift();
-        playAudioData(currentAudioJob);
+        await playAudioData(currentAudioJob);
     } catch (error) {
         toastr.error(error.toString());
         console.error(error);
@@ -501,25 +546,35 @@ let currentTtsJob = null; // Null if nothing is currently being processed
 function completeTtsJob() {
     console.info(`Current TTS job for ${currentTtsJob?.name} completed.`);
     currentTtsJob = null;
+    setTimeout(() => void wrapper.update(), 0);
 }
 
 async function tts(text, voiceId, char, voiceMapKey = null) {
     const messageId = currentTtsJob?.id ?? null;
+    const playbackRevision = ttsPlaybackRevision;
 
     await eventSource.emit(event_types.TTS_JOB_STARTED, { messageId, characterName: char, text, voiceId });
 
     async function processResponse(response) {
+        if (playbackRevision !== ttsPlaybackRevision) return;
+
         // RVC injection
         if (typeof globalThis.rvcVoiceConversion === 'function' && extension_settings.rvc.enabled)
             response = await globalThis.rvcVoiceConversion(response, char, text);
 
-        const audioResult = await addAudioJob(response, char);
+        if (playbackRevision !== ttsPlaybackRevision) return;
+
+        const audioResult = await addAudioJob(response, char, {
+            isCurrent: () => playbackRevision === ttsPlaybackRevision,
+        });
+        if (!audioResult.enqueued || playbackRevision !== ttsPlaybackRevision) return;
         const eventData = { messageId, characterName: char, text, audio: audioResult.audioBlob, mimeType: audioResult.mimeType };
         await eventSource.emit(event_types.TTS_AUDIO_READY, eventData);
     }
 
     // voiceMapKey can also include segment qualifiers, e.g. '{char} ("Quotes")'
     let response = await ttsProvider.generateTts(text, voiceId, voiceMapKey);
+    if (playbackRevision !== ttsPlaybackRevision) return;
 
     // If async generator, process every chunk as it comes in
     if (typeof response[Symbol.asyncIterator] === 'function') {
@@ -530,6 +585,7 @@ async function tts(text, voiceId, char, voiceMapKey = null) {
         await processResponse(response);
     }
 
+    if (playbackRevision !== ttsPlaybackRevision) return;
     await eventSource.emit(event_types.TTS_JOB_COMPLETE, { messageId, characterName: char });
     completeTtsJob();
 }
@@ -605,6 +661,7 @@ async function processTtsQueue() {
 
     console.debug('New message found, running TTS');
     currentTtsJob = ttsJobQueue.shift();
+    const processingJob = currentTtsJob;
 
     // Handle segmented jobs that already have processed text
     if (currentTtsJob.segmentType && currentTtsJob.segmentText) {
@@ -612,7 +669,7 @@ async function processTtsQueue() {
         const segmentText = currentTtsJob.segmentText;
         const segmentType = currentTtsJob.segmentType;
 
-        console.log(`TTS (${segmentType}): ${segmentText}`);
+        console.debug(`TTS segment (${segmentType}): ${segmentText.length} characters`);
 
         try {
             let voiceMapKey = char;
@@ -660,9 +717,14 @@ async function processTtsQueue() {
             // Pass the full voiceMapKey (e.g., "User ("Quotes")") as well with character name
             await tts(segmentText, voiceId, char, voiceMapKey);
         } catch (error) {
-            toastr.error(error.toString());
-            console.error(error);
-            currentTtsJob = null;
+            // A reset can finish while an old provider request is still in
+            // flight. Do not let that stale request clear or alarm over a new
+            // job that has already started.
+            if (currentTtsJob === processingJob) {
+                toastr.error(error.toString());
+                console.error(error);
+                currentTtsJob = null;
+            }
         }
         return;
     }
@@ -698,6 +760,10 @@ async function processTtsQueue() {
         }
     }
 
+    if (extension_settings.tts.narrate_outside_parentheses_only) {
+        text = stripParentheticalText(text);
+    }
+
     if (extension_settings.tts.narrate_quoted_only) {
         const partJoiner = (ttsProvider?.separator || ' ... ');
         text = joinQuotedBlocks(text, { separator: partJoiner, includeQuotes: true });
@@ -713,7 +779,7 @@ async function processTtsQueue() {
     // Collapse newlines and spaces into single space
     text = text.replace(/\s+/g, ' ').trim();
 
-    console.log(`TTS: ${text}`);
+    console.debug(`TTS text prepared (${text.length} characters)`);
     const char = currentTtsJob.name;
 
     // Remove character name from start of the line if power user setting is disabled
@@ -755,6 +821,7 @@ async function processTtsQueue() {
 
         // Clear current job so the segmented jobs can be processed
         currentTtsJob = null;
+        setTimeout(() => void wrapper.update(), 0);
     } catch (error) {
         toastr.error(error.toString());
         console.error(error);
@@ -880,6 +947,7 @@ function loadSettings() {
     );
     $('#tts_narrate_dialogues').prop('checked', extension_settings.tts.narrate_dialogues_only);
     $('#tts_narrate_quoted').prop('checked', extension_settings.tts.narrate_quoted_only);
+    $('#tts_narrate_outside_parentheses').prop('checked', extension_settings.tts.narrate_outside_parentheses_only);
     $('#tts_auto_generation').prop('checked', extension_settings.tts.auto_generation);
     $('#tts_periodic_auto_generation').prop('checked', extension_settings.tts.periodic_auto_generation);
     $('#tts_narrate_by_paragraphs').prop('checked', extension_settings.tts.narrate_by_paragraphs);
@@ -906,6 +974,7 @@ const defaultSettings = {
     currentProvider: 'ElevenLabs',
     auto_generation: true,
     narrate_user: false,
+    narrate_outside_parentheses_only: false,
     playback_rate: 1,
     multi_voice_enabled: false,
     apply_regex: false,
@@ -929,7 +998,7 @@ function onRefreshClick() {
         extension_settings.tts[ttsProviderName] = ttsProvider.settings;
         saveSettingsDebounced();
         setTtsStatus('Successfully applied settings', true);
-        console.info(`Saved settings ${ttsProviderName} ${JSON.stringify(ttsProvider.settings)}`);
+        console.info(`Saved settings for TTS provider ${ttsProviderName}`);
         initVoiceMap();
         updateVoiceMap();
     }).catch(error => {
@@ -978,6 +1047,20 @@ function onNarrateUserClick() {
 
 function onNarrateQuotedClick() {
     extension_settings.tts.narrate_quoted_only = !!$('#tts_narrate_quoted').prop('checked');
+    if (extension_settings.tts.narrate_quoted_only) {
+        extension_settings.tts.narrate_outside_parentheses_only = false;
+        $('#tts_narrate_outside_parentheses').prop('checked', false);
+    }
+    saveSettingsDebounced();
+}
+
+function onNarrateOutsideParenthesesClick() {
+    extension_settings.tts.narrate_outside_parentheses_only = !!$('#tts_narrate_outside_parentheses').prop('checked');
+    if (extension_settings.tts.narrate_outside_parentheses_only) {
+        extension_settings.tts.narrate_quoted_only = false;
+        extension_settings.tts.narrate_dialogues_only = false;
+        $('#tts_narrate_quoted, #tts_narrate_dialogues').prop('checked', false);
+    }
     saveSettingsDebounced();
 }
 
@@ -1082,7 +1165,7 @@ export function saveTtsProviderSettings() {
     extension_settings.tts[ttsProviderName] = ttsProvider.settings;
     updateVoiceMap();
     saveSettingsDebounced();
-    console.info(`Saved settings ${ttsProviderName} ${JSON.stringify(ttsProvider.settings)}`);
+    console.info(`Saved settings for TTS provider ${ttsProviderName}`);
 }
 
 
@@ -1183,13 +1266,12 @@ async function onMessageEvent(messageId, lastCharIndex) {
     lastMessageHash = hashNew;
     lastChatId = context.chatId;
 
-    console.debug(`Adding message from ${message.name} for TTS processing: "${message.mes}"`);
-
     if (extension_settings.tts.periodic_auto_generation && isStreamingEnabled()) {
+        console.debug(`Adding periodic message from ${message.name} for TTS processing (${message.mes.length} characters)`);
         message.id = messageId;
         ttsJobQueue.push(message);
     } else {
-        processAndQueueTtsMessage(message, messageId, { manual: false });
+        settledMessageScheduler.schedule({ chatId: context.chatId, messageId });
     }
 }
 
@@ -1227,6 +1309,10 @@ async function onGenerationStarted(generationType, _args, isDryRun) {
         return;
     }
 
+    // A continuation or regeneration supersedes any reply that was waiting to
+    // be narrated. A fresh render event will schedule the complete new text.
+    settledMessageScheduler.cancel();
+
     // Periodic auto generation is disabled
     if (!extension_settings.tts.periodic_auto_generation) {
         return;
@@ -1249,6 +1335,17 @@ async function onGenerationEnded() {
         periodicMessageGenerationTimer = null;
     }
     lastPositionOfParagraphEnd = -1;
+
+    // Some continuation paths update the existing message without emitting a
+    // second render event. Recheck the final chat item here; the message hash
+    // guard prevents a duplicate when a render event already scheduled it.
+    if (extension_settings.tts.enabled
+        && extension_settings.tts.auto_generation
+        && !extension_settings.tts.periodic_auto_generation) {
+        const context = getContext();
+        const messageId = context.chat.length - 1;
+        if (messageId >= 0) await onMessageEvent(messageId);
+    }
 }
 
 async function onPeriodicMessageGenerationTick() {
@@ -1539,6 +1636,7 @@ export async function init() {
         $('#tts_enabled').on('click', onEnableClick);
         $('#tts_narrate_dialogues').on('click', onNarrateDialoguesClick);
         $('#tts_narrate_quoted').on('click', onNarrateQuotedClick);
+        $('#tts_narrate_outside_parentheses').on('click', onNarrateOutsideParenthesesClick);
         $('#tts_narrate_translated_only').on('click', onNarrateTranslatedOnlyClick);
         $('#tts_skip_codeblocks').on('click', onSkipCodeblocksClick);
         $('#tts_skip_tags').on('click', onSkipTagsClick);

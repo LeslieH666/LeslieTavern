@@ -112,6 +112,7 @@ import {
     selected_proxy,
     initOpenAI,
 } from './scripts/openai.js';
+import { getLengthContinuationDecision, LESLIE_LENGTH_CONTINUATION_LIMIT } from './scripts/leslie-length-continuation.js';
 
 import {
     generateNovelWithStreaming,
@@ -453,6 +454,7 @@ let dialogueCloseStop = false;
 export let chat_metadata = {};
 /** @type {StreamingProcessor} */
 export let streamingProcessor = null;
+let leslieLengthContinuationAttempts = 0;
 let crop_data = undefined;
 let is_delete_mode = false;
 let fav_ch_checked = false;
@@ -868,9 +870,10 @@ export function resultCheckStatus() {
  * @param {number} id The ID of the character to switch to.
  * @param {object} [options] Options for the switch.
  * @param {boolean} [options.switchMenu=true] Whether to switch the right menu to the character edit menu if the character is already selected.
+ * @param {string|null} [options.chatFile=null] An existing chat file to load instead of the character card's current chat pointer.
  * @returns {Promise<void>} A promise that resolves when the character is switched.
  */
-export async function selectCharacterById(id, { switchMenu = true } = {}) {
+export async function selectCharacterById(id, { switchMenu = true, chatFile = null } = {}) {
     if (characters[id] === undefined) {
         return;
     }
@@ -884,7 +887,10 @@ export async function selectCharacterById(id, { switchMenu = true } = {}) {
         return;
     }
 
-    if (selected_group || String(this_chid) !== String(id)) {
+    const requestedChat = typeof chatFile === 'string' ? chatFile.trim() : '';
+    const requestedChatChanged = requestedChat && characters[id].chat !== requestedChat;
+
+    if (selected_group || String(this_chid) !== String(id) || requestedChatChanged) {
         //if clicked on a different character from what was currently selected
         if (!is_send_press) {
             setCharacterId(undefined);
@@ -896,6 +902,10 @@ export async function selectCharacterById(id, { switchMenu = true } = {}) {
             selected_button = 'character_edit';
             setCharacterId(id);
             chat_metadata = {};
+            if (requestedChat) {
+                await unshallowCharacter(id);
+                characters[id].chat = requestedChat;
+            }
             await getChat();
         }
     } else {
@@ -3524,6 +3534,8 @@ class StreamingProcessor {
         this.images = [];
         /** @type {string?} */
         this.reasoningSignature = null;
+        /** @type {string?} */
+        this.finishReason = null;
     }
 
     /**
@@ -3833,6 +3845,7 @@ class StreamingProcessor {
                 this.reasoningHandler.updateReasoning(this.messageId, state?.reasoning);
                 this.images = state?.images ?? [];
                 this.reasoningSignature = state?.signature ?? null;
+                this.finishReason = state?.finishReason ?? this.finishReason;
                 await eventSource.emit(event_types.STREAM_TOKEN_RECEIVED, text);
                 await sw.tick(async () => await this.onProgressStreaming(this.messageId, this.continueMessage + text));
             }
@@ -4230,6 +4243,9 @@ function removeLastMessage() {
  */
 export async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, jsonSchema = null, depth = 0 } = {}, dryRun = false) {
     console.log('Generate entered');
+    if (!dryRun && type !== 'continue') {
+        leslieLengthContinuationAttempts = 0;
+    }
     setGenerationProgress(0);
     generation_started = new Date();
 
@@ -5378,9 +5394,10 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             }
 
             if (isStreamFinished) {
+                const finishReason = streamingProcessor.finishReason;
                 await streamingProcessor.onFinishStreaming(streamingProcessor.messageId, getMessage);
                 streamingProcessor = null;
-                triggerAutoContinue(messageChunk, isImpersonate);
+                triggerAutoContinue(messageChunk, isImpersonate, { finishReason });
                 return Object.defineProperties(new String(getMessage), {
                     'messageChunk': { value: messageChunk },
                     'fromStream': { value: true },
@@ -5407,6 +5424,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         }
 
         let messageChunk = '';
+        const finishReason = data?.choices?.[0]?.finish_reason ?? null;
 
         // if an error was returned in data (textgenwebui), show it and throw it
         if (data.error) {
@@ -5516,7 +5534,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         streamingProcessor = null;
 
         if (type !== 'quiet') {
-            triggerAutoContinue(messageChunk, isImpersonate);
+            triggerAutoContinue(messageChunk, isImpersonate, { finishReason });
         }
 
         // Don't break the API chain that expects a single string in return
@@ -5720,10 +5738,41 @@ export function shouldAutoContinue(messageChunk, isImpersonate) {
  * Triggers auto-continue if the message meets the criteria.
  * @param {string} messageChunk Current message chunk
  * @param {boolean} isImpersonate Is the user impersonation
+ * @param {object} [options] Completion metadata.
+ * @param {string?} [options.finishReason] Provider completion finish reason.
  */
-export function triggerAutoContinue(messageChunk, isImpersonate) {
-    if (selected_group) {
+export function triggerAutoContinue(messageChunk, isImpersonate, { finishReason = null } = {}) {
+    if (selected_group && finishReason !== 'length') {
         console.debug('Auto-continue is disabled for group chat');
+        return;
+    }
+
+    if (finishReason === 'length') {
+        const textareaText = String($('#send_textarea').val());
+        const decision = getLengthContinuationDecision({
+            finishReason,
+            messageChunk,
+            isImpersonate,
+            isSending: is_send_press,
+            isAborted: Boolean(abortController && abortController.signal.aborted),
+            hasPendingInput: textareaText.length > 0,
+            isGroup: Boolean(selected_group),
+            attempts: leslieLengthContinuationAttempts,
+        });
+
+        if (decision === 'blocked') {
+            console.warn('A length-limited reply could not be continued automatically.');
+            return;
+        }
+
+        if (decision === 'limit-reached') {
+            toastr.warning('回复仍达到模型上限，请点击“继续”完成剩余内容。', '回复尚未完成', { preventDuplicates: true });
+            return;
+        }
+
+        leslieLengthContinuationAttempts += 1;
+        console.warn(`Reply reached the provider token limit; continuing automatically (${leslieLengthContinuationAttempts}/${LESLIE_LENGTH_CONTINUATION_LIMIT}).`);
+        window.setTimeout(() => $('#option_continue').trigger('click'), 0);
         return;
     }
 

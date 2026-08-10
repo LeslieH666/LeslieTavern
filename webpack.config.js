@@ -12,9 +12,11 @@ import { getVersion, color } from './src/util.js';
  * @returns {string} The cache version string.
  */
 function getWebpackCacheVersion() {
-    return crypto.createHash('shake256', { outputLength: 8 })
+    // SHA-256 is available in both regular Node.js and Electron's bundled Node runtime.
+    return crypto.createHash('sha256')
         .update(JSON.stringify([appVersion.pkgVersion, appVersion.gitRevision, webpack.version]))
-        .digest('hex');
+        .digest('hex')
+        .slice(0, 16);
 }
 
 /**

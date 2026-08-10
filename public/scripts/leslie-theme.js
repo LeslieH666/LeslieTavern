@@ -4,6 +4,26 @@
  */
 
 const DARK_LUMINANCE_THRESHOLD = 0.42;
+const THEME_PREFERENCE_KEY = 'leslie.theme.preference';
+const THEME_MODES = Object.freeze(['auto', 'light', 'dark']);
+
+const THEME_MODE_META = Object.freeze({
+    auto: {
+        label: '自动',
+        description: '跟随应用主题',
+        icon: 'fa-circle-half-stroke',
+    },
+    light: {
+        label: '亮色',
+        description: '始终使用亮色',
+        icon: 'fa-sun',
+    },
+    dark: {
+        label: '暗色',
+        description: '始终使用暗色',
+        icon: 'fa-moon',
+    },
+});
 
 /**
  * Convert an sRGB channel to a linear-light channel.
@@ -29,7 +49,7 @@ function parseRgb(color) {
  * Infer whether the active SillyTavern UI tint is dark.
  * @returns {'light' | 'dark'} Leslie color scheme.
  */
-function getLeslieColorScheme() {
+function getAutomaticColorScheme() {
     const rootStyle = getComputedStyle(document.documentElement);
     const tint = rootStyle.getPropertyValue('--SmartThemeBlurTintColor').trim();
     const channels = parseRgb(tint);
@@ -43,19 +63,243 @@ function getLeslieColorScheme() {
     return luminance < DARK_LUMINANCE_THRESHOLD ? 'dark' : 'light';
 }
 
+/**
+ * Read the local presentation-only theme preference.
+ * @returns {'auto' | 'light' | 'dark'} Theme preference.
+ */
+function getThemePreference() {
+    try {
+        const storedPreference = localStorage.getItem(THEME_PREFERENCE_KEY);
+        return THEME_MODES.includes(storedPreference) ? storedPreference : 'auto';
+    } catch {
+        return 'auto';
+    }
+}
+
+/**
+ * Persist a presentation-only preference without touching SillyTavern data.
+ * @param {'auto' | 'light' | 'dark'} preference Theme preference.
+ */
+function setThemePreference(preference) {
+    if (!THEME_MODES.includes(preference)) {
+        return;
+    }
+
+    try {
+        if (preference === 'auto') {
+            localStorage.removeItem(THEME_PREFERENCE_KEY);
+        } else {
+            localStorage.setItem(THEME_PREFERENCE_KEY, preference);
+        }
+    } catch {
+        // A restricted webview may disable localStorage. The current session
+        // can still apply the selected mode through the body dataset.
+    }
+
+    document.body.dataset.leslieThemePreference = preference;
+    applyLeslieColorScheme();
+}
+
+/**
+ * Resolve the effective Leslie light/dark scheme.
+ * @returns {'light' | 'dark'} Leslie color scheme.
+ */
+function getLeslieColorScheme() {
+    const preference = document.body?.dataset.leslieThemePreference || getThemePreference();
+    return preference === 'auto' ? getAutomaticColorScheme() : preference;
+}
+
 function applyLeslieColorScheme() {
     if (!document.body?.classList.contains('leslie-modern')) {
         return;
     }
 
+    document.body.dataset.leslieThemePreference ||= getThemePreference();
     document.body.dataset.leslieColorScheme = getLeslieColorScheme();
+    syncThemeControls();
+}
+
+/**
+ * Build the shared theme picker once.
+ * @returns {HTMLDivElement | null} Theme picker element.
+ */
+function ensureThemeMenu() {
+    if (!document.body) {
+        return null;
+    }
+
+    let menu = document.getElementById('leslie-theme-menu');
+    if (menu instanceof HTMLDivElement) {
+        return menu;
+    }
+
+    menu = document.createElement('div');
+    menu.id = 'leslie-theme-menu';
+    menu.className = 'leslie-theme-menu';
+    menu.hidden = true;
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', '界面主题');
+
+    for (const mode of THEME_MODES) {
+        const meta = THEME_MODE_META[mode];
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.leslieThemeMode = mode;
+        button.setAttribute('role', 'menuitemradio');
+        button.innerHTML = `
+            <i class="fa-solid ${meta.icon}" aria-hidden="true"></i>
+            <span><strong>${meta.label}</strong><small>${meta.description}</small></span>
+            <i class="fa-solid fa-check leslie-theme-choice-check" aria-hidden="true"></i>
+        `;
+        button.addEventListener('click', () => {
+            setThemePreference(mode);
+            closeThemeMenu();
+        });
+        menu.append(button);
+    }
+
+    document.body.append(menu);
+    return menu;
+}
+
+/**
+ * Create a quick-access theme button for a Leslie header.
+ * @returns {HTMLButtonElement} Theme toggle button.
+ */
+function createThemeButton() {
+    const button = document.createElement('button');
+    const icon = document.createElement('i');
+    button.type = 'button';
+    button.className = 'leslie-icon-button leslie-theme-toggle';
+    button.setAttribute('aria-haspopup', 'menu');
+    button.setAttribute('aria-expanded', 'false');
+    icon.className = 'fa-solid fa-circle-half-stroke';
+    icon.setAttribute('aria-hidden', 'true');
+    button.append(icon);
+    button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleThemeMenu(button);
+    });
+    return button;
+}
+
+/** Add theme controls when the Leslie headers become available. */
+function ensureThemeControls() {
+    const hosts = [
+        document.querySelector('.leslie-sidebar-actions'),
+        document.getElementById('leslie-chat-actions'),
+    ];
+
+    for (const host of hosts.filter(host => host instanceof HTMLElement)) {
+        if (!host.querySelector(':scope > .leslie-theme-toggle')) {
+            host.prepend(createThemeButton());
+        }
+    }
+
+    ensureThemeMenu();
+    syncThemeControls();
+
+    if (hosts.every(host => host?.querySelector(':scope > .leslie-theme-toggle'))) {
+        controlObserver.disconnect();
+    }
+}
+
+/** Keep icons, accessible labels and selected menu state synchronized. */
+function syncThemeControls() {
+    if (!document.body) {
+        return;
+    }
+
+    const preference = document.body.dataset.leslieThemePreference || getThemePreference();
+    const scheme = document.body.dataset.leslieColorScheme || getLeslieColorScheme();
+    const meta = THEME_MODE_META[preference];
+
+    for (const button of document.querySelectorAll('.leslie-theme-toggle')) {
+        button.dataset.leslieThemeMode = preference;
+        button.title = `界面主题：${meta.label}（当前${scheme === 'dark' ? '暗色' : '亮色'}）`;
+        button.setAttribute('aria-label', button.title);
+        const icon = button.querySelector(':scope > i');
+        if (icon) {
+            icon.className = `fa-solid ${meta.icon}`;
+        }
+    }
+
+    for (const choice of document.querySelectorAll('#leslie-theme-menu [data-leslie-theme-mode]')) {
+        const selected = choice.dataset.leslieThemeMode === preference;
+        choice.classList.toggle('is-active', selected);
+        choice.setAttribute('aria-checked', String(selected));
+    }
+}
+
+/**
+ * Position and open the shared picker next to its trigger.
+ * @param {HTMLButtonElement} anchor Trigger button.
+ */
+function openThemeMenu(anchor) {
+    const menu = ensureThemeMenu();
+    if (!menu) {
+        return;
+    }
+
+    closeThemeMenu();
+    menu.hidden = false;
+    menu.dataset.open = 'true';
+    anchor.setAttribute('aria-expanded', 'true');
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    const gutter = 8;
+    const left = Math.max(gutter, Math.min(anchorRect.right - menuRect.width, innerWidth - menuRect.width - gutter));
+    const preferredTop = anchorRect.bottom + 6;
+    const top = preferredTop + menuRect.height <= innerHeight - gutter
+        ? preferredTop
+        : Math.max(gutter, anchorRect.top - menuRect.height - 6);
+
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+}
+
+/** Close the picker and reset every trigger state. */
+function closeThemeMenu() {
+    const menu = document.getElementById('leslie-theme-menu');
+    if (menu) {
+        menu.hidden = true;
+        delete menu.dataset.open;
+    }
+
+    for (const button of document.querySelectorAll('.leslie-theme-toggle')) {
+        button.setAttribute('aria-expanded', 'false');
+    }
+}
+
+/**
+ * Toggle the picker for a trigger.
+ * @param {HTMLButtonElement} anchor Trigger button.
+ */
+function toggleThemeMenu(anchor) {
+    const menu = ensureThemeMenu();
+    if (!menu) {
+        return;
+    }
+
+    if (!menu.hidden && anchor.getAttribute('aria-expanded') === 'true') {
+        closeThemeMenu();
+    } else {
+        openThemeMenu(anchor);
+    }
 }
 
 let updateFrame = 0;
+let controlsFrame = 0;
 
 function scheduleLeslieColorSchemeUpdate() {
     cancelAnimationFrame(updateFrame);
     updateFrame = requestAnimationFrame(applyLeslieColorScheme);
+}
+
+function scheduleThemeControlsUpdate() {
+    cancelAnimationFrame(controlsFrame);
+    controlsFrame = requestAnimationFrame(ensureThemeControls);
 }
 
 // SillyTavern applies a theme by updating CSS variables on the root element.
@@ -73,10 +317,35 @@ document.addEventListener('change', (event) => {
 
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', scheduleLeslieColorSchemeUpdate);
 
+document.addEventListener('pointerdown', (event) => {
+    if (event.target instanceof Element && !event.target.closest('#leslie-theme-menu, .leslie-theme-toggle')) {
+        closeThemeMenu();
+    }
+}, true);
+
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        closeThemeMenu();
+    }
+});
+
+window.addEventListener('resize', closeThemeMenu);
+
+const controlObserver = new MutationObserver(scheduleThemeControlsUpdate);
+
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', scheduleLeslieColorSchemeUpdate, { once: true });
+    document.addEventListener('DOMContentLoaded', () => {
+        scheduleLeslieColorSchemeUpdate();
+        scheduleThemeControlsUpdate();
+        controlObserver.observe(document.body, { childList: true, subtree: true });
+    }, { once: true });
 } else {
     scheduleLeslieColorSchemeUpdate();
+    scheduleThemeControlsUpdate();
+    controlObserver.observe(document.body, { childList: true, subtree: true });
 }
 
-window.addEventListener('load', scheduleLeslieColorSchemeUpdate, { once: true });
+window.addEventListener('load', () => {
+    scheduleLeslieColorSchemeUpdate();
+    scheduleThemeControlsUpdate();
+}, { once: true });

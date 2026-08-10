@@ -1,4 +1,7 @@
 node_modules/
+/.codex-*.log
+/.npm-test-cache/
+/character-card-sources/
 public/chats/
 public/characters/
 public/User Avatars/
@@ -49,6 +52,12 @@ public/css/user.css
 public/error/
 /plugins/
 /data
+/Runtime/
+/Config/
+/Cache/
+/Run/
+/logs/
+/legacy-portable-package/
 /default/scaffold
 public/scripts/extensions/third-party
 /certs

@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron';
+import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yargs from 'yargs';
@@ -8,28 +9,55 @@ const cliArguments = yargs(process.argv)
     .usage('Usage: <your-start-script> [options]')
     .option('width', {
         type: 'number',
-        default: 800,
+        default: 1280,
         describe: 'The width of the window',
     })
     .option('height', {
         type: 'number',
-        default: 600,
+        default: 800,
         describe: 'The height of the window',
+    })
+    .option('electronDataRoot', {
+        type: 'string',
+        default: '',
+        describe: 'The Electron cache and window-state directory',
     })
     .parseSync();
 
+if (cliArguments.electronDataRoot) {
+    const electronDataRoot = path.resolve(cliArguments.electronDataRoot);
+    fs.mkdirSync(electronDataRoot, { recursive: true });
+    app.setPath('userData', electronDataRoot);
+}
+
 /** @type {string} The URL to load in the window. */
 let appUrl;
+
+/** @type {BrowserWindow | undefined} Keep the desktop window alive until it is explicitly closed. */
+let mainWindow;
 
 function createSillyTavernWindow() {
     if (!appUrl) {
         console.error('The server has not started yet.');
         return;
     }
-    new BrowserWindow({
+    mainWindow = new BrowserWindow({
         height: cliArguments.height,
         width: cliArguments.width,
-    }).loadURL(appUrl);
+        minHeight: 640,
+        minWidth: 960,
+        autoHideMenuBar: true,
+        title: 'LeslieTavern',
+        webPreferences: {
+            // Character speech is generated after an asynchronous model/API
+            // response, so it must not depend on a second user gesture.
+            autoplayPolicy: 'no-user-gesture-required',
+        },
+    });
+    mainWindow.once('closed', () => {
+        mainWindow = undefined;
+    });
+    void mainWindow.loadURL(appUrl);
 }
 
 function startServer() {
@@ -41,22 +69,41 @@ function startServer() {
         const sillyTavernRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
         process.chdir(sillyTavernRoot);
 
-        import('../server-global.js');
+        // Keep Electron on this project's configured data root instead of SillyTavern's global data directory.
+        import('../../server.js');
     });
 }
 
-app.whenReady().then(() => {
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        if (!mainWindow) {
             createSillyTavernWindow();
+            return;
         }
+        if (mainWindow.isMinimized()) {
+            mainWindow.restore();
+        }
+        mainWindow.show();
+        mainWindow.focus();
     });
 
-    startServer();
-});
+    app.whenReady().then(() => {
+        app.on('activate', () => {
+            if (BrowserWindow.getAllWindows().length === 0) {
+                createSillyTavernWindow();
+            }
+        });
 
-app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-        app.quit();
-    }
-});
+        startServer();
+    });
+
+    app.on('window-all-closed', () => {
+        if (process.platform !== 'darwin') {
+            app.quit();
+        }
+    });
+}

@@ -2,51 +2,16 @@ import { event_types, eventSource, getRequestHeaders } from '../../../script.js'
 import { SECRET_KEYS, secret_state } from '../../secrets.js';
 import { saveTtsProviderSettings, initVoiceMap } from './index.js';
 import { Popup } from '../../popup.js';
+import {
+    getVolcengineResourceId,
+    loadVolcengineVoices,
+    normalizeVolcengineVoiceId,
+    VOLCENGINE_BUILTIN_VOICES,
+} from '../../leslie-volcengine-voices.js';
 export { VolcengineTtsProvider };
 
 class VolcengineTtsProvider {
-    static voices = [
-        {
-            name: 'zh_female_xiaohe_uranus_bigtts',
-            voice_id: 'zh_female_xiaohe_uranus_bigtts',
-            lang: 'cl',
-        },
-        {
-            name: 'zh_female_vv_uranus_bigtts',
-            voice_id: 'zh_female_vv_uranus_bigtts',
-            lang: 'cl',
-        },
-        {
-            name: 'saturn_zh_female_keainvsheng_tob',
-            voice_id: 'saturn_zh_female_keainvsheng_tob',
-            lang: 'cl',
-        },
-        {
-            name: 'saturn_zh_female_tiaopigongzhu_tob',
-            voice_id: 'saturn_zh_female_tiaopigongzhu_tob',
-            lang: 'cl',
-        },
-        {
-            name: 'saturn_zh_female_cancan_tob',
-            voice_id: 'saturn_zh_female_cancan_tob',
-            lang: 'cl',
-        },
-        {
-            name: 'saturn_zh_male_shuanglangshaonian_tob',
-            voice_id: 'saturn_zh_male_shuanglangshaonian_tob',
-            lang: 'cl',
-        },
-        {
-            name: 'saturn_zh_male_tiancaitongzhuo_tob',
-            voice_id: 'saturn_zh_male_tiancaitongzhuo_tob',
-            lang: 'cl',
-        },
-        {
-            name: 'zh_male_taocheng_uranus_bigtts',
-            voice_id: 'zh_male_taocheng_uranus_bigtts',
-            lang: 'cl',
-        },
-    ];
+    static voices = VOLCENGINE_BUILTIN_VOICES;
     settings;
     audioElement = document.createElement('audio');
     defaultSettings = {
@@ -54,6 +19,7 @@ class VolcengineTtsProvider {
         customVoices: [],
         resource_id: '',
         speed: 0,
+        language_mode: 'auto',
         provider_endpoint: 'https://openspeech.bytedance.com/api/v3/tts/unidirectional',
     };
 
@@ -77,7 +43,7 @@ class VolcengineTtsProvider {
     }
 
     async previewTtsVoice(voice) {
-        const text = 'Hello! Nice to meet you!';
+        const text = '你好，很高兴认识你。Hello, nice to meet you.';
         const audio = await this.generateTts(text, voice);
         const audioElement = new Audio(URL.createObjectURL(await audio.blob()));
         audioElement.play().catch(e => console.error('Error playing audio:', e));
@@ -125,8 +91,19 @@ class VolcengineTtsProvider {
                 </div>
             </div>
             <div>
+                <label for="volcengine-tts-language">Language:</label>
+                <select id="volcengine-tts-language" class="text_pole">
+                    <option value="auto">Auto-detect from each reply</option>
+                    <option value="crosslingual">Mixed / cross-lingual</option>
+                    <option value="zh-cn">Chinese</option>
+                    <option value="en">English</option>
+                    <option value="ja">Japanese</option>
+                </select>
+            </div>
+            <div>
                 <label for="volcengine-tts-provider-endpoint">Provider Endpoint:</label>
-                <input type="text" class="text_pole" id="volcengine-tts-provider-endpoint">
+                <input type="text" class="text_pole" id="volcengine-tts-provider-endpoint" readonly>
+                <small>Version one uses the official Volcengine V3 HTTPS endpoint.</small>
             </div>
         `;
         return html;
@@ -134,13 +111,14 @@ class VolcengineTtsProvider {
 
     async getVoice(voiceName) {
         const allVoices = this.getAllVoices();
-        return allVoices.find(voice => voice.name == voiceName);
+        return allVoices.find(voice => voice.name == voiceName || voice.voice_id == voiceName);
     }
 
     getAllVoices() {
         const voices = [...VolcengineTtsProvider.voices];
 
-        for (const customVoice of this.settings.customVoices) {
+        for (const customVoice of this.settings?.customVoices ?? []) {
+            if (voices.some(voice => voice.voice_id === customVoice)) continue;
             voices.push({
                 name: customVoice,
                 voice_id: customVoice,
@@ -172,6 +150,7 @@ class VolcengineTtsProvider {
         // Used when provider settings are updated from UI
         this.settings.resource_id = $('#volcengine-tts-resource-id').val();
         this.settings.speed = $('#volcengine-tts-speed').val();
+        this.settings.language_mode = $('#volcengine-tts-language').val();
         this.settings.provider_endpoint = $('#volcengine-tts-provider-endpoint').val();
         saveTtsProviderSettings();
         this.changeTTSSettings();
@@ -208,6 +187,7 @@ class VolcengineTtsProvider {
         // Ensure custom configuration arrays exist
         if (!this.settings.customVoices) this.settings.customVoices = [];
 
+        VolcengineTtsProvider.voices = await loadVolcengineVoices();
 
         this.populateVoices();
 
@@ -232,6 +212,7 @@ class VolcengineTtsProvider {
         });
 
         $('#volcengine-tts-provider-endpoint').val(this.settings.provider_endpoint).on('change', this.onSettingsChange.bind(this));
+        $('#volcengine-tts-language').val(this.settings.language_mode).on('change', this.onSettingsChange.bind(this));
 
         // Initialize secret keys UI
         $('#volcengine-tts-app-id').toggleClass('success', !!secret_state[SECRET_KEYS.VOLCENGINE_APP_ID]);
@@ -246,8 +227,13 @@ class VolcengineTtsProvider {
     }
 
     async createNewVoice() {
-        const name = await Popup.show.input('Voice name: ', null);
+        const input = await Popup.show.input('Voice type / Speaker ID:', null);
+        if (!input) {
+            return;
+        }
+        const name = normalizeVolcengineVoiceId(input);
         if (!name) {
+            toastr.error('Invalid voice_type. Paste the ID itself, JSON, or voice_type=...');
             return;
         }
         if (this.settings.customVoices.includes(name)) {
@@ -294,15 +280,17 @@ class VolcengineTtsProvider {
     }
     async fetchTtsGeneration(text, voice_speaker) {
         console.info(`Generating new TTS for voice_id ${voice_speaker}`);
+        const resourceId = getVolcengineResourceId(voice_speaker, this.getAllVoices(), this.settings.resource_id);
         const response = await fetch('/api/volcengine/generate-voice', {
             method: 'POST',
             headers: getRequestHeaders(),
             body: JSON.stringify({
                 'provider_endpoint': this.settings.provider_endpoint,
-                'resource_id': this.settings.resource_id,
+                'resource_id': resourceId,
                 'text': text,
                 'voice_speaker': voice_speaker,
                 'speed': this.settings.speed,
+                'language_mode': this.settings.language_mode,
             }),
         });
         if (!response.ok) {

@@ -51,6 +51,9 @@ import { router as dataMaidRouter } from './endpoints/data-maid.js';
 import { router as backupsRouter } from './endpoints/backups.js';
 import { router as imageMetadataRouter } from './endpoints/image-metadata.js';
 import { router as volcengineRouter } from './endpoints/volcengine.js';
+import { router as leslieIdentityRouter } from './leslie-identity/router.js';
+import { router as leslieMemoryRouter } from './leslie-memory/router.js';
+import { router as leslieMomentsRouter } from './leslie-moments/router.js';
 
 /**
  * @typedef {object} ServerStartupResult
@@ -159,6 +162,9 @@ export function setupPrivateEndpoints(app) {
     app.use('/api/files', filesRouter);
     app.use('/api/characters', charactersRouter);
     app.use('/api/chats', chatsRouter);
+    app.use('/api/leslie/identity', leslieIdentityRouter);
+    app.use('/api/leslie/memory', leslieMemoryRouter);
+    app.use('/api/leslie/moments', leslieMomentsRouter);
     app.use('/api/groups', groupsRouter);
     app.use('/api/worldinfo', worldInfoRouter);
     app.use('/api/stats', statsRouter);
