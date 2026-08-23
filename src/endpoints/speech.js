@@ -39,19 +39,27 @@ function getWaveFile(audio) {
     return audioData;
 }
 
+/**
+ * Transcribe WAV audio with LeslieTavern's configured local Transformers model.
+ * @param {{audio: string, model?: string, lang?: string}} request Recognition request.
+ * @returns {Promise<{text: string}>} Transcribed text.
+ */
+export async function recognizeSpeech(request) {
+    const TASK = 'automatic-speech-recognition';
+    const pipe = await getPipeline(TASK, request.model);
+    const wav = getWaveFile(request.audio);
+    const start = performance.now();
+    const result = await pipe(wav, { language: request.lang || null, task: 'transcribe' });
+    const end = performance.now();
+    const text = String(result.text ?? '').trim();
+    console.info(`Speech recognition completed in ${(end - start) / 1000} seconds (${text.length} characters).`);
+    return { text };
+}
+
 router.post('/recognize', async (req, res) => {
     try {
-        const TASK = 'automatic-speech-recognition';
         const { model, audio, lang } = req.body;
-        const pipe = await getPipeline(TASK, model);
-        const wav = getWaveFile(audio);
-        const start = performance.now();
-        const result = await pipe(wav, { language: lang || null, task: 'transcribe' });
-        const end = performance.now();
-        console.info(`Execution duration: ${(end - start) / 1000} seconds`);
-        console.info('Transcribed audio:', result.text);
-
-        return res.json({ text: result.text });
+        return res.json(await recognizeSpeech({ model, audio, lang }));
     } catch (error) {
         console.error(error);
         return res.sendStatus(500);

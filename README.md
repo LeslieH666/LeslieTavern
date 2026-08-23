@@ -7,6 +7,8 @@
 
 LeslieTavern 是基于 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 开发的实验性桌面聊天分支，保留原有聊天兼容性，并增加 Electron 桌面入口、现代聊天界面、角色记忆、身份隔离、朋友圈原型和角色语音功能。
 
+本仓库同时包含 `airi/` 桌面陪伴前端。LeslieTavern 与 AIRI 共享一个 Git 根目录和项目版本，由本仓库统一继续演化；两个应用仅保留各自的 npm/pnpm 依赖边界。
+
 > 当前处于可运行原型阶段，不是 SillyTavern 官方版本，也不是经过签名的正式发行版。
 
 ## 主要功能
@@ -44,19 +46,25 @@ npm run test:unit
 
 本项目提供以下 Windows 快捷入口：
 
+- `启动中心.cmd`：选择只启动 LeslieTavern、联合启动 AIRI、停止或诊断。
 - `启动 LeslieTavern.cmd`
+- `启动 LeslieTavern 与 AIRI.cmd`
 - `关闭 LeslieTavern.cmd`
+- `关闭 LeslieTavern 与 AIRI.cmd`
 - `备份用户数据.cmd`
 - `打开用户数据目录.cmd`
 - `查看运行日志.cmd`
 
 这些脚本使用项目根目录下的本地 `data/`、`Runtime/` 和 `Config/`。这些目录不会进入 Git。
+启用局域网监听后，与访问地址属于同一私有子网的设备无需逐个填写 IP；切换家庭 Wi-Fi 或手机热点后会自动使用新子网，公网及未用于当前连接的其他网段仍被拒绝。
+联合启动、自动角色绑定和 AIRI 使用方法见 [LeslieTavern 与 AIRI 启动指南](docs/airi-launcher.md)。AIRI 不需要手动选择聊天 provider、模型或音色。
 
 ## 项目结构
 
 ```text
 LeslieTavern/
 ├─ .github/        GitHub Issue、PR 与 CI 配置
+├─ airi/           集成的 AIRI 桌面前端源码与 pnpm 工作区
 ├─ docs/           架构、路线图、设计和数据说明
 ├─ packaging/      Windows 本机与便携版脚本
 ├─ public/         浏览器端界面与扩展
@@ -83,6 +91,7 @@ npm run check:repo
 - [开发路线图](docs/roadmap.md)
 - [界面设计基线](docs/design.md)
 - [角色卡工作流](docs/character-card-workflow.md)
+- [LeslieTavern 与 AIRI 启动指南](docs/airi-launcher.md)
 - [数据与打包说明](docs/data-and-packaging.md)
 - [贡献指南](CONTRIBUTING.md)
 - [变更记录](CHANGELOG.md)

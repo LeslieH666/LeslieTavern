@@ -113,6 +113,11 @@ import {
     initOpenAI,
 } from './scripts/openai.js';
 import { getLengthContinuationDecision, LESLIE_LENGTH_CONTINUATION_LIMIT } from './scripts/leslie-length-continuation.js';
+import {
+    getCharacterAvatarRevision,
+    refreshCharacterAvatarState,
+    uploadCharacterAvatarFile,
+} from './scripts/character-avatar-upload.js';
 
 import {
     generateNovelWithStreaming,
@@ -7502,27 +7507,40 @@ async function read_avatar_load(input) {
             return;
         }
 
-        await createOrEditCharacter();
+        const avatarKey = String($('#avatar_url_pole').val() || '');
 
-        const formData = new FormData(/** @type {HTMLFormElement} */($('#form_create').get(0)));
-        const avatarKey = formData.get('avatar_url').toString();
-
-        // Bust cache for the avatar thumbnail and character image
-        const thumbnailUrl = getThumbnailUrl('avatar', avatarKey);
-        await fetch(thumbnailUrl, { method: 'GET', cache: 'reload' });
-        await fetch(`/characters/${avatarKey}`, { method: 'GET', cache: 'reload' });
-
-        // Refresh all visible avatar images that use this thumbnail URL
-        // This handles messages, character list, and any other place using the thumbnail
-        const avatarImages = document.querySelectorAll(`img[src^="${thumbnailUrl}"]`);
-        for (const img of avatarImages) {
-            if (img instanceof HTMLImageElement) {
-                const originalSrc = img.src;
-                img.src = '';
-                img.src = originalSrc;
-            }
+        try {
+            const convertedFile = await ensureImageFormatSupported(file);
+            await uploadCharacterAvatarFile({
+                avatarKey,
+                file: convertedFile,
+                cropData: crop_data,
+                headers: getRequestHeaders({ omitContentType: true }),
+            });
+        } catch (error) {
+            console.error('Failed to upload character avatar', error);
+            toastr.error(t`Something went wrong while uploading the character avatar.`);
+            const currentAvatar = characters[this_chid]?.avatar;
+            const currentAvatarUrl = currentAvatar && currentAvatar !== 'none'
+                ? getThumbnailUrl('avatar', currentAvatar)
+                : default_avatar;
+            $('#avatar_load_preview').attr('src', currentAvatarUrl);
+            return;
+        } finally {
+            input.value = '';
+            crop_data = undefined;
         }
-        console.debug(`Refreshed ${avatarImages.length} avatar images for ${avatarKey}`);
+
+        const refreshResult = await refreshCharacterAvatarState({
+            avatarKey,
+            getThumbnailUrl,
+            getOneCharacter,
+        });
+        if (!refreshResult.characterSynchronized) {
+            console.warn(`Character data refresh failed after updating avatar ${avatarKey}`);
+        }
+        console.debug(`Refreshed ${refreshResult.updatedImages} avatar images for ${avatarKey} at revision ${refreshResult.revision}`);
+        await eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: this_chid, character: characters[this_chid] } });
 
         console.log('Avatar refreshed');
     }
@@ -7536,7 +7554,8 @@ async function read_avatar_load(input) {
  * @returns {string} The URL for the thumbnail
  */
 export function getThumbnailUrl(type, file, t = false) {
-    return `/thumbnail?type=${type}&file=${encodeURIComponent(file)}${t ? `&t=${Date.now()}` : ''}`;
+    const revision = t ? Date.now() : type === 'avatar' ? getCharacterAvatarRevision(file) : undefined;
+    return `/thumbnail?type=${type}&file=${encodeURIComponent(file)}${revision ? `&t=${revision}` : ''}`;
 }
 
 export function buildAvatarList(block, entities, { templateId = 'inline_avatar_template', empty = true, interactable = false, highlightFavs = true } = {}) {

@@ -9,6 +9,7 @@ function createMockExpressResponse() {
     const response = new PassThrough();
     response.statusCode = 200;
     response.statusMessage = '';
+    response.setHeader = jest.fn();
 
     return response;
 }
@@ -132,6 +133,34 @@ describe('flattenSchema', () => {
 });
 
 describe('forwardFetchResponse', () => {
+    test('forwards the upstream content type for streaming responses', async () => {
+        const response = createMockExpressResponse();
+        response.socket = { on: jest.fn() };
+        const bodyPromise = collectResponseBody(response);
+
+        await forwardFetchResponse(new Response('data: [DONE]\n\n', {
+            headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },
+        }), response);
+
+        expect(await bodyPromise).toBe('data: [DONE]\n\n');
+        expect(response.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream; charset=utf-8');
+    });
+
+    test('omits an upstream error body from logs when requested', async () => {
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const response = createMockExpressResponse();
+        const bodyPromise = collectResponseBody(response);
+
+        await forwardFetchResponse(new Response('private upstream detail', {
+            status: 403,
+            statusText: 'Forbidden',
+        }), response, { logErrorBody: false });
+
+        expect(await bodyPromise).toBe('private upstream detail');
+        expect(warnSpy).toHaveBeenCalledWith('Streaming request failed with status 403 Forbidden: Response body omitted');
+        expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('private upstream detail'));
+    });
+
     test('should log JSON error bodies and return the original body for non-2xx streaming responses', async () => {
         const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
         const body = JSON.stringify({ error: { message: 'Forbidden by upstream policy' }, detail: 'policy_denied' });

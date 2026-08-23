@@ -54,6 +54,8 @@ import { router as volcengineRouter } from './endpoints/volcengine.js';
 import { router as leslieIdentityRouter } from './leslie-identity/router.js';
 import { router as leslieMemoryRouter } from './leslie-memory/router.js';
 import { router as leslieMomentsRouter } from './leslie-moments/router.js';
+import { router as leslieBridgeRouter } from './leslie-bridge/router.js';
+import { LESLIE_BRIDGE_API_ROOT } from './leslie-bridge/protocol.js';
 
 /**
  * @typedef {object} ServerStartupResult
@@ -165,6 +167,7 @@ export function setupPrivateEndpoints(app) {
     app.use('/api/leslie/identity', leslieIdentityRouter);
     app.use('/api/leslie/memory', leslieMemoryRouter);
     app.use('/api/leslie/moments', leslieMomentsRouter);
+    app.use(LESLIE_BRIDGE_API_ROOT, leslieBridgeRouter);
     app.use('/api/groups', groupsRouter);
     app.use('/api/worldinfo', worldInfoRouter);
     app.use('/api/stats', statsRouter);

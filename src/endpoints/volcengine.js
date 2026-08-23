@@ -22,7 +22,7 @@ export const router = Router();
 const VOICE_CATALOG_TTL_MS = 6 * 60 * 60 * 1000;
 let voiceCatalogCache = null;
 
-router.get('/voices', async (_req, res) => {
+export async function handleListVolcengineVoices(_req, res) {
     try {
         if (voiceCatalogCache?.expiresAt > Date.now()) {
             res.set('Cache-Control', 'private, max-age=3600');
@@ -52,10 +52,12 @@ router.get('/voices', async (_req, res) => {
         if (voiceCatalogCache?.payload) return res.json(voiceCatalogCache.payload);
         return res.status(502).send('暂时无法读取火山引擎官方音色目录，请稍后重试。');
     }
-});
+}
+
+router.get('/voices', handleListVolcengineVoices);
 
 
-router.post('/generate-voice', async (req, res) => {
+export async function handleGenerateVolcengineVoice(req, res) {
     try {
         const appId = readSecret(req.user.directories, SECRET_KEYS.VOLCENGINE_APP_ID);
         const accessKey = readSecret(req.user.directories, SECRET_KEYS.VOLCENGINE_ACCESS_KEY);
@@ -66,6 +68,7 @@ router.post('/generate-voice', async (req, res) => {
         }
 
         const request = normalizeVolcengineRequest(req.body);
+        const startedAt = performance.now();
 
         const response = await fetch(request.endpoint, {
             method: 'POST',
@@ -139,6 +142,12 @@ router.post('/generate-voice', async (req, res) => {
 
         res.set('Content-Type', 'audio/mpeg');
         res.set('Cache-Control', 'no-store');
+        console.info('Volcengine TTS generated audio', {
+            bytes: finalAudioData.length,
+            durationMs: Math.round(performance.now() - startedAt),
+            resourceId: request.resourceId,
+            speaker: request.speaker,
+        });
         res.status(200).send(finalAudioData);
     } catch (error) {
         if (error instanceof VolcengineRequestError) {
@@ -152,4 +161,6 @@ router.post('/generate-voice', async (req, res) => {
         console.error('Volcengine TTS request failed', error);
         return res.status(502).send('语音生成失败，请检查火山引擎配置后重试。');
     }
-});
+}
+
+router.post('/generate-voice', handleGenerateVolcengineVoice);

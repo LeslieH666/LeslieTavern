@@ -99,6 +99,7 @@ import { t } from './i18n.js';
 import { kai_settings } from './kai-settings.js';
 import { instruct_presets, selectContextPreset, selectInstructPreset } from './instruct-mode.js';
 import { debounce_timeout, SWIPE_DIRECTION, SWIPE_SOURCE } from './constants.js';
+import { refreshCharacterAvatarState, uploadCharacterAvatarFile } from './character-avatar-upload.js';
 export {
     executeSlashCommands, executeSlashCommandsWithOptions, getSlashCommandsHelp, registerSlashCommand,
 };
@@ -5149,38 +5150,16 @@ async function uploadCharacterAvatar(avatarKey, base64Data, { resizePrompt = fal
         const response = await fetch(finalImageData);
         const blob = await response.blob();
 
-        // Create form data for upload
-        const formData = new FormData();
-        formData.append('avatar', blob, 'avatar.png');
-        formData.append('avatar_url', avatarKey);
-
-        const uploadResponse = await fetch('/api/characters/edit-avatar', {
-            method: 'POST',
+        await uploadCharacterAvatarFile({
+            avatarKey,
+            file: blob,
             headers: getRequestHeaders({ omitContentType: true }),
-            body: formData,
         });
-
-        if (!uploadResponse.ok) {
-            const errorText = await uploadResponse.text();
-            throw new Error(errorText); // Will be caught and logged below
+        const refreshResult = await refreshCharacterAvatarState({ avatarKey, getThumbnailUrl, getOneCharacter });
+        if (!refreshResult.characterSynchronized) {
+            console.warn(`Character data refresh failed after updating avatar ${avatarKey}`);
         }
-
-        // Bust cache for the avatar thumbnail and character image
-        const thumbnailUrl = getThumbnailUrl('avatar', avatarKey);
-        await fetch(thumbnailUrl, { method: 'GET', cache: 'reload' });
-        await fetch(`/characters/${avatarKey}`, { method: 'GET', cache: 'reload' });
-
-        // Refresh all visible avatar images that use this thumbnail URL
-        // This handles messages, character list, and any other place using the thumbnail
-        const avatarImages = document.querySelectorAll(`img[src^="${thumbnailUrl}"]`);
-        for (const img of avatarImages) {
-            if (img instanceof HTMLImageElement) {
-                const originalSrc = img.src;
-                img.src = '';
-                img.src = originalSrc;
-            }
-        }
-        console.debug(`Refreshed ${avatarImages.length} avatar images for ${avatarKey}`);
+        console.debug(`Refreshed ${refreshResult.updatedImages} avatar images for ${avatarKey} at revision ${refreshResult.revision}`);
 
         return true;
     } catch (error) {

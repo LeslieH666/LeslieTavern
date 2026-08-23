@@ -3,13 +3,19 @@
 ## Available in the current prototype
 
 - SillyTavern-compatible chat and character workflows.
-- Electron desktop entry point and a listener-aware local launcher; the current workspace can explicitly enable allowlisted LAN web access.
+- Electron desktop entry point and a listener-aware local launcher; the current workspace can explicitly enable same-subnet LAN web access without per-device whitelist entries.
 - Modern desktop chat layout and settings adaptations.
 - First versions of Leslie memory and Persona/storyline identity isolation.
 - Moments publishing and timeline storage prototype.
 - Volcengine character voice settings and playback integration.
 - Character workshop prototype.
+- Character-card and chat-record export from the Leslie chat menu, including a combined ZIP that preserves CCV3 PNG and SillyTavern JSONL files.
 - Windows portable-package builder with empty distributable user data.
+- Disabled-by-default Leslie Bridge v1 foundation with bearer authentication, capability discovery, and an OpenAI-compatible Volcengine speech route.
+- Authoritative AIRI companion turns through the active LeslieTavern character, chat, prompt pipeline, memory, and model.
+- Automatic AIRI binding to the visible LeslieTavern character and its Volcengine voice.
+- Dedicated AIRI mode with automatic provider selection, no onboarding window, and a reduced settings surface.
+- Windows launch center with LeslieTavern-only, combined AIRI, diagnostics, rebuild, and tracked shutdown modes.
 
 ## Stabilization priorities
 
@@ -17,7 +23,8 @@
 2. Add long-response cancellation and swipe coverage for automatic voice playback.
 3. Split the largest frontend modules into smaller maintainable units.
 4. Add schema migration and recovery fixtures for identity, memory, and moments stores.
-5. Document upstream rebasing and conflict-resolution practices.
+5. Add AIRI controls for LeslieTavern retry, regenerate, swipe, edit, and branch operations.
+6. Add an optional per-character AIRI display-model mapping without mixing it into LeslieTavern character data.
 
 ## Later work
 

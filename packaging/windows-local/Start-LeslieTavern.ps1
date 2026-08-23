@@ -129,7 +129,7 @@ if ($started) {
         if ($lanUrls) {
             Write-Host ('LAN URL: ' + ($lanUrls -join '  ')) -ForegroundColor Cyan
         }
-        Write-Host 'LAN access is limited by Config\config.yaml whitelist and the Windows firewall.' -ForegroundColor Yellow
+        Write-Host 'Devices on the directly connected private subnet are allowed automatically; Windows Firewall still enforces the inbound boundary.' -ForegroundColor Yellow
     }
 } else {
     Write-Host "LeslieTavern is still initializing. Logs: $LogsPath" -ForegroundColor Yellow

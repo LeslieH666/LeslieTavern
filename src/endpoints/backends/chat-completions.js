@@ -2154,7 +2154,7 @@ router.post('/bias', async function (request, response) {
     }
 });
 
-router.post('/generate', async function (request, response) {
+export async function handleChatCompletionGenerate(request, response) {
     try {
         if (!request.body) return response.status(400).send({ error: true });
 
@@ -2585,19 +2585,24 @@ router.post('/generate', async function (request, response) {
             signal: controller.signal,
         };
 
-        console.debug('Chat Completion request:', requestBody);
+        const suppressBodyLog = request.leslieBridge?.modelGateway === true;
+        console.debug('Chat Completion request:', suppressBodyLog ? {
+            model: requestBody.model,
+            source: request.body.chat_completion_source,
+            stream: requestBody.stream,
+        } : requestBody);
 
         const fetchResponse = await fetch(endpointUrl, config);
 
         if (request.body.stream) {
             console.info('Streaming request in progress');
-            return await forwardFetchResponse(fetchResponse, response);
+            return await forwardFetchResponse(fetchResponse, response, { logErrorBody: !suppressBodyLog });
         }
 
         if (fetchResponse.ok) {
             /** @type {any} */
             const json = await fetchResponse.json();
-            console.debug('Chat Completion response:', json);
+            console.debug('Chat Completion response:', suppressBodyLog ? { model: requestBody.model, received: true } : json);
             return response.send(json);
         } else {
             const responseText = await fetchResponse.text();
@@ -2605,7 +2610,7 @@ router.post('/generate', async function (request, response) {
 
             const message = fetchResponse.statusText || 'Unknown error occurred';
             const quota_error = fetchResponse.status === 429 && errorData?.error?.type === 'insufficient_quota';
-            console.error('Chat completion request error: ', message, responseText);
+            console.error('Chat completion request error: ', message, suppressBodyLog ? { status: fetchResponse.status } : responseText);
 
             if (!response.headersSent) {
                 response.send({ error: { message }, quota_error: quota_error });
@@ -2627,7 +2632,9 @@ router.post('/generate', async function (request, response) {
             response.end();
         }
     }
-});
+}
+
+router.post('/generate', handleChatCompletionGenerate);
 
 const multimodalModels = express.Router();
 

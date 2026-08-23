@@ -20,6 +20,27 @@ Browser UI
 ├─ Leslie desktop chat and settings layers
 ├─ Memory and moments extensions
 └─ Character workshop and voice settings
+
+Optional companion boundary
+└─ Leslie Bridge v1
+   ├─ Process-scoped bearer authentication
+   ├─ Capability discovery
+   ├─ OpenAI-compatible Volcengine speech adapter
+   ├─ Active LeslieTavern character and chat binding
+   ├─ Authoritative LeslieTavern turn streaming
+   └─ Bound-character Volcengine speech
+
+Local Windows launcher
+├─ LeslieTavern-only mode
+├─ LeslieTavern + AIRI mode
+├─ Ephemeral shared Bridge token
+└─ Build, diagnostics, logs, and safe tracked-process shutdown
+
+Integrated source workspace
+├─ One root Git repository and owned origin remote
+├─ LeslieTavern npm package boundary
+├─ airi/ pnpm package boundary
+└─ No nested AIRI Git metadata or upstream remote
 ```
 
 ## Compatibility boundaries
@@ -28,7 +49,9 @@ Browser UI
 - Leslie modules should be optional and fail open.
 - Character cards, JSONL chats, group chats, World Info, swipes, and model adapters must remain usable.
 - User data is local state and is not part of the source repository.
-- Direct LAN web access may be enabled explicitly with an IP allowlist and a trusted-network firewall boundary. Device discovery, data synchronization, cloud synchronization, and automatic memory writes still require separate security and approval designs before implementation.
+- Direct LAN web access may be enabled explicitly with an allowlist that follows the private subnet used for each connection and a trusted-network firewall boundary. Same-subnet devices do not need per-IP entries, while public and unrelated routed networks remain blocked. Device discovery, data synchronization, cloud synchronization, and automatic memory writes still require separate security and approval designs before implementation.
+- The AIRI companion bridge is disabled by default and uses a process-scoped bearer token.
+- AIRI sends only the newest user input. LeslieTavern remains authoritative for prompt assembly, generation, persistence, character selection, and voice selection. The boundary is documented in [airi-bridge.md](airi-bridge.md).
 
 ## Current maturity
 

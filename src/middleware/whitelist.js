@@ -7,11 +7,13 @@ import ipMatching from 'ip-matching';
 import isDocker from 'is-docker';
 
 import { filterValidIpPatterns, getIpFromRequest, getRealOrForwardedIp } from '../express-common.js';
+import { isDirectPrivateNetworkRequest } from '../network-access.js';
 import { color, getConfigValue, safeReadFileSync } from '../util.js';
 
 const whitelistPath = path.join(process.cwd(), './whitelist.txt');
 const enableForwardedWhitelist = !!getConfigValue('enableForwardedWhitelist', false, 'boolean');
 const whitelistDockerHosts = !!getConfigValue('whitelistDockerHosts', true, 'boolean');
+const whitelistDirectPrivateNetworks = !!getConfigValue('whitelistDirectPrivateNetworks', true, 'boolean');
 /** @type {string[]} */
 let whitelist = getConfigValue('whitelist', []);
 
@@ -77,12 +79,32 @@ export default async function getWhitelistMiddleware() {
          * @returns {boolean} True if the IP matches any whitelist entry
          */
         function isIPInWhitelist(whitelist, ip) {
-            return whitelist.some(x => ipMatching.matches(ip, ipMatching.getMatch(x)));
+            if (typeof ip !== 'string') {
+                return false;
+            }
+            const normalizedIp = ip.replace(/%[^%]+$/, '');
+            return whitelist.some((entry) => {
+                try {
+                    return ipMatching.matches(normalizedIp, ipMatching.getMatch(entry));
+                } catch {
+                    return false;
+                }
+            });
+        }
+
+        /**
+         * Allows an explicitly listed IP or a client on the private subnet it used to reach this server.
+         * @param {string} ip - The IP address to check
+         * @returns {boolean} True if the request source is allowed
+         */
+        function isRequestSourceAllowed(ip) {
+            return isIPInWhitelist(whitelist, ip)
+                || (whitelistDirectPrivateNetworks && isDirectPrivateNetworkRequest(ip, req.socket.localAddress));
         }
 
         //clientIp = req.connection.remoteAddress.split(':').pop();
-        if (!isIPInWhitelist(whitelist, clientIp)
-            || (forwardedIp && !isIPInWhitelist(whitelist, forwardedIp))
+        if (!isRequestSourceAllowed(clientIp)
+            || (forwardedIp && !isRequestSourceAllowed(forwardedIp))
         ) {
             // Log the connection attempt with real IP address
             const ipDetails = forwardedIp
@@ -92,7 +114,7 @@ export default async function getWhitelistMiddleware() {
             if (!noLogPaths.includes(req.path)) {
                 console.warn(
                     color.red(
-                        `Blocked connection from ${ipDetails}; User Agent: ${userAgent}\n\tTo allow this connection, add its IP address to the whitelist or disable whitelist mode by editing config.yaml in the root directory of your SillyTavern installation.\n`,
+                        `Blocked connection from ${ipDetails}; User Agent: ${userAgent}\n\tDevices on the directly connected private subnet can be allowed with whitelistDirectPrivateNetworks. Other addresses must be added to the whitelist in config.yaml.\n`,
                     ),
                 );
             }
