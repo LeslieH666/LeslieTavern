@@ -54,6 +54,11 @@ import corsProxyMiddleware from './middleware/corsProxy.js';
 import hostWhitelistMiddleware from './middleware/hostWhitelist.js';
 import userCssMiddleware from './middleware/userCss.js';
 import {
+    isLeslieBridgeRequestAuthenticated,
+    leslieBridgeAuthenticationMiddleware,
+} from './leslie-bridge/auth.js';
+import { LESLIE_BRIDGE_API_ROOT } from './leslie-bridge/protocol.js';
+import {
     getVersion,
     color,
     removeColorFormatting,
@@ -162,6 +167,7 @@ app.use(cookieSession({
 }));
 
 app.use(setUserDataMiddleware);
+app.use(LESLIE_BRIDGE_API_ROOT, leslieBridgeAuthenticationMiddleware);
 
 // CSRF Protection //
 if (!cliArgs.disableCsrf) {
@@ -184,7 +190,8 @@ if (!cliArgs.disableCsrf) {
             req.session.csrfToken = token;
         },
         skipCsrfProtection: (req) => {
-            return cliArgs.enableCorsProxy ? /^\/proxy\//.test(req.path) : false;
+            const corsProxyRequest = cliArgs.enableCorsProxy ? /^\/proxy\//.test(req.path) : false;
+            return corsProxyRequest || isLeslieBridgeRequestAuthenticated(req);
         },
         size: 32,
     });

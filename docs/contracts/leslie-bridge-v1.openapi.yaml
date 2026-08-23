@@ -1,0 +1,311 @@
+openapi: 3.1.0
+info:
+  title: Leslie Bridge
+  version: '1'
+  description: Process-local companion API for an AIRI desktop frontend.
+servers:
+  - url: /api/leslie/bridge/v1
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      operationId: getBridgeHealth
+      responses:
+        '200':
+          description: Bridge is authenticated and ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service, protocol]
+                properties:
+                  status: { const: ok }
+                  service: { const: leslie-tavern }
+                  protocol: { $ref: '#/components/schemas/Protocol' }
+  /capabilities:
+    get:
+      operationId: getBridgeCapabilities
+      responses:
+        '200':
+          description: Feature availability for this Bridge version.
+          content:
+            application/json:
+              schema: { type: object }
+  /companion/state:
+    get:
+      operationId: getCompanionState
+      description: Reports the visible LeslieTavern page and its active character, chat, and voice binding.
+      responses:
+        '200':
+          description: Current companion state. A disconnected state is still a successful response.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompanionState' }
+  /models:
+    get:
+      operationId: listBridgeModels
+      responses:
+        '200':
+          description: OpenAI-compatible model list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [object, data]
+                properties:
+                  object: { const: list }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Model' }
+  /voices:
+    get:
+      operationId: listBridgeVoices
+      responses:
+        '200':
+          description: Volcengine public voice catalog.
+  /audio/speech:
+    post:
+      operationId: createBridgeSpeech
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SpeechRequest' }
+      responses:
+        '200':
+          description: Synthesized MP3 audio.
+          content:
+            audio/mpeg:
+              schema: { type: string, contentEncoding: binary }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+  /model/chat/models:
+    get:
+      operationId: listBridgeChatModels
+      description: Legacy compatibility endpoint. The dedicated AIRI companion does not use it.
+      responses:
+        '200':
+          description: One stable AIRI chat model mapped to the active upstream model.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [object, data]
+                properties:
+                  object: { const: list }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ChatModel' }
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /model/chat/completions:
+    post:
+      operationId: createBridgeModelChatCompletion
+      description: Legacy AIRI-owned prompt gateway. The dedicated AIRI companion does not use it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChatRequest' }
+      responses:
+        '200':
+          description: OpenAI-compatible JSON or server-sent event stream.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /chat/completions:
+    post:
+      operationId: createBridgeChatCompletion
+      description: Uses only the newest user message and runs a normal turn for the active LeslieTavern character and chat.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChatRequest' }
+      responses:
+        '200':
+          description: OpenAI-compatible server-sent event stream.
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+  /companion/audio/speech:
+    post:
+      operationId: createCompanionSpeech
+      description: Uses the Volcengine voice assigned to the active LeslieTavern character.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input]
+              properties:
+                input: { type: string, minLength: 1, maxLength: 10000 }
+                model: { const: leslie-volcengine-tts }
+                response_format: { const: mp3, default: mp3 }
+      responses:
+        '200':
+          description: Synthesized MP3 audio.
+          content:
+            audio/mpeg:
+              schema: { type: string, contentEncoding: binary }
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /companion/audio/transcriptions:
+    post:
+      operationId: createCompanionTranscription
+      description: Uses the local speech-recognition model configured by LeslieTavern. No external API key is required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TranscriptionRequest' }
+      responses:
+        '200':
+          description: Transcribed text.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [text]
+                properties:
+                  text: { type: string }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    ErrorResponse:
+      description: Stable Bridge error envelope.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    Protocol:
+      type: object
+      required: [name, version]
+      properties:
+        name: { const: leslie-bridge }
+        version: { const: '1' }
+    CompanionState:
+      type: object
+      required: [connected, binding, characters, generating, voice]
+      properties:
+        connected: { type: boolean }
+        binding:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [characterId, characterName, chatId, personaName]
+              properties:
+                characterId: { type: string }
+                characterName: { type: string }
+                chatId: { type: string }
+                personaName: { type: string }
+        characters:
+          type: array
+          items:
+            type: object
+            required: [id, name, avatar]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              avatar: { type: string }
+        generating: { type: boolean }
+        voice:
+          type: object
+          required: [available]
+          properties:
+            available: { type: boolean }
+            speakerId: { type: string }
+            resourceId: { type: string }
+            speed: { type: number }
+            languageMode: { type: string }
+    Model:
+      type: object
+      required: [id, object, owned_by]
+      properties:
+        id: { const: leslie-volcengine-tts }
+        object: { const: model }
+        created: { type: integer }
+        owned_by: { const: leslie-tavern }
+    ChatModel:
+      type: object
+      required: [id, object, owned_by, leslie_source, leslie_upstream_model]
+      properties:
+        id: { const: leslie-current-chat }
+        object: { const: model }
+        created: { type: integer }
+        owned_by: { const: leslie-tavern }
+        leslie_source: { type: string }
+        leslie_upstream_model: { type: string }
+    ChatRequest:
+      type: object
+      required: [messages]
+      properties:
+        model: { const: leslie-current-chat, default: leslie-current-chat }
+        messages:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { type: object }
+        stream: { type: boolean, default: true }
+        temperature: { type: number }
+        top_p: { type: number }
+        max_tokens: { type: integer, minimum: 1 }
+        stop:
+          type: array
+          items: { type: string }
+        tools:
+          type: array
+          items: { type: object }
+    SpeechRequest:
+      type: object
+      required: [input, voice]
+      properties:
+        model:
+          type: string
+          enum: [leslie-volcengine-tts, tts-1]
+          default: leslie-volcengine-tts
+        input: { type: string, minLength: 1, maxLength: 10000 }
+        voice: { type: string, minLength: 1, description: Volcengine speaker ID. }
+        speed: { type: number, exclusiveMinimum: 0, default: 1 }
+        response_format: { const: mp3, default: mp3 }
+        resource_id: { type: string, minLength: 1 }
+        language_mode:
+          type: string
+          enum: [auto, crosslingual, zh-cn, en, ja]
+    TranscriptionRequest:
+      type: object
+      required: [audio, content_type, model]
+      properties:
+        audio:
+          type: string
+          contentEncoding: base64
+          minLength: 4
+        content_type:
+          type: string
+          enum: [audio/wav, audio/x-wav]
+        language:
+          type: string
+          maxLength: 32
+        model: { const: leslie-local-whisper }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            type: { type: string }

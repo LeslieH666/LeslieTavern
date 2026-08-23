@@ -1,16 +1,17 @@
 import path from 'node:path';
-import fs from 'node:fs';
 import process from 'node:process';
 import { Buffer } from 'node:buffer';
 
 import { pipeline, env, RawImage } from 'sillytavern-transformers';
 import { getConfigValue } from './util.js';
 import { serverDirectory } from './server-directory.js';
+import { migrateLegacyModelCache } from './transformers-cache.js';
 
 configureTransformers();
 
 function configureTransformers() {
-    // Limit the number of threads to 1 to avoid issues on Android
+    // Keep ONNX WASM single-threaded. The bundled Whisper runtime does not
+    // reliably initialize its threaded worker in the desktop Electron host.
     env.backends.onnx.wasm.numThreads = 1;
     // Use WASM from a local folder to avoid CDN connections
     env.backends.onnx.wasm.wasmPaths = path.join(serverDirectory, 'node_modules', 'sillytavern-transformers', 'dist') + path.sep;
@@ -84,34 +85,14 @@ function getModelForTask(task) {
     }
 }
 
-async function migrateCacheToDataDir() {
-    const oldCacheDir = path.join(process.cwd(), 'cache');
-    const newCacheDir = path.join(globalThis.DATA_ROOT, '_cache');
+let cacheMigrationPromise;
 
-    if (!fs.existsSync(newCacheDir)) {
-        fs.mkdirSync(newCacheDir, { recursive: true });
-    }
-
-    if (fs.existsSync(oldCacheDir) && fs.statSync(oldCacheDir).isDirectory()) {
-        const files = fs.readdirSync(oldCacheDir);
-
-        if (files.length === 0) {
-            return;
-        }
-
-        console.log('Migrating model cache files to data directory. Please wait...');
-
-        for (const file of files) {
-            try {
-                const oldPath = path.join(oldCacheDir, file);
-                const newPath = path.join(newCacheDir, file);
-                fs.cpSync(oldPath, newPath, { recursive: true, force: true });
-                fs.rmSync(oldPath, { recursive: true, force: true });
-            } catch (error) {
-                console.warn('Failed to migrate cache file. The model will be re-downloaded.', error);
-            }
-        }
-    }
+function migrateCacheToDataDir() {
+    cacheMigrationPromise ??= Promise.resolve().then(() => migrateLegacyModelCache({
+        oldCacheDir: path.join(process.cwd(), 'cache'),
+        newCacheDir: path.join(globalThis.DATA_ROOT, '_cache'),
+    }));
+    return cacheMigrationPromise;
 }
 
 /**

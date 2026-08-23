@@ -135,6 +135,31 @@ function getProviderSettings() {
     return settings;
 }
 
+/**
+ * Get the Volcengine voice that belongs to the active companion character.
+ * Secret values stay in the LeslieTavern secret store.
+ * @param {string} characterName Active character name.
+ * @returns {{available: boolean, speakerId: string, resourceId: string, speed: number, languageMode: string}} Voice snapshot.
+ */
+export function getLeslieCompanionVoiceSettings(characterName) {
+    const settings = getProviderSettings();
+    const speakerId = settings.voiceMap[characterName] || settings.voiceMap[DEFAULT_VOICE_MARKER] || '';
+    const voices = [
+        ...VOLCENGINE_BUILTIN_VOICES,
+        ...settings.customVoices.map(voiceId => ({ name: voiceId, voice_id: voiceId })),
+    ];
+    const resourceId = getVolcengineResourceId(speakerId, voices, settings.resource_id);
+    const hasCredentials = hasSecret(secret_state[SECRET_KEYS.VOLCENGINE_APP_ID])
+        && hasSecret(secret_state[SECRET_KEYS.VOLCENGINE_ACCESS_KEY]);
+    return {
+        available: hasCredentials && Boolean(speakerId) && speakerId !== 'disabled' && Boolean(resourceId),
+        speakerId,
+        resourceId,
+        speed: Math.min(100, Math.max(-50, Number(settings.speed) || 0)),
+        languageMode: String(settings.language_mode || 'auto'),
+    };
+}
+
 /** @param {unknown} value @returns {string} HTML-safe text. */
 function escapeHtml(value) {
     return String(value ?? '')

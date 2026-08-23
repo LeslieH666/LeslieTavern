@@ -694,6 +694,10 @@ body.leslie-modern .leslie-chat-heading small {
     display: none !important;
 }
 
+.leslie-chat-more-menu button[hidden] {
+    display: none !important;
+}
+
 .leslie-chat-more-menu button {
     display: grid;
     min-height: 42px;
@@ -711,6 +715,13 @@ body.leslie-modern .leslie-chat-heading small {
     color: var(--leslie-shell-accent);
     background: var(--leslie-shell-hover);
     outline: none;
+}
+
+.leslie-chat-more-menu button:disabled {
+    color: var(--leslie-shell-muted);
+    background: transparent;
+    cursor: not-allowed;
+    opacity: 0.48;
 }
 
 .leslie-chat-more-menu button i {

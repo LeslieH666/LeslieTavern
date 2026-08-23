@@ -4,6 +4,7 @@ import { promises as fsPromises } from 'node:fs';
 import { Buffer } from 'node:buffer';
 
 import express from 'express';
+import archiver from 'archiver';
 import sanitize from 'sanitize-filename';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import yaml from 'yaml';
@@ -25,6 +26,7 @@ import { getChatInfo } from './chats.js';
 import { ByafParser } from '../byaf.js';
 import { CharXParser, persistCharXAssets } from '../charx.js';
 import cacheBuster from '../middleware/cacheBuster.js';
+import { appendCharacterBundleFiles, getCharacterBundleFileName, getCharacterExportBaseName, listCharacterChatExports } from '../leslie-character-export.js';
 
 // With 100 MB limit it would take roughly 3000 characters to reach this limit
 const memoryCacheCapacity = getConfigValue('performance.memoryCacheCapacity', '100mb');
@@ -499,6 +501,19 @@ function unsetPrivateFields(char) {
     _.set(char, 'fav', false);
     _.set(char, 'data.extensions.fav', false);
     _.unset(char, 'chat');
+}
+
+/**
+ * Creates a shareable character card PNG without local-only fields.
+ *
+ * @param {string} filename Character card path.
+ * @returns {Promise<Buffer>} Sanitized character card PNG.
+ */
+async function getShareableCharacterPng(filename) {
+    const rawBuffer = await fsPromises.readFile(filename);
+    const rawData = read(rawBuffer);
+    const mutatedData = mutateJsonString(rawData, unsetPrivateFields);
+    return write(rawBuffer, mutatedData);
 }
 
 function readFromV2(char) {
@@ -1655,10 +1670,7 @@ router.post('/export', validateAvatarUrlMiddleware, async function (request, res
 
         switch (request.body.format) {
             case 'png': {
-                const rawBuffer = await fsPromises.readFile(filename);
-                const rawData = read(rawBuffer);
-                const mutatedData = mutateJsonString(rawData, unsetPrivateFields);
-                const mutatedBuffer = write(rawBuffer, mutatedData);
+                const mutatedBuffer = await getShareableCharacterPng(filename);
                 const contentType = mime.lookup(filename) || 'image/png';
                 response.setHeader('Content-Type', contentType);
                 response.setHeader('Content-Disposition', `attachment; filename="${encodeURI(path.basename(filename))}"`);
@@ -1681,5 +1693,55 @@ router.post('/export', validateAvatarUrlMiddleware, async function (request, res
     } catch (err) {
         console.error('Character export failed', err);
         response.sendStatus(500);
+    }
+});
+
+router.post('/export-bundle', validateAvatarUrlMiddleware, async function (request, response) {
+    try {
+        if (!request.body.avatar_url || typeof request.body.avatar_url !== 'string') {
+            return response.sendStatus(400);
+        }
+
+        const avatarName = sanitize(request.body.avatar_url);
+        if (!avatarName || avatarName !== request.body.avatar_url || path.extname(avatarName) !== '.png') {
+            return response.sendStatus(400);
+        }
+        const filename = path.join(request.user.directories.characters, avatarName);
+        if (!fs.existsSync(filename) || !fs.statSync(filename).isFile()) {
+            return response.sendStatus(404);
+        }
+
+        const [characterCard, chatFiles] = await Promise.all([
+            getShareableCharacterPng(filename),
+            listCharacterChatExports(request.user.directories.chats, avatarName),
+        ]);
+        const characterName = getCharacterExportBaseName(avatarName);
+        const archive = archiver('zip', { zlib: { level: 9 } });
+
+        archive.on('warning', error => console.warn('Character bundle export warning', error.message));
+        archive.on('error', (error) => {
+            console.error('Character bundle export failed', error);
+            if (response.headersSent) {
+                response.destroy(error);
+            } else {
+                response.sendStatus(500);
+            }
+        });
+
+        response.attachment(getCharacterBundleFileName(avatarName));
+        response.setHeader('X-Leslie-Chat-Count', String(chatFiles.length));
+        archive.pipe(response);
+        appendCharacterBundleFiles(archive, { characterName, characterCard, chatFiles });
+        await archive.finalize();
+    } catch (err) {
+        console.error('Character bundle export failed', err);
+        if (response.writableEnded || response.destroyed) {
+            return;
+        }
+        if (response.headersSent) {
+            response.destroy(err);
+        } else {
+            response.sendStatus(500);
+        }
     }
 });

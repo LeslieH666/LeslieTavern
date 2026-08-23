@@ -12,6 +12,7 @@ Before changing code, read `README.md`, `docs/project-overview.md`, and `docs/ro
 ## User data
 
 - Treat `data/`, `Config/`, `Runtime/`, `Cache/`, `Run/`, logs, backups, and `notes/private/` as local-only state.
+- Treat `airi/` as an integrated source subtree in this Git repository. It keeps its pnpm package boundary but has no nested Git repository or separate remote.
 - Never commit character cards, chats, credentials, cookies, memories, user settings, generated audio, or real-person fixtures.
 - Do not print secret values or private chat content in logs, tests, documentation, or review output.
 - Use synthetic fixtures for automated tests.
@@ -26,4 +27,4 @@ Before changing code, read `README.md`, `docs/project-overview.md`, and `docs/ro
 
 - Keep commits focused and use clear conventional-style messages when practical.
 - Update `docs/roadmap.md` or `CHANGELOG.md` when a change materially affects project status or release behavior.
-- Do not push to the SillyTavern `upstream` remote. Publish only after the maintainer configures a project-owned `origin`.
+- Use the project-owned `origin` as the only remote. Do not add or push to SillyTavern or AIRI upstream remotes.

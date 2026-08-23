@@ -15,7 +15,9 @@ The following are always local and ignored:
 
 ## Local Windows workflow
 
-The root Windows shortcuts call scripts under `packaging/windows-local/`. Paths are resolved relative to the repository, so the project can be moved without editing the scripts. The launcher verifies the actual data root and the listener resolved from `Config/config.yaml` before reporting success. If LAN web access is enabled locally, keep an explicit IP allowlist and restrict the Windows firewall rule to the trusted network interface and subnet. Portable builds remain localhost-only.
+The root Windows shortcuts call scripts under `packaging/windows-local/`. Paths are resolved relative to the repository, so the project can be moved without editing the scripts. The launcher verifies the actual data root and the listener resolved from `Config/config.yaml` before reporting success. When LAN web access is enabled, `whitelistDirectPrivateNetworks` permits only clients that share the private subnet of the local address they connected to, so Wi-Fi changes do not require per-device entries and unrelated routed subnets are not implicitly trusted. Keep the Windows firewall restricted to a trusted local-subnet boundary; portable builds remain localhost-only.
+
+`启动中心.cmd` runs the integrated `airi/` source tree from the same Git worktree. AIRI keeps its pnpm package boundary, while the root repository owns versioning and remotes for both applications. The launcher stores only ignored logs and process state. Bridge bearer tokens remain process-local and are never written to disk.
 
 ## Portable build
 

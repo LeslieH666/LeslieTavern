@@ -1,9 +1,10 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yargs from 'yargs';
 import { serverEvents, EVENT_NAMES } from '../server-events.js';
+import { companionSession } from '../leslie-bridge/companion-session.js';
 
 const cliArguments = yargs(process.argv)
     .usage('Usage: <your-start-script> [options]')
@@ -35,6 +36,37 @@ let appUrl;
 
 /** @type {BrowserWindow | undefined} Keep the desktop window alive until it is explicitly closed. */
 let mainWindow;
+let companionHostSeen = false;
+
+function isMainWindowSender(event) {
+    return Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
+}
+
+ipcMain.handle('leslie:companion:poll', async (event, message) => {
+    if (!isMainWindowSender(event)) {
+        throw new Error('Only the LeslieTavern window can own the companion session.');
+    }
+    const command = companionSession.pollHost({
+        hostId: message?.hostId,
+        snapshot: message?.snapshot,
+    });
+    if (!companionHostSeen) {
+        companionHostSeen = true;
+        console.info('Leslie companion page host connected.');
+    }
+    return command;
+});
+
+ipcMain.handle('leslie:companion:publish', (event, message) => {
+    if (!isMainWindowSender(event)) {
+        throw new Error('Only the LeslieTavern window can publish companion events.');
+    }
+    return companionSession.publishHostEvent({
+        hostId: message?.hostId,
+        requestId: message?.requestId,
+        event: message?.event,
+    });
+});
 
 function createSillyTavernWindow() {
     if (!appUrl) {
@@ -49,6 +81,9 @@ function createSillyTavernWindow() {
         autoHideMenuBar: true,
         title: 'LeslieTavern',
         webPreferences: {
+            preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)),
+            contextIsolation: true,
+            nodeIntegration: false,
             // Character speech is generated after an asynchronous model/API
             // response, so it must not depend on a second user gesture.
             autoplayPolicy: 'no-user-gesture-required',
@@ -56,6 +91,17 @@ function createSillyTavernWindow() {
     });
     mainWindow.once('closed', () => {
         mainWindow = undefined;
+    });
+    mainWindow.webContents.once('did-finish-load', async () => {
+        try {
+            const companionHostReady = await mainWindow.webContents.executeJavaScript(
+                'typeof window.leslieCompanionHost === \'object\'',
+                true,
+            );
+            console.info(`Leslie companion preload: ${companionHostReady ? 'ready' : 'missing'}.`);
+        } catch (error) {
+            console.warn('Failed to inspect the Leslie companion preload.', error);
+        }
     });
     void mainWindow.loadURL(appUrl);
 }

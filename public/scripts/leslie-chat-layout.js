@@ -22,6 +22,7 @@ import {
     selected_group,
 } from './group-chats.js';
 import { selectLatestCharacterChat } from './leslie-chat-selection.js';
+import { runCharacterExport, syncCharacterExportMenuState } from './leslie-character-export.js';
 import { getLeslieConnectionState } from './leslie-connection-state.js';
 
 const LAYOUT_PREFERENCE_KEY = 'leslie-chat-layout-enabled';
@@ -230,8 +231,12 @@ function ensureChatHeader() {
         <button type="button" data-action="new-chat"><i class="fa-solid fa-comment-medical" aria-hidden="true"></i><span>新建当前角色会话</span></button>
         <button type="button" data-action="manage-chats"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i><span>历史会话</span></button>
         <button type="button" data-action="world-info"><i class="fa-solid fa-book-atlas" aria-hidden="true"></i><span>世界设定</span></button>
-        <button type="button" data-action="settings"><i class="fa-solid fa-sliders" aria-hidden="true"></i><span>设置与高级功能</span></button>
         <hr>
+        <button type="button" data-action="export-character" data-character-export-only><i class="fa-solid fa-address-card" aria-hidden="true"></i><span>导出角色卡（PNG）</span></button>
+        <button type="button" data-action="export-chat"><i class="fa-solid fa-file-lines" aria-hidden="true"></i><span>导出当前聊天（JSONL）</span></button>
+        <button type="button" data-action="export-character-bundle" data-character-export-only><i class="fa-solid fa-file-zipper" aria-hidden="true"></i><span>导出角色卡与全部聊天（ZIP）</span></button>
+        <hr>
+        <button type="button" data-action="settings"><i class="fa-solid fa-sliders" aria-hidden="true"></i><span>设置与高级功能</span></button>
         <button type="button" data-action="disable-layout"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i><span>暂时使用原版布局</span></button>
     `;
 
@@ -491,6 +496,7 @@ function updateHeader() {
     if (cardButton instanceof HTMLButtonElement) {
         cardButton.disabled = !active;
     }
+    syncCharacterExportMenuState();
     document.querySelector('.leslie-chat-identity')?.setAttribute('aria-disabled', String(!active));
     relocateMemoryLauncher();
 }
@@ -643,8 +649,12 @@ async function selectConversation(button) {
     }
 }
 
-function handleAction(action) {
+async function handleAction(action) {
     closeHeaderMenu();
+    if (action.startsWith('export-')) {
+        await runCharacterExport(action);
+        return;
+    }
     switch (action) {
         case 'clear-search':
             searchInput.value = '';
@@ -694,7 +704,7 @@ function bindShellEvents() {
         }
         const action = target?.closest('[data-action]')?.dataset.action;
         if (action) {
-            handleAction(action);
+            await handleAction(action);
         }
     });
 
@@ -720,7 +730,7 @@ function bindShellEvents() {
     document.getElementById('leslie-chat-header')?.addEventListener('click', (event) => {
         const action = event.target instanceof Element ? event.target.closest('[data-action]')?.dataset.action : null;
         if (action) {
-            handleAction(action);
+            void handleAction(action);
         }
     });
     document.querySelector('.leslie-chat-identity')?.addEventListener('keydown', (event) => {

@@ -704,11 +704,17 @@ export function getImages(directoryPath, sortBy = 'name', type = MEDIA_REQUEST_T
  * Pipe a fetch() response to an Express.js Response, including status code.
  * @param {import('node-fetch').Response} from The Fetch API response to pipe from.
  * @param {import('express').Response} to The Express response to pipe to.
+ * @param {{ logErrorBody?: boolean }} [options] Forwarding options
  * @returns {Promise<void>}
  */
-export async function forwardFetchResponse(from, to) {
+export async function forwardFetchResponse(from, to, options = {}) {
     let statusCode = from.status;
     let statusText = from.statusText;
+    const contentType = from.headers.get('content-type');
+
+    if (contentType && !to.headersSent) {
+        to.setHeader('Content-Type', contentType);
+    }
 
     // Avoid sending 401 responses as they reset the client Basic auth.
     // This can produce an interesting artifact as "400 Unauthorized", but it's not out of spec.
@@ -725,7 +731,9 @@ export async function forwardFetchResponse(from, to) {
     if (!from.ok) {
         try {
             const rawErrorText = await from.text();
-            const detail = rawErrorText || 'Unknown error occurred';
+            const detail = options.logErrorBody === false
+                ? 'Response body omitted'
+                : rawErrorText || 'Unknown error occurred';
 
             console.warn(`Streaming request failed with status ${from.status} ${statusText}: ${detail}`);
             to.end(rawErrorText, 'utf-8');

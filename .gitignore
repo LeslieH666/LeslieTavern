@@ -1,6 +1,7 @@
 # Dependencies and package-manager state
 node_modules/
 yarn.lock
+/.pnpm-store/
 
 # Local environment and credentials
 .env
