@@ -2010,9 +2010,10 @@ async function autoUpdateExtensions(forceAll) {
  * @param {any[]} chat Chat array
  * @param {number} contextSize Context size
  * @param {string} type Generation type
+ * @param {object} [generationContext] Optional metadata describing the generation request.
  * @returns {Promise<boolean>} True if generation should be aborted
  */
-export async function runGenerationInterceptors(chat, contextSize, type) {
+export async function runGenerationInterceptors(chat, contextSize, type, generationContext = {}) {
     let aborted = false;
     let exitImmediately = false;
 
@@ -2025,7 +2026,7 @@ export async function runGenerationInterceptors(chat, contextSize, type) {
         const interceptorKey = manifest.generate_interceptor;
         if (typeof globalThis[interceptorKey] === 'function') {
             try {
-                await globalThis[interceptorKey](chat, contextSize, abort, type);
+                await globalThis[interceptorKey](chat, contextSize, abort, type, generationContext);
             } catch (e) {
                 console.error(`Failed running interceptor for ${manifest.display_name}`, e);
             }

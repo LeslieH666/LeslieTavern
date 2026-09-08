@@ -1,0 +1,257 @@
+#leslie-story-choices {
+    display: grid;
+    width: 100%;
+    margin: 0 0 7px;
+    gap: 7px;
+    color: var(--tg-text-primary, var(--leslie-text, #1f2d3d));
+}
+
+#leslie-story-choices[hidden],
+#leslie-story-choices .leslie-story-choice-body[hidden],
+#leslie-story-choices [hidden] {
+    display: none !important;
+}
+
+.leslie-story-choice-toolbar {
+    display: flex;
+    min-height: 30px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.leslie-story-mode-switch,
+.leslie-story-choice-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.leslie-story-mode-switch {
+    padding: 2px;
+    background: var(--tg-layer-2, var(--leslie-control, #f2f6fa));
+    border: 1px solid var(--tg-border-soft, var(--leslie-border, #d6e0e9));
+    border-radius: 10px;
+}
+
+.leslie-story-mode-switch button,
+.leslie-story-choice-actions button {
+    min-height: 28px;
+    margin: 0;
+    padding: 4px 9px;
+    color: var(--tg-text-secondary, var(--leslie-text-soft, #607086));
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.leslie-story-mode-switch button.is-active {
+    color: var(--tg-accent-strong, var(--leslie-accent, #2f7df4));
+    background: var(--tg-layer-active, rgba(47, 125, 244, 0.12));
+    font-weight: 600;
+}
+
+.leslie-story-choice-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.leslie-story-choice-actions button:hover:not(:disabled),
+.leslie-story-mode-switch button:hover:not(.is-active) {
+    color: var(--tg-text-primary, var(--leslie-text, #1f2d3d));
+    background: var(--tg-layer-hover, rgba(47, 125, 244, 0.08));
+}
+
+.leslie-story-choice-actions button:disabled {
+    cursor: default;
+    opacity: 0.48;
+}
+
+.leslie-story-choice-body {
+    display: grid;
+    gap: 6px;
+}
+
+.leslie-story-choice-perspective {
+    margin: 0;
+    color: var(--tg-text-secondary, var(--leslie-text-soft, #607086));
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.leslie-story-choice-perspective strong {
+    color: var(--tg-text-primary, var(--leslie-text, #1f2d3d));
+    font-weight: 650;
+}
+
+.leslie-story-choice-status {
+    min-height: 17px;
+    margin: 0;
+    color: var(--tg-text-tertiary, var(--leslie-text-soft, #75869a));
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.leslie-story-choice-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.leslie-story-choice {
+    display: grid;
+    min-width: 0;
+    min-height: 72px;
+    grid-template-columns: 24px minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    margin: 0;
+    padding: 9px 10px;
+    color: var(--tg-text-primary, var(--leslie-text, #1f2d3d));
+    text-align: left;
+    background: var(--tg-layer-2, var(--leslie-input, #f8fafc));
+    border: 1px solid var(--tg-border-soft, var(--leslie-border, #d6e0e9));
+    border-radius: 11px;
+    box-shadow: none;
+    cursor: pointer;
+    transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.leslie-story-choice:hover:not(:disabled) {
+    background: var(--tg-layer-hover, rgba(47, 125, 244, 0.08));
+    border-color: color-mix(in srgb, var(--tg-accent, #2f7df4) 38%, var(--tg-border-soft, #d6e0e9));
+    transform: translateY(-1px);
+}
+
+.leslie-story-choice:disabled {
+    cursor: default;
+    opacity: 0.56;
+}
+
+.leslie-story-choice-number {
+    display: grid;
+    width: 24px;
+    height: 24px;
+    place-items: center;
+    color: var(--tg-accent-strong, var(--leslie-accent, #2f7df4));
+    background: var(--tg-accent-soft, rgba(47, 125, 244, 0.12));
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.leslie-story-choice-copy {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+}
+
+.leslie-story-choice-heading {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 5px;
+}
+
+.leslie-story-choice-speaker {
+    max-width: 42%;
+    flex: 0 1 auto;
+    overflow: hidden;
+    padding: 1px 5px;
+    color: var(--tg-accent-strong, var(--leslie-accent, #2f7df4));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: var(--tg-accent-soft, rgba(47, 125, 244, 0.12));
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 650;
+}
+
+.leslie-story-choice-copy strong {
+    min-width: 0;
+    overflow: hidden;
+    flex: 1 1 auto;
+    font-size: 13px;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leslie-story-choice-message {
+    display: -webkit-box;
+    overflow: hidden;
+    color: var(--tg-text-secondary, var(--leslie-text-soft, #607086));
+    font-size: 12px;
+    line-height: 1.45;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+#leslie-story-choices.is-loading .leslie-story-choice-status::before {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    margin-right: 6px;
+    vertical-align: -1px;
+    border: 2px solid color-mix(in srgb, var(--tg-accent, #2f7df4) 25%, transparent);
+    border-top-color: var(--tg-accent, #2f7df4);
+    border-radius: 50%;
+    content: '';
+    animation: leslie-story-choice-spin 700ms linear infinite;
+}
+
+@keyframes leslie-story-choice-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (max-width: 900px) {
+    .leslie-story-choice-list {
+        grid-template-columns: 1fr;
+    }
+
+    .leslie-story-choice {
+        min-height: 58px;
+    }
+}
+
+@media (max-width: 700px) {
+    #leslie-story-choices {
+        margin-bottom: 5px;
+    }
+
+    .leslie-story-choice-toolbar {
+        min-height: 36px;
+    }
+
+    .leslie-story-mode-switch button,
+    .leslie-story-choice-actions button {
+        min-height: 36px;
+        padding: 6px 9px;
+    }
+
+    .leslie-story-choice-actions button span {
+        display: none;
+    }
+
+    .leslie-story-choice-list {
+        max-height: min(34dvh, 270px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .leslie-story-choice {
+        transition: none;
+    }
+
+    #leslie-story-choices.is-loading .leslie-story-choice-status::before {
+        animation-duration: 1.4s;
+    }
+}

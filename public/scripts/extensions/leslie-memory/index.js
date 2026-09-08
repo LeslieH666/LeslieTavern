@@ -1203,8 +1203,10 @@ async function fitPromptToBudget(context, selected, contextSize, identity) {
     return { growthText, eventsText };
 }
 
-export async function preparePrompt(_chat, contextSize, _abort, type) {
-    if (type === 'quiet') {
+export async function preparePrompt(_chat, contextSize, _abort, type, generationContext = {}) {
+    const isStoryChoiceGeneration = type === 'quiet'
+        && generationContext?.generationPurpose === 'leslie-story-choices';
+    if (type === 'quiet' && !isStoryChoiceGeneration) {
         return;
     }
     clearPromptInjection();

@@ -3032,12 +3032,14 @@ export function getStoppingStrings(isImpersonate, isContinue, api = main_api) {
  * @prop {number} [responseLength] Maximum response length. If unset, the global default value is used.
  * @prop {number} [forceChId] Character ID to use for this generation run. Works in groups only.
  * @prop {object} [jsonSchema] JSON schema to use for the structured generation. Usually requires a special instruction.
+ * @prop {AbortSignal} [signal] Optional external signal used to cancel this generation without stopping unrelated background work.
+ * @prop {string} [generationPurpose] Optional machine-readable purpose exposed to generation interceptors.
  * @prop {boolean} [removeReasoning] Parses and removes the reasoning block according to reasoning format preferences
  * @prop {boolean} [trimToSentence] Whether to trim the response to the last complete sentence
  * @param {GenerateQuietPromptParams} params Parameters for the quiet prompt generation
  * @returns {Promise<string>} Generated text. If using structured output, will contain a serialized JSON object.
  */
-export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = false, skipWIAN = false, quietImage = null, quietName = null, responseLength = null, forceChId = null, jsonSchema = null, removeReasoning = true, trimToSentence = false } = {}) {
+export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = false, skipWIAN = false, quietImage = null, quietName = null, responseLength = null, forceChId = null, jsonSchema = null, signal = null, generationPurpose = null, removeReasoning = true, trimToSentence = false } = {}) {
     if (arguments.length > 0 && typeof arguments[0] !== 'object') {
         console.trace('generateQuietPrompt called with positional arguments. Please use an object instead.');
         [quietPrompt, quietToLoud, skipWIAN, quietImage, quietName, responseLength, forceChId, jsonSchema] = arguments;
@@ -3056,6 +3058,8 @@ export async function generateQuietPrompt({ quietPrompt = '', quietToLoud = fals
             quietName: quietName ?? null,
             force_chid: forceChId ?? null,
             jsonSchema: jsonSchema ?? null,
+            signal: signal ?? null,
+            generationPurpose: generationPurpose ?? null,
         };
         if (responseLengthCustomized) {
             TempResponseLength.save(main_api, responseLength);
@@ -4236,6 +4240,7 @@ function removeLastMessage() {
  * @property {string} [quietName] Name to use for the quiet prompt (defaults to "System:")
  * @property {number} [depth] Recursion depth for the generation. Used to prevent infinite loops in tool calls.
  * @property {JsonSchema} [jsonSchema] JSON schema to use for the structured generation. Usually requires a special instruction.
+ * @property {string} [generationPurpose] Optional machine-readable purpose exposed to generation interceptors.
  */
 
 /**
@@ -4246,7 +4251,7 @@ function removeLastMessage() {
  * @param {boolean} dryRun Whether to actually generate a message or just assemble the prompt
  * @returns {Promise<any>} Returns a promise that resolves when the text is done generating.
  */
-export async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, jsonSchema = null, depth = 0 } = {}, dryRun = false) {
+export async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, jsonSchema = null, generationPurpose = null, depth = 0 } = {}, dryRun = false) {
     console.log('Generate entered');
     if (!dryRun && type !== 'continue') {
         leslieLengthContinuationAttempts = 0;
@@ -4258,11 +4263,21 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     await unshallowCharacter(this_chid);
 
     // Occurs every time, even if the generation is aborted due to slash commands execution
-    await eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage }, dryRun);
+    await eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, generationPurpose }, dryRun);
 
-    // Don't recreate abort controller if signal is passed
-    if (!(abortController && signal)) {
-        abortController = new AbortController();
+    // Group member generation reuses the wrapper's controller. Other external
+    // signals are linked to a fresh controller so callers can cancel only the
+    // generation they started.
+    if (abortController?.signal !== signal) {
+        const generationAbortController = new AbortController();
+        if (signal instanceof AbortSignal) {
+            if (signal.aborted) {
+                generationAbortController.abort(signal.reason);
+            } else {
+                signal.addEventListener('abort', () => generationAbortController.abort(signal.reason), { once: true });
+            }
+        }
+        abortController = generationAbortController;
     }
 
     // OpenAI doesn't need instruct mode. Use OAI main prompt instead.
@@ -4280,7 +4295,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     }
 
     // Occurs only if the generation is not aborted due to slash commands execution
-    await eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage }, dryRun);
+    await eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, generationPurpose }, dryRun);
 
     if (main_api == 'kobold' && kai_settings.streaming_kobold && !kai_flags.can_use_streaming) {
         toastr.error(t`Streaming is enabled, but the version of Kobold used does not support token streaming.`, undefined, { timeOut: 10000, preventDuplicates: true });
@@ -4312,7 +4327,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     if (selected_group && !is_group_generating) {
         if (!dryRun) {
             // Returns the promise that generateGroupWrapper returns; resolves when generation is done
-            return generateGroupWrapper(false, type, { quiet_prompt, force_chid, signal: abortController.signal, quietImage, jsonSchema });
+            return generateGroupWrapper(false, type, { quiet_prompt, force_chid, signal: abortController.signal, quietImage, jsonSchema, generationPurpose });
         }
 
         const characterIndexMap = new Map(characters.map((char, index) => [char.avatar, index]));
@@ -4523,7 +4538,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
     if (!dryRun) {
         console.debug('Running extension interceptors');
-        const aborted = await runGenerationInterceptors(coreChat, this_max_context, type);
+        const aborted = await runGenerationInterceptors(coreChat, this_max_context, type, { generationPurpose });
 
         if (aborted) {
             console.debug('Generation aborted by extension interceptors');
@@ -5394,7 +5409,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
                     streamingProcessor = null;
                     depth = depth + 1;
                     await ToolManager.saveFunctionToolInvocations(invocationResult.invocations);
-                    return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, depth }, dryRun);
+                    return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal: abortController.signal, quietImage, quietName, generationPurpose, depth }, dryRun);
                 }
             }
 
@@ -5519,7 +5534,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
                 depth = depth + 1;
                 await ToolManager.saveFunctionToolInvocations(invocationResult.invocations);
-                return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, depth }, dryRun);
+                return Generate('normal', { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal: abortController.signal, quietImage, quietName, generationPurpose, depth }, dryRun);
             }
         }
 

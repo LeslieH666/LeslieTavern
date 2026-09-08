@@ -57,6 +57,9 @@ public/vectors/
 /cache/
 /Run/
 /logs/
+/models/*
+!/models/README.md
+/tools/koboldcpp/
 /legacy-portable-package/
 /plugins/
 /default/scaffold/

@@ -15,6 +15,9 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 - Automatic AIRI voice input through LeslieTavern's local speech-recognition model, with no additional API key.
 - Windows launch center for LeslieTavern-only and LeslieTavern + AIRI sessions, including automatic Bridge token generation, AIRI discovery, diagnostics, rebuild, logs, and tracked shutdown.
 - Leslie chat-menu exports for a CCV3 PNG character card, the current SillyTavern JSONL chat, or a ZIP containing the shareable card and all of that character's JSONL chats.
+- Optional interactive-guidance chat mode that uses the active model, character context, World Info, Persona, and Leslie memory to offer three live replies explicitly authored by the current user Persona while preserving free-form input and ordinary JSONL messages.
+- One-click local Peach 2.0 GGUF setup in Leslie's model-connection settings, with KoboldCpp and llama.cpp endpoints plus 8GB-friendly RP defaults.
+- Character workshop generation can now switch between the existing DeepSeek/current chat API and the local Peach 2.0 KoboldCpp API; local runs stay as an in-memory preview until the user explicitly applies them.
 
 ### Changed
 

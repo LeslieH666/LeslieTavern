@@ -36,14 +36,18 @@ describe('Leslie Volcengine voice catalog', () => {
         expect(() => readVolcengineVoiceDocument({ Result: { Content: 'too short' } })).toThrow();
     });
 
-    test.each([
+    const customVoiceCases = [
         ['zh_female_xiaohe_uranus_bigtts', 'zh_female_xiaohe_uranus_bigtts'],
         ['"zh_female_xiaohe_uranus_bigtts"', 'zh_female_xiaohe_uranus_bigtts'],
         ['voice_type=zh_female_xiaohe_uranus_bigtts', 'zh_female_xiaohe_uranus_bigtts'],
         ['{"voice_type":"zh_female_xiaohe_uranus_bigtts"}', 'zh_female_xiaohe_uranus_bigtts'],
         ['speaker_id: S_xxx_123', 'S_xxx_123'],
-    ])('imports common custom voice formats: %s', (input, expected) => {
-        expect(normalizeVolcengineVoiceId(input)).toBe(expected);
+    ];
+
+    test('imports common custom voice formats', () => {
+        for (const [input, expected] of customVoiceCases) {
+            expect(normalizeVolcengineVoiceId(input)).toBe(expected);
+        }
     });
 
     test('rejects ambiguous free text', () => {
