@@ -16,6 +16,9 @@
 - Automatic AIRI binding to the visible LeslieTavern character and its Volcengine voice.
 - Dedicated AIRI mode with automatic provider selection, no onboarding window, and a reduced settings surface.
 - Windows launch center with LeslieTavern-only, combined AIRI, diagnostics, rebuild, and tracked shutdown modes.
+- Optional interactive-guidance input mode with three AI-generated replies anchored to the current user Persona, automatic collapse for free-form typing, and the existing model, character-card, World Info, Persona, memory, and chat pipeline as its source of truth.
+- One-click local Peach 2.0 GGUF API setup for KoboldCpp or llama.cpp, with the model weights kept outside Git.
+- Character workshop provider switch between the existing chat API and local Peach generation, with structured-output budgeting and preview-only drafts.
 
 ## Stabilization priorities
 

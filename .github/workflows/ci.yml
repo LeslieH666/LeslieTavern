@@ -34,11 +34,5 @@ jobs:
       - name: Install test dependencies
         run: npm ci --ignore-scripts --prefix tests
 
-      - name: Check repository boundaries
-        run: npm run check:repo
-
-      - name: Lint source
-        run: npm run lint
-
-      - name: Run unit tests
-        run: npm run test:unit
+      - name: Run repository validation
+        run: npm run validate

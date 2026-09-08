@@ -37,9 +37,7 @@ npm run start:electron
 
 ```bash
 npm ci --prefix tests
-npm run check:repo
-npm run lint
-npm run test:unit
+npm run validate
 ```
 
 ### 已整理的本机工作区

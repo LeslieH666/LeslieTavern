@@ -139,7 +139,7 @@
         "check:repo": "node scripts/check-repository-hygiene.cjs",
         "test": "npm run test:unit",
         "test:unit": "npm run test:unit --prefix tests",
-        "validate": "npm run check:repo && npm run lint && npm run test:unit",
+        "validate": "npm run check:repo && npm run lint && npm run lint --prefix tests && npm run test:unit",
         "lint": "eslint \"src/**/*.js\" \"public/**/*.js\" \"scripts/**/*.cjs\" ./*.js",
         "lint:fix": "eslint \"src/**/*.js\" \"public/**/*.js\" ./*.js --fix",
         "plugins:update": "node plugins update",

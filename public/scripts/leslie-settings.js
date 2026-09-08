@@ -6,8 +6,10 @@
  * the source of truth.
  */
 
-import { eventSource, event_types } from '../script.js';
+import { eventSource, event_types, saveSettingsDebounced, setGenerationParamsFromPreset } from '../script.js';
 import { getLeslieConnectionState } from './leslie-connection-state.js';
+import { textgen_types, textgenerationwebui_settings } from './textgen-settings.js';
+import { LESLIE_LOCAL_MODEL, getLeslieLocalRuntime, getLeslieLocalSettings } from './leslie-local-model-core.js';
 import './leslie-voice-settings.js';
 
 const SECONDARY_DRAWERS = [
@@ -121,6 +123,14 @@ const COPY = {
         serviceTextGenBody: '连接 oobabooga WebUI 接口。',
         serviceLocalGeneric: '通用本地接口',
         serviceLocalGenericBody: '连接兼容接口的其他本地推理程序。',
+        localModelTitle: 'Peach 2.0 本地快捷设置',
+        localModelBody: '已下载 Q4_K_M 量化，适合 8GB 显存。选择已启动的本地服务即可自动填充设置。',
+        localModelPath: '模型文件',
+        localModelKobold: 'KoboldCpp（推荐）',
+        localModelLlama: 'llama.cpp',
+        localModelKoboldHelp: '127.0.0.1:5001 · 支持 CPU offload',
+        localModelLlamaHelp: '127.0.0.1:8080 · llama-server',
+        localModelApply: '应用并连接',
         serviceOpenAI: 'OpenAI',
         serviceOpenAIBody: '直接连接 OpenAI 官方接口。',
         endpoint: '服务地址',
@@ -300,6 +310,14 @@ const COPY = {
         serviceTextGenBody: 'Connect to an oobabooga WebUI API.',
         serviceLocalGeneric: 'Generic local API',
         serviceLocalGenericBody: 'Connect to another compatible local inference server.',
+        localModelTitle: 'Peach 2.0 local setup',
+        localModelBody: 'The Q4_K_M download is ready for an 8GB GPU. Choose a running local service to apply the connection and RP defaults.',
+        localModelPath: 'Model file',
+        localModelKobold: 'KoboldCpp (recommended)',
+        localModelLlama: 'llama.cpp',
+        localModelKoboldHelp: '127.0.0.1:5001 · CPU offload supported',
+        localModelLlamaHelp: '127.0.0.1:8080 · llama-server',
+        localModelApply: 'Apply and connect',
         serviceOpenAI: 'OpenAI',
         serviceOpenAIBody: 'Connect directly to the official OpenAI API.',
         endpoint: 'Server address',
@@ -660,6 +678,42 @@ function getActiveModelService() {
 }
 
 /**
+ * Render the local Peach setup without taking ownership of the original API
+ * controls. The action below delegates to the existing Text Completion
+ * handlers after selecting a runtime.
+ * @param {Record<string, string>} copy Active UI copy.
+ * @returns {string} Local model setup markup.
+ */
+function renderLocalModelSetup(copy) {
+    return `
+        <section class="leslie-detail-card leslie-local-model-card" aria-labelledby="leslie-local-model-title">
+            <div class="leslie-local-model-card-heading">
+                <div>
+                    <strong id="leslie-local-model-title">${copy.localModelTitle}</strong>
+                    <small>${copy.localModelBody}</small>
+                </div>
+                <span class="leslie-local-model-badge">${LESLIE_LOCAL_MODEL.modelName}</span>
+            </div>
+            <div class="leslie-local-model-grid">
+                <span>${copy.localModelPath}</span>
+                <code>${escapeHtml(LESLIE_LOCAL_MODEL.modelPath)}</code>
+            </div>
+            <div class="leslie-local-model-actions">
+                <button type="button" class="leslie-settings-primary-button" data-leslie-local-model-setup="koboldcpp">
+                    <i class="fa-solid fa-dragon" aria-hidden="true"></i>
+                    <span>${copy.localModelKobold}</span>
+                    <small>${copy.localModelKoboldHelp}</small>
+                </button>
+                <button type="button" class="leslie-settings-secondary-button" data-leslie-local-model-setup="llamacpp">
+                    <i class="fa-solid fa-microchip" aria-hidden="true"></i>
+                    <span>${copy.localModelLlama}</span>
+                    <small>${copy.localModelLlamaHelp}</small>
+                </button>
+            </div>
+        </section>`;
+}
+
+/**
  * Render the model connection detail page.
  * @returns {string} Page markup.
  */
@@ -729,6 +783,7 @@ function renderModelDetail() {
             <div class="leslie-detail-card-heading"><h3>${copy.serviceTitle}</h3><p>${copy.serviceBody}</p></div>
             <div class="leslie-service-grid">${cards}</div>
         </section>
+        ${activeModelKind === 'local' ? renderLocalModelSetup(copy) : ''}
         <section class="leslie-detail-card">
             <div class="leslie-detail-grid">${fields}</div>
             ${selectedService?.kind === activeModelKind ? `
@@ -1808,8 +1863,10 @@ function showSettingsHome(pageId = 'overview') {
 /**
  * Switch SillyTavern to a common model service chosen by the user.
  * @param {string} serviceId Leslie service id.
+ * @param {(() => void) | undefined} afterSelect Optional callback after the
+ * provider's original controls have been selected.
  */
-function selectModelService(serviceId) {
+function selectModelService(serviceId, afterSelect) {
     const service = MODEL_SERVICES[serviceId];
     const mainApi = document.getElementById('main_api');
     if (!service || !(mainApi instanceof HTMLSelectElement)) {
@@ -1824,8 +1881,55 @@ function selectModelService(serviceId) {
             secondary.value = service.secondaryValue;
             secondary.dispatchEvent(new Event('change', { bubbles: true }));
         }
+        afterSelect?.();
         showDetail('model');
     }, 60);
+}
+
+/**
+ * Apply the downloaded Peach GGUF defaults through SillyTavern's existing
+ * local API controls, then run the normal connection check.
+ * @param {string} runtime Local runtime id.
+ */
+function applyLocalPeachModel(runtime) {
+    const runtimeConfig = getLeslieLocalRuntime(runtime);
+    const settings = getLeslieLocalSettings(runtime);
+    const serviceId = runtimeConfig.apiType === textgen_types.LLAMACPP ? 'llamacpp' : 'koboldcpp';
+
+    textgenerationwebui_settings.server_urls ??= {};
+    // Prevent the original provider change handler from issuing a duplicate
+    // request before the quick setup has filled all generation parameters.
+    textgenerationwebui_settings.server_urls[runtimeConfig.apiType] = '';
+    selectModelService(serviceId, () => {
+        const endpointId = runtimeConfig.apiType === textgen_types.LLAMACPP
+            ? 'llamacpp_api_url_text'
+            : 'koboldcpp_api_url_text';
+        const endpoint = document.getElementById(endpointId);
+        if (endpoint instanceof HTMLInputElement) {
+            endpoint.value = settings.endpoint;
+            endpoint.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        for (const [name, value] of Object.entries(settings.generation)) {
+            const source = document.getElementById(`${name}_textgenerationwebui`);
+            if (!(source instanceof HTMLInputElement)) {
+                continue;
+            }
+            if (source.type === 'checkbox') {
+                source.checked = Boolean(value);
+            } else {
+                source.value = String(value);
+            }
+            source.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        setGenerationParamsFromPreset({
+            max_length: settings.context,
+            genamt: settings.responseTokens,
+        });
+        saveSettingsDebounced();
+        document.getElementById('api_button_textgenerationwebui')?.click();
+    });
 }
 
 /**
@@ -2019,6 +2123,13 @@ function initLeslieSettings() {
             event.stopPropagation();
             activeModelKind = apiKindButton.dataset.leslieApiKind;
             showDetail('model');
+            return;
+        }
+        const localModelButton = target?.closest('[data-leslie-local-model-setup]');
+        if (localModelButton instanceof HTMLElement) {
+            event.preventDefault();
+            event.stopPropagation();
+            applyLocalPeachModel(localModelButton.dataset.leslieLocalModelSetup);
             return;
         }
         const serviceButton = target?.closest('[data-leslie-service]');

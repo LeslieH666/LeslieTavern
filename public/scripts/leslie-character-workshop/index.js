@@ -35,6 +35,15 @@ import {
     LESLIE_CHARACTER_WRITING_SKILL,
 } from './writing-skill.js';
 import { parseCharacterCardJsonText } from './importer.js';
+import {
+    WORKSHOP_PROVIDER,
+    buildLocalChatCompletionRequest,
+    extractLocalCompletionText,
+    getLocalChatCompletionUrl,
+    getLocalWorkshopSettings,
+    getWorkshopProviderLabel,
+    probeLocalWorkshopProvider,
+} from './provider.js';
 
 const STAGES = ['brief', 'research', 'draft', 'review', 'ready'];
 const PREVIEW_FIELDS = [
@@ -62,6 +71,8 @@ const state = {
     localReview: null,
     importSource: '',
     importNotices: [],
+    provider: WORKSHOP_PROVIDER.CHAT,
+    abortController: null,
 };
 
 let overlay;
@@ -100,14 +111,14 @@ function createWorkshopMarkup() {
                     </div>
                     <ol class="leslie-character-workshop-steps">
                         <li data-workshop-stage="brief"><span>1</span><div><strong>创作简报</strong><small>锁定硬事实与边界</small></div></li>
-                        <li data-workshop-stage="research"><span>2</span><div><strong>AI 知识核对</strong><small>复用当前聊天 API</small></div></li>
+                        <li data-workshop-stage="research"><span>2</span><div><strong>AI 知识核对</strong><small>按所选接口执行</small></div></li>
                         <li data-workshop-stage="draft"><span>3</span><div><strong>完整写作</strong><small>只生成一个候选</small></div></li>
                         <li data-workshop-stage="review"><span>4</span><div><strong>独立审校</strong><small>检查失真、边界与节奏</small></div></li>
                         <li data-workshop-stage="ready"><span>5</span><div><strong>人工确认</strong><small>补头像后再保存</small></div></li>
                     </ol>
                     <div class="leslie-character-workshop-privacy">
                         <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
-                        <span>不会读取现有角色卡、聊天、记忆或密钥。全部文本任务只使用当前聊天模型连接。</span>
+                        <span>不会读取现有角色卡、聊天、记忆或密钥。本地选项只访问 127.0.0.1 的已加载模型。</span>
                     </div>
                 </aside>
 
@@ -133,8 +144,16 @@ function createWorkshopMarkup() {
                         </div>
                         <div class="leslie-character-workshop-api-note">
                             <i class="fa-solid fa-link" aria-hidden="true"></i>
-                            <span><strong>一个连接完成全部文本工作</strong><small>创作简报、知识核对、角色写作、质量审校和头像提示词都走“设置 → 模型连接”中的当前聊天 API。</small></span>
+                            <span><strong>可切换角色卡生成接口</strong><small>默认复用当前聊天 API；选择本地 Peach 只作用于本次角色卡草稿生成，不改变聊天设置。生成结果只在内存中预览，不会自动保存。</small></span>
                         </div>
+                        <label class="leslie-character-workshop-provider">
+                            <span>角色卡生成接口</span>
+                            <select data-workshop-provider>
+                                <option value="chat">当前聊天 API（DeepSeek 等）</option>
+                                <option value="local">本地 Peach 2.0 · KoboldCpp</option>
+                            </select>
+                            <small data-workshop-provider-status>默认使用当前聊天 API；本地接口仅用于角色卡工坊。</small>
+                        </label>
 
                         <details class="leslie-character-workshop-json-import">
                             <summary>
@@ -221,9 +240,37 @@ function setHidden(selector, hidden) {
 
 function setConnectionBadge() {
     const badge = query('[data-workshop-connection]');
-    const connected = online_status && online_status !== 'no_connection';
+    const connected = state.provider === WORKSHOP_PROVIDER.LOCAL
+        ? Boolean(state.localProviderConnected)
+        : online_status && online_status !== 'no_connection';
     badge.textContent = connected ? '● 模型已连接' : '○ 模型未连接';
     badge.classList.toggle('is-connected', connected);
+}
+
+function updateProviderStatus(message, connected = null) {
+    const status = query('[data-workshop-provider-status]');
+    if (!status) {
+        return;
+    }
+    status.textContent = message;
+    status.dataset.connected = connected === null ? '' : String(Boolean(connected));
+    setConnectionBadge();
+}
+
+function getSelectedProvider() {
+    return query('[data-workshop-provider]')?.value === WORKSHOP_PROVIDER.LOCAL
+        ? WORKSHOP_PROVIDER.LOCAL
+        : WORKSHOP_PROVIDER.CHAT;
+}
+
+function syncProviderUi() {
+    state.provider = getSelectedProvider();
+    state.localProviderConnected = false;
+    if (state.provider === WORKSHOP_PROVIDER.LOCAL) {
+        updateProviderStatus('本地接口：127.0.0.1:5001 · 生成前会自动检查', null);
+    } else {
+        updateProviderStatus('默认使用当前聊天 API；本地接口仅用于角色卡工坊。', null);
+    }
 }
 
 function setStage(stage, status = 'active') {
@@ -268,6 +315,7 @@ function setRunning(running) {
     query('[data-workshop-action="close"]').disabled = running;
     query('[data-workshop-prompt]').disabled = running;
     query('[data-workshop-mode]').disabled = running;
+    query('[data-workshop-provider]').disabled = running;
     query('[data-workshop-knowledge-check]').disabled = running;
     query('[data-workshop-import-json]').disabled = running;
     query('[data-workshop-action="paste-json"]').disabled = running;
@@ -298,6 +346,7 @@ function resetResults() {
 function openWorkshop() {
     state.previousFocus = document.activeElement;
     overlay.hidden = false;
+    syncProviderUi();
     setConnectionBadge();
     document.documentElement.classList.add('leslie-character-workshop-open');
     document.body.classList.add('leslie-character-workshop-open');
@@ -614,13 +663,35 @@ async function pasteAndInspectJson() {
     }
 }
 
-async function generateStructured(request, runId) {
-    const response = await generateRaw({
+async function generateLocalRaw(request) {
+    const settings = getLocalWorkshopSettings();
+    const response = await fetch(getLocalChatCompletionUrl(settings), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildLocalChatCompletionRequest(request, settings)),
+        signal: state.abortController?.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload?.error?.message || payload?.message || `本地模型生成失败（HTTP ${response.status}）。`);
+    }
+    return extractLocalCompletionText(payload);
+}
+
+async function generateWithSelectedProvider(request) {
+    if (state.provider === WORKSHOP_PROVIDER.LOCAL) {
+        return generateLocalRaw(request);
+    }
+    return generateRaw({
         prompt: request.prompt,
         systemPrompt: request.systemPrompt,
         responseLength: request.responseLength,
         trimNames: false,
     });
+}
+
+async function generateStructured(request, runId) {
+    const response = await generateWithSelectedProvider(request);
 
     if (runId !== state.runId || state.cancelled) {
         throw new Error('创作已取消。');
@@ -631,12 +702,7 @@ async function generateStructured(request, runId) {
     } catch (error) {
         showStatus('正在修复模型格式', '内容已经生成，但 JSON 格式不完整。AI 正在做一次格式修复，不会重写你的要求。');
         const repair = buildRepairRequest(response, error.message);
-        const repairedResponse = await generateRaw({
-            prompt: repair.prompt,
-            systemPrompt: repair.systemPrompt,
-            responseLength: repair.responseLength,
-            trimNames: false,
-        });
+        const repairedResponse = await generateWithSelectedProvider(repair);
         if (runId !== state.runId || state.cancelled) {
             throw new Error('创作已取消。');
         }
@@ -657,7 +723,8 @@ async function runWorkshop() {
         query('[data-workshop-prompt]').focus();
         return;
     }
-    if (!online_status || online_status === 'no_connection') {
+    state.provider = getSelectedProvider();
+    if (state.provider === WORKSHOP_PROVIDER.CHAT && (!online_status || online_status === 'no_connection')) {
         showError('当前没有连接可用模型。请先到“设置 → 模型连接”完成连接，再回来创作。');
         return;
     }
@@ -669,10 +736,18 @@ async function runWorkshop() {
     resetResults();
     clearError();
     state.cancelled = false;
+    state.localProviderConnected = false;
+    state.abortController = new AbortController();
     const runId = ++state.runId;
     setRunning(true);
 
     try {
+        if (state.provider === WORKSHOP_PROVIDER.LOCAL) {
+            showStatus('正在检查本地模型', '确认 KoboldCpp 已加载 Peach 2.0，再开始角色卡 JSON 流程。', 'brief');
+            const localConnection = await probeLocalWorkshopProvider({ signal: state.abortController.signal });
+            state.localProviderConnected = localConnection.connected;
+            updateProviderStatus(`已连接：${localConnection.model}`, true);
+        }
         showStatus('正在整理创作简报', 'AI 会先区分硬要求和可补全部分，避免一上来就堆设定。', 'brief');
         const selectedMode = query('[data-workshop-mode]').value;
         const modelSafePrompt = protectRoleMacrosForGeneration(prompt);
@@ -693,7 +768,7 @@ async function runWorkshop() {
         }
 
         if (state.brief.requiresKnowledgeCheck) {
-            showStatus('正在用当前聊天 AI 核对知识', '不会要求第二套 API。模型若没有联网能力，必须标出不确定项，不得虚构网址或出处。', 'research');
+            showStatus(`正在用${getWorkshopProviderLabel(state.provider)}核对知识`, '模型若没有联网能力，必须标出不确定项，不得虚构网址或出处。', 'research');
             const knowledgeResponse = await generateStructured(buildKnowledgeCheckRequest(state.brief), runId);
             ensureRunActive(runId);
             state.knowledgeCheck = normalizeKnowledgeCheck(knowledgeResponse);
@@ -737,6 +812,7 @@ async function runWorkshop() {
             showError(error?.message || '角色创作没有完成。你的正式角色卡和聊天没有受到影响，可以修改提示词后重试。');
         }
     } finally {
+        state.abortController = null;
         setRunning(false);
     }
 }
@@ -745,18 +821,27 @@ async function rerunReview() {
     if (!state.finalCard || state.running || isGenerating()) {
         return;
     }
-    if (!online_status || online_status === 'no_connection') {
+    state.provider = getSelectedProvider();
+    if (state.provider === WORKSHOP_PROVIDER.CHAT && (!online_status || online_status === 'no_connection')) {
         showError('当前没有连接可用模型。你仍可查看本地检查结果，或连接模型后再做 AI 深度审校。');
         return;
     }
 
     clearError();
     state.cancelled = false;
+    state.abortController = new AbortController();
+    state.localProviderConnected = false;
     const runId = ++state.runId;
     setRunning(true);
     setHidden('[data-workshop-action="review"]', true);
     setHidden('[data-workshop-action="apply"]', true);
     try {
+        if (state.provider === WORKSHOP_PROVIDER.LOCAL) {
+            showStatus('正在检查本地模型', '确认 KoboldCpp 仍在运行，再开始第二次审校。', 'review');
+            const localConnection = await probeLocalWorkshopProvider({ signal: state.abortController.signal });
+            state.localProviderConnected = localConnection.connected;
+            updateProviderStatus(`已连接：${localConnection.model}`, true);
+        }
         showStatus('正在进行第二次审校', '这次会把上一版最终稿当作待审稿，只修复问题，不扩写无关设定。', 'review');
         const currentReview = assessCharacterCard(state.finalCard, { brief: state.brief, knowledgeCheck: state.knowledgeCheck });
         const response = await generateStructured(buildReviewRequest(state.brief, state.finalCard, state.knowledgeCheck, currentReview, state.avatarPrompt), runId);
@@ -782,6 +867,7 @@ async function rerunReview() {
             showError(error?.message || '第二次审校没有完成，上一版草稿仍然保留。');
         }
     } finally {
+        state.abortController = null;
         setRunning(false);
     }
 }
@@ -847,6 +933,8 @@ function cancelWorkshopRun() {
     }
     state.cancelled = true;
     state.runId++;
+    state.abortController?.abort();
+    state.abortController = null;
     stopGeneration();
     hideStatus();
     showError('已停止本次创作。没有保存或覆盖任何角色数据。');

@@ -686,7 +686,24 @@ async function getStatusTextgen() {
             signal: abortStatusCheck.signal,
         });
 
-        const data = await response.json();
+        // Some local runtimes return a plain-text 500 while they are not
+        // running. Keep that expected connection failure user-facing instead
+        // of turning it into a misleading JSON parse error in the console.
+        const responseText = await response.text();
+        let data;
+        try {
+            data = responseText ? JSON.parse(responseText) : {};
+        } catch {
+            data = { response: responseText };
+        }
+
+        if (!response.ok) {
+            setOnlineStatus('no_connection');
+            if (data?.response) {
+                toastr.error(data.response, t`API Error`, { timeOut: 5000, preventDuplicates: true });
+            }
+            return resultCheckStatus();
+        }
 
         if (textgenerationwebui_settings.type === textgen_types.MANCER) {
             loadMancerModels(data?.data);
