@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, test, expect, jest } from '@jest/globals';
 import {
     keyToEnv,
@@ -27,6 +30,7 @@ import {
     formatBytes,
     sanitizeSafeCharacterReplacements,
     generateTimestamp,
+    removeOldBackups,
     mergeObjectWithYaml,
     excludeKeysByYaml,
     Cache,
@@ -148,6 +152,27 @@ describe('humanizedDateTime', () => {
         const result = humanizedDateTime(timestamp);
         // The output uses local time, so just check the format pattern
         expect(result).toMatch(/^\d{4}-\d{2}-\d{2}@\d{2}h\d{2}m\d{2}s\d{3}ms$/);
+    });
+});
+
+describe('removeOldBackups', () => {
+    test('does not throw when an old backup cannot be removed', () => {
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'leslietavern-backups-'));
+        const oldest = path.join(directory, 'settings_default-user_old.json');
+        const newest = path.join(directory, 'settings_default-user_new.json');
+        fs.writeFileSync(oldest, '{}');
+        fs.writeFileSync(newest, '{}');
+        const unlinkSpy = jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {
+            throw new Error('locked');
+        });
+
+        try {
+            expect(() => removeOldBackups(directory, 'settings_default-user', 1)).not.toThrow();
+            expect(fs.readdirSync(directory)).toHaveLength(2);
+        } finally {
+            unlinkSpy.mockRestore();
+            fs.rmSync(directory, { recursive: true, force: true });
+        }
     });
 });
 

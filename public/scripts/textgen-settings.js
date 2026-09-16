@@ -12,12 +12,14 @@ import {
     setGenerationParamsFromPreset,
     setOnlineStatus,
     startStatusLoading,
+    stopStatusLoading,
     substituteParams,
 } from '../script.js';
 import { deriveTemplatesFromChatTemplate } from './chat-templates.js';
 import { t } from './i18n.js';
 import { autoSelectInstructPreset, selectContextPreset, selectInstructPreset } from './instruct-mode.js';
 import { BIAS_CACHE, createNewLogitBiasEntry, displayLogitBias, getLogitBiasListResult } from './logit-bias.js';
+import { isLocalModelLoadingEnabled } from './leslie-local-model-core.js';
 
 import { power_user, registerDebugFunction } from './power-user.js';
 import { getActiveManualApiSamplers, loadApiSelectedSamplers, isSamplerManualPriorityEnabled } from './samplerSelect.js';
@@ -63,6 +65,12 @@ const {
     HUGGINGFACE,
     FEATHERLESS,
 } = textgen_types;
+
+const LOCAL_TEXTGEN_TYPES = new Set([OOBA, KOBOLDCPP, LLAMACPP, OLLAMA, GENERIC]);
+
+function isLocalTextgenConnection() {
+    return main_api === 'textgenerationwebui' && LOCAL_TEXTGEN_TYPES.has(textgenerationwebui_settings.type);
+}
 
 const LLAMACPP_DEFAULT_ORDER = [
     'penalties',
@@ -659,6 +667,12 @@ function sortAphroditeItemsByOrder(orderArray) {
 async function getStatusTextgen() {
     const url = '/api/backends/text-completions/status';
 
+    if (isLocalTextgenConnection() && !isLocalModelLoadingEnabled()) {
+        setOnlineStatus('no_connection');
+        stopStatusLoading();
+        return resultCheckStatus();
+    }
+
     const endpoint = getTextGenServer();
 
     if (!endpoint) {
@@ -961,8 +975,11 @@ export function initTextGenSettings() {
 
         $('#main_api').trigger('change');
 
-        if (!SERVER_INPUTS[type] || textgenerationwebui_settings.server_urls[type]) {
+        if ((!SERVER_INPUTS[type] || textgenerationwebui_settings.server_urls[type])
+            && (!isLocalTextgenConnection() || isLocalModelLoadingEnabled())) {
             $('#api_button_textgenerationwebui').trigger('click');
+        } else if (isLocalTextgenConnection() && !isLocalModelLoadingEnabled()) {
+            stopStatusLoading();
         }
 
         saveSettingsDebounced();
@@ -1109,6 +1126,11 @@ export function initTextGenSettings() {
     });
 
     $('#api_button_textgenerationwebui').on('click', async function (e) {
+        if (isLocalTextgenConnection() && !isLocalModelLoadingEnabled()) {
+            setOnlineStatus('no_connection');
+            stopStatusLoading();
+            return;
+        }
         const keys = [
             { id: 'api_key_mancer', secret: SECRET_KEYS.MANCER },
             { id: 'api_key_vllm', secret: SECRET_KEYS.VLLM },

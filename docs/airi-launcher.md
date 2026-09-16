@@ -30,12 +30,16 @@ D:\Projects\Leslietavern\
 3. 停止 AIRI 和 LeslieTavern。
 4. 检查路径、端口、构建产物和运行时。
 5. 重新构建 AIRI，再同时启动两个应用。
+6. 启动项目适配的 Peach 本地模型。
+7. 关闭项目适配的 Peach 本地模型。
 
 也可以使用直接入口：
 
 - `启动 LeslieTavern.cmd`：只启动 LeslieTavern。
 - `启动 LeslieTavern 与 AIRI.cmd`：直接联合启动。
 - `关闭 LeslieTavern 与 AIRI.cmd`：停止联合启动的两个应用。
+- `启动本地模型.cmd`：启动项目适配的 Peach GGUF。
+- `关闭本地模型.cmd`：只关闭该脚本记录的 KoboldCpp 进程树。
 
 ## 联合启动过程
 

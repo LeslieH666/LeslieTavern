@@ -35,7 +35,15 @@ const AUTOSAVE_FUNCTIONS = new Map();
  */
 function triggerAutoSave(handle) {
     if (!AUTOSAVE_FUNCTIONS.has(handle)) {
-        const throttledAutoSave = _.throttle(() => backupUserSettings(handle, true), AUTOSAVE_INTERVAL);
+        const throttledAutoSave = _.throttle(() => {
+            try {
+                backupUserSettings(handle, true);
+            } catch (error) {
+                // Autosave must never become an uncaught asynchronous
+                // exception that takes down the web server.
+                console.error(`Could not autosave settings for ${handle}:`, error);
+            }
+        }, AUTOSAVE_INTERVAL);
         AUTOSAVE_FUNCTIONS.set(handle, throttledAutoSave);
     }
 

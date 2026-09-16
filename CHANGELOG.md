@@ -18,9 +18,12 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 - Optional interactive-guidance chat mode that uses the active model, character context, World Info, Persona, and Leslie memory to offer three live replies explicitly authored by the current user Persona while preserving free-form input and ordinary JSONL messages.
 - One-click local Peach 2.0 GGUF setup in Leslie's model-connection settings, with KoboldCpp and llama.cpp endpoints plus 8GB-friendly RP defaults.
 - Character workshop generation can now switch between the existing DeepSeek/current chat API and the local Peach 2.0 KoboldCpp API; local runs stay as an in-memory preview until the user explicitly applies them.
+- Role memory automation can now use a separate DeepSeek API connection with the same OpenAI Chat Completions request format as the chat API.
+- Added an in-memory DeepSeek safety-test workbench that reuses the active character card prompt, runs authorized line-by-line checks, and exports results without writing to normal chats.
 
 ### Changed
 
+- 收紧本地 Peach 角色扮演默认采样与回复约束，减少机械反问，并关闭非推理模型的 reasoning 传递。
 - Consolidated development and portable workspaces into one Git repository.
 - Made allowlisted LAN access follow the directly connected private subnet so changing Wi-Fi no longer requires per-device IP entries.
 - Integrated the complete AIRI source tree under `airi/`, removed its nested Git metadata, and made the LeslieTavern repository the single versioning and push boundary.

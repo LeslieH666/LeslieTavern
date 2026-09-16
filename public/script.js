@@ -34,6 +34,19 @@ import {
     parseTabbyLogprobs,
     initTextGenSettings,
 } from './scripts/textgen-settings.js';
+import { cleanLeslieLocalRoleplayOutput, isLesliePeachRoleplayModel, isLocalModelLoadingEnabled, LESLIE_LOCAL_ROLEPLAY_GUIDANCE } from './scripts/leslie-local-model-core.js';
+
+const LOCAL_TEXTGEN_API_TYPES = new Set([
+    textgen_types.OOBA,
+    textgen_types.KOBOLDCPP,
+    textgen_types.LLAMACPP,
+    textgen_types.OLLAMA,
+    textgen_types.GENERIC,
+]);
+
+function isLocalTextgenApi(api = main_api) {
+    return api === 'textgenerationwebui' && LOCAL_TEXTGEN_API_TYPES.has(textgen_settings.type);
+}
 
 import {
     world_info,
@@ -3377,7 +3390,14 @@ export function getCharacterCardFieldsLazy({ chid = undefined } = {}) {
         },
         jailbreak: () => {
             if (!character) return '';
-            return power_user.prefer_character_jailbreak ? baseChatReplace(character.data?.post_history_instructions?.trim()) : '';
+            if (!power_user.prefer_character_jailbreak) return '';
+
+            const characterJailbreak = baseChatReplace(character.data?.post_history_instructions?.trim());
+            const localRoleplayGuidance = main_api === 'textgenerationwebui' && isLesliePeachRoleplayModel(online_status)
+                ? LESLIE_LOCAL_ROLEPLAY_GUIDANCE
+                : '';
+
+            return [characterJailbreak, localRoleplayGuidance].filter(Boolean).join('\n');
         },
         version: () => character?.data?.character_version ?? '',
         charDepthPrompt: () => {
@@ -3964,6 +3984,9 @@ export async function generateRawData({ prompt = '', api = null, instructOverrid
     if (!api) {
         api = main_api;
     }
+    if (isLocalTextgenApi(api) && !isLocalModelLoadingEnabled()) {
+        throw new Error('本地模型加载已关闭，请先在“设置 → 模型连接”中打开。');
+    }
 
     const abortController = new AbortController();
     const responseLengthCustomized = typeof responseLength === 'number' && responseLength > 0;
@@ -4241,6 +4264,11 @@ function removeLastMessage() {
  * @property {number} [depth] Recursion depth for the generation. Used to prevent infinite loops in tool calls.
  * @property {JsonSchema} [jsonSchema] JSON schema to use for the structured generation. Usually requires a special instruction.
  * @property {string} [generationPurpose] Optional machine-readable purpose exposed to generation interceptors.
+ * @property {string} [promptTestInput] Synthetic user input used only by a dry-run prompt test.
+ * @property {boolean} [promptTestIncludeHistory] Include the current chat history in a dry-run prompt test.
+ * @property {boolean} [promptTestIncludeExamples] Include character message examples in a dry-run prompt test.
+ * @property {boolean} [promptTestIncludeWorldInfo] Include World Info in a dry-run prompt test.
+ * @property {boolean} [promptTestIncludeExtensions] Include project extension prompts in a dry-run prompt test.
  */
 
 /**
@@ -4251,8 +4279,9 @@ function removeLastMessage() {
  * @param {boolean} dryRun Whether to actually generate a message or just assemble the prompt
  * @returns {Promise<any>} Returns a promise that resolves when the text is done generating.
  */
-export async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, jsonSchema = null, generationPurpose = null, depth = 0 } = {}, dryRun = false) {
+export async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, jsonSchema = null, generationPurpose = null, depth = 0, promptTestInput = '', promptTestIncludeHistory = false, promptTestIncludeExamples = true, promptTestIncludeWorldInfo = false, promptTestIncludeExtensions = false } = {}, dryRun = false) {
     console.log('Generate entered');
+    const isPromptTest = dryRun && String(promptTestInput ?? '').trim().length > 0;
     if (!dryRun && type !== 'continue') {
         leslieLengthContinuationAttempts = 0;
     }
@@ -4463,16 +4492,28 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     }
 
     // First message in fresh 1-on-1 chat reacts to user/character settings changes
-    if (chat.length) {
+    if (chat.length && !isPromptTest) {
         chat[0].mes = substituteParams(chat[0].mes);
     }
 
     // Collect messages with usable content
     const canUseTools = ToolManager.isToolCallingSupported();
     const canPerformToolCalls = !dryRun && ToolManager.canPerformToolCalls(type) && depth < ToolManager.RECURSE_LIMIT;
-    let coreChat = chat.filter(x => !x.is_system || (canUseTools && Array.isArray(x.extra?.tool_invocations)));
+    let coreChat = (isPromptTest && !promptTestIncludeHistory)
+        ? []
+        : chat.filter(x => !x.is_system || (canUseTools && Array.isArray(x.extra?.tool_invocations)));
     if (type === 'swipe') {
         coreChat.pop();
+    }
+
+    if (isPromptTest) {
+        coreChat.push({
+            name: name1,
+            mes: String(promptTestInput).trim(),
+            is_user: true,
+            is_system: false,
+            extra: {},
+        });
     }
 
     coreChat = await Promise.all(coreChat.map(async (/** @type {ChatMessage} */ chatItem, index) => {
@@ -4590,6 +4631,10 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         force_name2 = false;
     }
 
+    if (isPromptTest && promptTestIncludeExamples === false) {
+        mesExamples = '';
+    }
+
     let mesExamplesArray = parseMesExamples(mesExamples, isInstruct);
 
     // Set non-WI AN
@@ -4609,7 +4654,15 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         creatorNotes: creatorNotes,
         trigger: GENERATION_TYPE_TRIGGERS.includes(type) ? type : 'normal',
     };
-    const { worldInfoString, worldInfoBefore, worldInfoAfter, worldInfoExamples, worldInfoDepth, outletEntries } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun, globalScanData);
+    let { worldInfoString, worldInfoBefore, worldInfoAfter, worldInfoExamples, worldInfoDepth, outletEntries } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun, globalScanData);
+    if (isPromptTest && promptTestIncludeWorldInfo === false) {
+        worldInfoString = '';
+        worldInfoBefore = '';
+        worldInfoAfter = '';
+        worldInfoExamples = [];
+        worldInfoDepth = [];
+        outletEntries = {};
+    }
     setExtensionPrompt(inject_ids.QUIET_PROMPT, '', extension_prompt_types.IN_PROMPT, 0, true);
 
     // Add message example WI
@@ -5266,7 +5319,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
                 scenario: scenario,
                 worldInfoBefore: worldInfoBefore,
                 worldInfoAfter: worldInfoAfter,
-                extensionPrompts: extension_prompts,
+                extensionPrompts: isPromptTest && promptTestIncludeExtensions === false ? {} : extension_prompts,
                 bias: promptBias,
                 type: type,
                 quietPrompt: quiet_prompt,
@@ -6485,6 +6538,13 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
                 }
             }
         }
+    }
+
+    // Peach 2.0 can continue from a valid roleplay reply into a bracketed
+    // state/scene template before repeating the dialogue. Clean that model-
+    // specific tail before it reaches the chat message or its swipe copy.
+    if (main_api === 'textgenerationwebui' && isLesliePeachRoleplayModel(online_status)) {
+        getMessage = cleanLeslieLocalRoleplayOutput(getMessage, { model: online_status });
     }
 
     // Regex uses vars, so add before formatting
@@ -7884,6 +7944,9 @@ export function changeMainAPI(api = null) {
 
     main_api = selectedVal;
     setOnlineStatus('no_connection');
+    if (isLocalTextgenApi() && !isLocalModelLoadingEnabled()) {
+        stopStatusLoading();
+    }
 
     if (main_api == 'koboldhorde') {
         getStatusHorde();

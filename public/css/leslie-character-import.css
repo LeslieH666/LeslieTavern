@@ -1,0 +1,115 @@
+#leslie-character-card-import {
+    display: grid;
+    gap: 10px;
+    margin: 14px 0 18px;
+    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--leslie-border, #cbd5e1) 88%, transparent);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--leslie-surface-subtle, #f8fafc) 88%, transparent);
+}
+
+#leslie-character-card-import .leslie-character-import-heading,
+#leslie-character-card-import .leslie-character-import-file-row,
+#leslie-character-card-import .leslie-character-import-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#leslie-character-card-import .leslie-character-import-heading {
+    justify-content: space-between;
+}
+
+#leslie-character-card-import .leslie-character-import-heading strong {
+    font-size: 1rem;
+}
+
+#leslie-character-card-import .leslie-character-import-heading small,
+#leslie-character-card-import .leslie-character-import-file small,
+#leslie-character-card-import .leslie-character-import-footnote {
+    color: var(--leslie-text-soft, #64748b);
+}
+
+#leslie-character-card-import .leslie-character-import-heading small,
+#leslie-character-card-import .leslie-character-import-footnote {
+    font-size: 0.82rem;
+}
+
+#leslie-character-card-import .leslie-character-import-file-row {
+    align-items: stretch;
+}
+
+#leslie-character-card-import .leslie-character-import-file {
+    display: grid;
+    flex: 1 1 0;
+    gap: 5px;
+    min-width: 0;
+    padding: 10px;
+    border: 1px dashed color-mix(in srgb, var(--leslie-border, #cbd5e1) 80%, transparent);
+    border-radius: 10px;
+}
+
+#leslie-character-card-import .leslie-character-import-file > span {
+    font-weight: 700;
+}
+
+#leslie-character-card-import .leslie-character-import-file input {
+    width: 100%;
+    min-width: 0;
+}
+
+#leslie-character-card-import .leslie-character-import-file small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#leslie-character-card-import .leslie-character-import-actions {
+    justify-content: flex-start;
+}
+
+#leslie-character-card-import .leslie-character-import-button {
+    padding: 8px 12px;
+    border: 1px solid var(--leslie-accent, #3b82f6);
+    border-radius: 9px;
+    color: var(--leslie-accent-contrast, #fff);
+    background: var(--leslie-accent, #3b82f6);
+    cursor: pointer;
+}
+
+#leslie-character-card-import .leslie-character-import-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+#leslie-character-card-import [data-leslie-character-import-status] {
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    color: var(--leslie-text-soft, #64748b);
+    background: color-mix(in srgb, var(--leslie-surface-solid, #fff) 75%, transparent);
+}
+
+#leslie-character-card-import [data-leslie-character-import-status][data-status="success"] {
+    color: var(--leslie-success, #16794b);
+}
+
+#leslie-character-card-import [data-leslie-character-import-status][data-status="error"] {
+    color: var(--leslie-danger, #b42318);
+}
+
+#leslie-character-card-import [data-leslie-character-import-status][data-status="working"] {
+    color: var(--leslie-accent, #2563eb);
+}
+
+@media (max-width: 640px) {
+    #leslie-character-card-import .leslie-character-import-file-row {
+        flex-direction: column;
+    }
+
+    #leslie-character-card-import .leslie-character-import-heading {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+    }
+}

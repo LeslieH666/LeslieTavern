@@ -53,6 +53,7 @@ test('Leslie reports failed connection checks accurately and keeps thinking easy
     await expect(modelStatus).not.toHaveClass(/is-checking/, { timeout: 10_000 });
     await expect(modelStatus).not.toHaveClass(/is-connected/);
     await expect(modelStatus).toHaveClass(/is-(configured|unconfigured)/);
+    await expect(page.locator('[data-leslie-model-connect]')).toBeEnabled();
     await page.screenshot({ path: 'test-results/leslie-api-ux.png', fullPage: true });
 
     await restoreThinkingSettings(page, originalThinking, reasoningEffort, thinkingWasEnabled, originalEffort);

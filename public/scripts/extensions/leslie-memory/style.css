@@ -372,6 +372,25 @@ body.leslie-memory-page-open {
     line-height: 1.55;
 }
 
+.leslie-memory-model-card {
+    border-color: rgb(132 180 255 / 22%);
+    background: linear-gradient(135deg, rgb(90 140 220 / 10%), rgb(255 255 255 / 4%));
+}
+
+.leslie-memory-model-status {
+    margin-top: 12px;
+    padding: 9px 11px;
+    border: 1px solid rgb(255 255 255 / 10%);
+    border-radius: 9px;
+    color: var(--SmartThemeEmColor);
+    font-size: 12px;
+}
+
+.leslie-memory-model-status[data-connected="true"] {
+    border-color: rgb(99 205 151 / 35%);
+    color: var(--SmartThemeQuoteColor);
+}
+
 .leslie-memory-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
