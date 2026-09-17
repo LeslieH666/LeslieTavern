@@ -194,6 +194,36 @@ body.leslie-moments-page-open {
     text-align: center;
 }
 
+.leslie-moments-activity-status {
+    display: inline-flex;
+    min-height: 26px;
+    padding: 4px 8px;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    color: var(--tg-text-secondary, #9aabba);
+    background: color-mix(in srgb, var(--tg-text-secondary, #9aabba) 9%, transparent);
+    border-radius: 999px;
+    font-size: 10px;
+    white-space: nowrap;
+}
+
+.leslie-moments-activity-status.is-running {
+    color: #5dc58b;
+    background: rgb(93 197 139 / 10%);
+}
+
+.leslie-moments-activity-status.is-busy,
+.leslie-moments-activity-status.is-waiting {
+    color: var(--tg-accent, #3390ec);
+    background: color-mix(in srgb, var(--tg-accent, #3390ec) 10%, transparent);
+}
+
+.leslie-moments-activity-status.is-error {
+    color: var(--tg-danger, #ef6b73);
+    background: rgb(239 107 115 / 10%);
+}
+
 .leslie-moments-notice span {
     display: grid;
     gap: 2px;
@@ -624,6 +654,52 @@ body.leslie-moments-page-open {
     gap: 5px;
 }
 
+.leslie-moments-comments {
+    display: grid;
+    margin: 12px 0 0 54px;
+    gap: 8px;
+}
+
+.leslie-moments-comment {
+    display: grid;
+    padding: 9px 10px;
+    grid-template-columns: 30px minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    background: color-mix(in srgb, var(--tg-layer-raised, #223043) 78%, transparent);
+    border-radius: 10px;
+}
+
+.leslie-moments-comment > div {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+
+.leslie-moments-comment strong,
+.leslie-moments-comment p,
+.leslie-moments-comment small {
+    margin: 0;
+}
+
+.leslie-moments-comment strong {
+    color: var(--tg-accent, #3390ec);
+    font-size: 11px;
+}
+
+.leslie-moments-comment p {
+    color: var(--tg-text-primary, #f5f5f5);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.leslie-moments-comment small {
+    color: var(--tg-text-tertiary, #7f91a4);
+    font-size: 9px;
+}
+
 .leslie-moments-post > footer {
     display: flex;
     min-height: 34px;
@@ -657,6 +733,14 @@ body.leslie-moments-page-open {
     border-radius: 7px;
     box-shadow: none;
     font-size: 10px;
+}
+
+.leslie-moments-reactions .leslie-moments-read-receipt {
+    color: var(--tg-accent, #3390ec);
+}
+
+.leslie-moments-reactions .leslie-moments-read-receipt.is-pending {
+    color: var(--tg-text-tertiary, #7f91a4);
 }
 
 .leslie-moments-post-actions button {
@@ -991,6 +1075,15 @@ body.leslie-moments-page-open {
         border-radius: 10px;
     }
 
+    .leslie-moments-notice {
+        grid-template-columns: 28px minmax(0, 1fr);
+    }
+
+    .leslie-moments-activity-status {
+        grid-column: 2;
+        justify-self: start;
+    }
+
     .leslie-moments-composer {
         padding: 13px;
         border-radius: 11px;
@@ -1059,6 +1152,7 @@ body.leslie-moments-page-open {
 
     .leslie-moments-post-content,
     .leslie-moments-post-meta,
+    .leslie-moments-comments,
     .leslie-moments-post > footer,
     .leslie-moments-archived-label {
         margin-left: 0;
@@ -1067,6 +1161,10 @@ body.leslie-moments-page-open {
     .leslie-moments-post > footer {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .leslie-moments-reactions {
+        flex-wrap: wrap;
     }
 
     .leslie-moments-post-actions {

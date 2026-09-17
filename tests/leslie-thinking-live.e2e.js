@@ -9,7 +9,7 @@ test.use({
 
 test.skip(process.env.LESLIE_LIVE_API !== '1', 'Set LESLIE_LIVE_API=1 to run the paid DeepSeek acceptance check.');
 
-test('DeepSeek thinking returns complete, clean role text for every Leslie reply style', async ({ page }, testInfo) => {
+test('DeepSeek quiet checks stay bounded while reply styles remain semantic', async ({ page }, testInfo) => {
     test.setTimeout(300_000);
     const generatedRequests = [];
     page.on('request', (request) => {
@@ -31,11 +31,15 @@ test('DeepSeek thinking returns complete, clean role text for every Leslie reply
     await expect(page.locator('#preloader')).toBeHidden();
     await page.locator('.popup[open]').evaluateAll((popups) => popups.forEach((popup) => popup.close()));
 
-    const snapshot = await page.evaluate(() => ({
-        maxTokens: document.getElementById('openai_max_tokens')?.value,
-        temperature: document.getElementById('temp_openai')?.value,
-        showThoughts: document.getElementById('openai_show_thoughts')?.checked,
-    }));
+    const snapshot = await page.evaluate(async () => {
+        const { extension_settings } = await import('/scripts/extensions.js');
+        return {
+            maxTokens: document.getElementById('openai_max_tokens')?.value,
+            temperature: document.getElementById('temp_openai')?.value,
+            showThoughts: document.getElementById('openai_show_thoughts')?.checked,
+            replyStyle: extension_settings.leslieReplyStyle?.style,
+        };
+    });
     const results = [];
 
     try {
@@ -54,15 +58,16 @@ test('DeepSeek thinking returns complete, clean role text for every Leslie reply
 
         await settingsNavigation.locator('[data-leslie-detail="reply"]').click();
         const styles = [
-            ['concise', 180, '请用两到三句简体中文回应，保持角色口吻并以完整句子结尾。'],
-            ['dialogue', 360, '请用简体中文写一段以对话推进的回应，保持角色口吻并以完整句子结尾。'],
-            ['balanced', 500, '请用简体中文写一段叙述与对话均衡的回应，保持角色口吻并以完整句子结尾。'],
-            ['novel', 1500, '请用简体中文写一段较丰富的场景回应，保持角色口吻并以完整句子结尾。'],
+            ['concise', '请用两到三句简体中文回应，保持角色口吻并以完整句子结尾。'],
+            ['dialogue', '请用简体中文写一段以对话推进的回应，保持角色口吻并以完整句子结尾。'],
+            ['balanced', '请用简体中文写一段叙述与对话均衡的回应，保持角色口吻并以完整句子结尾。'],
+            ['novel', '请用简体中文写一段较丰富的场景回应，保持角色口吻并以完整句子结尾。'],
         ];
 
-        for (const [style, selectedTokens, instruction] of styles) {
+        for (const [style, instruction] of styles) {
             await page.locator(`[data-leslie-reply-style="${style}"]`).click();
-            await expect(page.locator('#openai_max_tokens')).toHaveValue(String(selectedTokens));
+            await expect(page.locator('#openai_max_tokens')).toHaveValue(String(snapshot.maxTokens));
+            await expect(page.locator('#temp_openai')).toHaveValue(String(snapshot.temperature));
             const requestIndex = generatedRequests.length;
             const result = await page.evaluate(async ({ style, instruction }) => {
                 const script = await import('/script.js');
@@ -143,7 +148,7 @@ test('DeepSeek thinking returns complete, clean role text for every Leslie reply
             expect(result.hasVisibleThinkElement).toBe(false);
         }
     } finally {
-        await page.evaluate((saved) => {
+        await page.evaluate(async (saved) => {
             const restoreInput = (id, value, property = 'value') => {
                 const element = document.getElementById(id);
                 if (!(element instanceof HTMLInputElement) || value === undefined) {
@@ -155,6 +160,12 @@ test('DeepSeek thinking returns complete, clean role text for every Leslie reply
             restoreInput('openai_max_tokens', saved.maxTokens);
             restoreInput('temp_openai', saved.temperature);
             restoreInput('openai_show_thoughts', Boolean(saved.showThoughts), 'checked');
+            const { extension_settings } = await import('/scripts/extensions.js');
+            const { saveSettingsDebounced } = await import('/script.js');
+            if (extension_settings.leslieReplyStyle && saved.replyStyle) {
+                extension_settings.leslieReplyStyle.style = saved.replyStyle;
+                saveSettingsDebounced();
+            }
         }, snapshot);
         await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 1200)));
     }

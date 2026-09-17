@@ -8,7 +8,7 @@ import {
 } from '../public/scripts/leslie-reasoning-budget.js';
 
 describe('Leslie reasoning-safe token budget', () => {
-    test.each([180, 360, 500, 1500])('protects every reply-style length while DeepSeek thinking is enabled (%i)', (outputTokens) => {
+    test.each([128, 1024, 4096])('protects representative manual output limits while DeepSeek thinking is enabled (%i)', (outputTokens) => {
         const budget = getReasoningSafeTokenBudget({
             chatCompletionSource: 'deepseek',
             showThoughts: true,
@@ -30,7 +30,7 @@ describe('Leslie reasoning-safe token budget', () => {
             showThoughts: true,
             reasoningEffort: 'max',
             contextTokens: 65_536,
-            outputTokens: 1500,
+            outputTokens: 2048,
         });
 
         expect(budget.contextTokens).toBe(131_072);
@@ -44,8 +44,8 @@ describe('Leslie reasoning-safe token budget', () => {
             showThoughts: false,
             reasoningEffort: 'auto',
             contextTokens: 8192,
-            outputTokens: 180,
-        })).toEqual({ contextTokens: 8192, outputTokens: 180, protected: false });
+            outputTokens: 384,
+        })).toEqual({ contextTokens: 8192, outputTokens: 384, protected: false });
     });
 
     test('does not alter other providers', () => {

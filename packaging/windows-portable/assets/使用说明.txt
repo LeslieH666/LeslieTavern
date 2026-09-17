@@ -8,7 +8,7 @@ LeslieTavern Windows x64 懒人便携版
 
 二、关闭
 
-优先直接关闭 LeslieTavern 窗口，也可以双击“关闭 LeslieTavern.cmd”。
+关闭 LeslieTavern 窗口后，程序会留在系统托盘并继续处理朋友圈互动。需要完全退出时，请在托盘菜单选择“退出 LeslieTavern”，也可以双击“关闭 LeslieTavern.cmd”。
 关闭脚本只会处理本便携包记录的主进程，不会批量结束电脑上的其他 Electron 程序。
 
 三、用户数据

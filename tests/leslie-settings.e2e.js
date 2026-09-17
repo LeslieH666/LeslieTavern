@@ -1,4 +1,5 @@
 /* eslint-disable playwright/no-conditional-in-test */
+/* global document */
 import { expect, test } from '@playwright/test';
 
 test.use({
@@ -75,20 +76,31 @@ test('Leslie settings keeps essentials clear and advanced tools guarded', async 
     await settingsNavigation.locator('[data-leslie-detail="reply"]').click();
     const mainApi = await page.locator('#main_api').inputValue();
     const replyLengthSource = { openai: '#openai_max_tokens' }[mainApi] ?? '#amount_gen';
-    const replyContextSource = { openai: '#openai_max_context' }[mainApi] ?? '#max_context';
-    const originalLength = await page.locator('#leslie-reply-length').inputValue();
+    const originalLength = await page.locator(replyLengthSource).inputValue();
     const originalCreativity = await page.locator('#leslie-reply-creativity').inputValue();
-    await expect(page.locator('#leslie-reply-length')).toHaveValue(await page.locator(replyLengthSource).inputValue());
-    await expect(page.locator('#leslie-reply-context')).toHaveValue(await page.locator(replyContextSource).inputValue());
+    await expect(page.locator('[data-leslie-reply-style]')).toHaveCount(5);
+    await expect(page.locator('#leslie-reply-length')).toHaveCount(0);
+    await expect(page.locator('#leslie-reply-context')).toHaveCount(0);
     await page.locator('[data-leslie-reply-style="novel"]').click();
-    await expect(page.locator('#leslie-reply-length')).toHaveValue('1500');
-    await expect(page.locator(replyLengthSource)).toHaveValue('1500');
-    await expect(page.locator('#leslie-reply-creativity')).toHaveValue('1.05');
-    await expect(page.locator('[data-leslie-reply-style="novel"]')).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('[data-leslie-preset-undo]')).toBeVisible();
-    await page.locator('[data-leslie-preset-undo]').click();
-    await expect(page.locator('#leslie-reply-length')).toHaveValue(originalLength);
+    await expect(page.locator(replyLengthSource)).toHaveValue(originalLength);
     await expect(page.locator('#leslie-reply-creativity')).toHaveValue(originalCreativity);
+    await expect(page.locator('[data-leslie-reply-style="novel"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.leslie-detail-callout')).toContainText('model service decides reply length');
+    await expect.poll(() => page.evaluate(async () => {
+        const { extension_settings } = await import('/scripts/extensions.js');
+        return extension_settings.leslieReplyStyle?.style;
+    })).toBe('novel');
+    const injection = await page.evaluate(async () => {
+        const script = await import('/script.js');
+        await document.defaultView.LeslieReplyStylePreparePrompt([], 8192, () => {}, 'normal');
+        const prompt = structuredClone(script.extension_prompts.leslie_reply_style);
+        await document.defaultView.LeslieReplyStylePreparePrompt([], 8192, () => {}, 'quiet');
+        return { prompt, quietValue: script.extension_prompts.leslie_reply_style?.value };
+    });
+    expect(injection.prompt.value).toContain('Use cohesive, vivid literary prose');
+    expect(injection.prompt.value).toContain('Do not target a fixed word count or token count.');
+    expect(injection.prompt.value).not.toMatch(/\b(180|360|500|1500)\b/);
+    expect(injection.quietValue).toBe('');
 
     for (const [detail, title] of [['character', 'Characters & chats'], ['persona', 'My identity'], ['world', 'World & memory']]) {
         await settingsNavigation.locator(`[data-leslie-detail="${detail}"]`).click();
@@ -136,15 +148,13 @@ test('Leslie settings becomes a full-screen settings page on phones', async ({ p
     await expect.poll(async () => Math.abs((await settingsContent.boundingBox()).x)).toBeLessThanOrEqual(1);
     await expect(page.locator('#leslie-settings-detail')).toBeVisible();
     await expect(page.locator('.leslie-detail-hero h2')).toHaveText('Reply style');
-    await expect(page.locator('[data-leslie-reply-style]')).toHaveCount(4);
+    await expect(page.locator('[data-leslie-reply-style]')).toHaveCount(5);
     await expect(page.locator('[data-leslie-reply-style="novel"]')).toContainText('Long-form novel');
     const presetColumns = await page.locator('.leslie-style-presets').evaluate((element) => element.ownerDocument.defaultView.getComputedStyle(element).gridTemplateColumns.split(' '));
     expect(presetColumns).toHaveLength(2);
     const detailColumns = await page.locator('.leslie-detail-grid').first().evaluate((element) => element.ownerDocument.defaultView.getComputedStyle(element).gridTemplateColumns.split(' '));
     expect(detailColumns).toHaveLength(1);
-    const mainApi = await page.locator('#main_api').inputValue();
-    const replyLengthSource = { openai: '#openai_max_tokens' }[mainApi] ?? '#amount_gen';
-    await expect(page.locator('#leslie-reply-length')).toHaveValue(await page.locator(replyLengthSource).inputValue());
+    await expect(page.locator('#leslie-reply-length')).toHaveCount(0);
     await expect(page.locator('[data-leslie-drawer-target="ai-config-button"]')).toBeVisible();
 
     await page.locator('[data-leslie-settings-nav-back]').click();
@@ -165,6 +175,6 @@ test('Leslie settings follows the saved Chinese interface language', async ({ pa
     await expect(page.locator('.leslie-detail-hero h2')).toHaveText('模型连接');
     await expect(page.getByRole('heading', { name: '选择连接方式', exact: true })).toBeVisible();
     await settingsNavigation.locator('[data-leslie-detail="reply"]').click();
-    await expect(page.locator('.leslie-style-presets-card h3')).toHaveText('选择一种写作节奏');
+    await expect(page.locator('.leslie-style-presets-card h3')).toHaveText('选择回复范式');
     await expect(page.locator('[data-leslie-reply-style="novel"]')).toContainText('长篇小说');
 });

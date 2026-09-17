@@ -23,6 +23,12 @@ import {
     LESLIE_CHARACTER_WRITING_SKILL,
 } from '../public/scripts/leslie-character-workshop/writing-skill.js';
 import { parseCharacterCardJsonText } from '../public/scripts/leslie-character-workshop/importer.js';
+import {
+    assessBlueprintFidelity,
+    buildCharacterBlueprintPrompt,
+    normalizeCharacterBlueprint,
+    summarizeCharacterBlueprint,
+} from '../public/scripts/leslie-character-workshop/blueprint.js';
 
 function buildCompleteCard() {
     return {
@@ -183,10 +189,11 @@ test('canonicalizes neutral and active chat dialogue labels to portable card mac
 test('versioned writing skill uses one chat API for four quality-first stages', () => {
     const brief = buildBriefRequest('写一个警觉但好奇的成年角色', 'original');
     const knowledge = buildKnowledgeCheckRequest({ mode: 'adaptation', knowledgeQuestions: ['角色身份'] });
-    const draft = buildDraftRequest({ mode: 'original' }, {});
-    const review = buildReviewRequest({ mode: 'original' }, buildCompleteCard(), {}, { score: 100 }, { positive: 'adult portrait' });
+    const blueprint = normalizeCharacterBlueprint({ age: '24 岁', occupation: '书店店员' });
+    const draft = buildDraftRequest({ mode: 'original' }, {}, blueprint);
+    const review = buildReviewRequest({ mode: 'original' }, buildCompleteCard(), {}, { score: 100 }, { positive: 'adult portrait' }, blueprint);
 
-    assert.equal(LESLIE_CHARACTER_WRITING_SKILL.version, '1.1.0');
+    assert.equal(LESLIE_CHARACTER_WRITING_SKILL.version, '1.2.0');
     assert.match(brief.prompt, /阶段 1\/4/);
     assert.match(knowledge.prompt, /阶段 2\/4/);
     assert.match(knowledge.systemPrompt, /严禁编造网址/);
@@ -194,11 +201,94 @@ test('versioned writing skill uses one chat API for four quality-first stages', 
     assert.match(draft.prompt, /4～8 组正例/);
     assert.match(draft.prompt, /avatar_prompt/);
     assert.match(draft.prompt, /不生成图片数据/);
+    assert.match(draft.prompt, /structuredInput/);
+    assert.match(draft.prompt, /24 岁/);
+    assert.doesNotMatch(draft.prompt, /固定成年外观/);
     assert.match(draft.systemPrompt, /\[USER\].*\[CHAR\]/);
     assert.match(review.prompt, /审校并修订/);
     assert.match(review.prompt, /手动头像提示词/);
+    assert.match(review.prompt, /用户指定年龄一致/);
     assert.match(review.systemPrompt, /不要因为原稿来自另一个模型而宽松评分/);
     assert.match(review.systemPrompt, /0～100/);
+});
+
+test('builds a structured blueprint where blank fields are delegated to AI', () => {
+    const blueprint = normalizeCharacterBlueprint({
+        name: '林雾遥',
+        age: '24 岁',
+        occupation: '独立书店夜班店员',
+        personalityTension: '警觉但好奇',
+        height: '168 cm',
+        unknownField: '不会被保留',
+    });
+    const summary = summarizeCharacterBlueprint(blueprint);
+    const prompt = JSON.parse(buildCharacterBlueprintPrompt({
+        blueprint,
+        freeform: '开场发生在停电后的书店。',
+        mode: 'original',
+    }));
+
+    assert.equal(blueprint.version, 1);
+    assert.equal(blueprint.fields.name, '林雾遥');
+    assert.equal('unknownField' in blueprint.fields, false);
+    assert.equal(summary.lockedFacts.some(item => item.key === 'height' && item.value === '168 cm'), true);
+    assert.equal(summary.aiFillFields.some(item => item.key === 'hair'), true);
+    assert.equal(prompt.schema, 'leslie-character-blueprint-v1');
+    assert.equal(prompt.freeformNotes, '开场发生在停电后的书店。');
+    assert.match(prompt.rules.join('\n'), /空白不是缺陷/);
+});
+
+test('checks concrete user-locked blueprint facts against the generated card', () => {
+    const blueprint = normalizeCharacterBlueprint({
+        name: '林雾遥',
+        age: '24 岁',
+        height: '168 cm',
+        occupation: '独立书店夜班店员',
+        personalityTension: '警觉但好奇',
+        replyLength: '简短',
+    });
+    const card = buildCompleteCard();
+    card.data.name = '林雾遥';
+    card.data.description = '林雾遥，24 岁，身高 168 厘米，是一名独立书店夜班店员。她不知道玩家没有亲口说出的经历。';
+    card.data.personality = '她警觉但好奇，有自己的计划。关系与信任必须逐步发展。';
+
+    const complete = assessBlueprintFidelity(card, blueprint);
+    assert.equal(complete.total, 6);
+    assert.deepEqual(complete.missing, []);
+
+    card.data.description = '她在书店工作，外貌没有明确记录。';
+    const incomplete = assessBlueprintFidelity(card, blueprint);
+    assert.equal(incomplete.missing.some(item => item.key === 'height'), true);
+    assert.equal(incomplete.missing.some(item => item.key === 'occupation'), true);
+    assert.equal(incomplete.missing.some(item => item.key === 'replyLength'), false);
+});
+
+test('accepts faithful paraphrases across stable character-card fields', () => {
+    const blueprint = normalizeCharacterBlueprint({
+        clothing: '浅灰连帽卫衣、深色牛仔裤',
+        coreTraits: '认真、敏锐、慢热',
+        personalityTension: '理性克制，但对未知事物非常好奇',
+        goals: '完成学期项目并争取实验室实习',
+        likes: '天文摄影、独立游戏、冰美式',
+        boundaries: '不替玩家说话或行动；不读心；不强行升级亲密关系',
+        addressUser: '先用你，熟悉后才根据玩家自我介绍改用名字',
+        forbiddenStyle: '不说教，不连环追问，不用大段抽象抒情',
+    });
+    const card = buildCompleteCard();
+    card.data.description = [
+        '她常穿浅灰连帽卫衣和深色牛仔裤。',
+        '当前目标是完成学期项目并争取实验室实习。',
+        '核心性格认真负责、观察敏锐，但表达慢热。',
+        '她理性克制，但对未知事物非常好奇。',
+        '她喜欢天文摄影、独立游戏和冰美式。',
+    ].join('\n');
+    card.data.personality = '她不替玩家说话或行动，不读心，也不强行升级亲密关系。';
+    card.data.system_prompt = '先用“你”称呼用户，熟悉后才根据用户自我介绍改用名字。';
+    card.data.post_history_instructions = '不说教，不连环追问，不用大段抽象抒情。';
+
+    const result = assessBlueprintFidelity(card, blueprint);
+    assert.equal(result.total, 8);
+    assert.deepEqual(result.missing, []);
 });
 
 test('imports Clarix Character Card V2 JSON and preserves its personalization extension', () => {

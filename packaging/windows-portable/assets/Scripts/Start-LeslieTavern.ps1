@@ -72,7 +72,7 @@ for ($attempt = 0; $attempt -lt 90; $attempt++) {
 }
 
 if ($started) {
-    Write-Host 'LeslieTavern started. Close its window or run the stop shortcut to exit safely.' -ForegroundColor Green
+    Write-Host 'LeslieTavern started. Closing the window keeps it in the system tray; use the tray Exit command or the stop shortcut to end it.' -ForegroundColor Green
 } else {
     Write-Host "LeslieTavern is still initializing. Logs: $LogsPath" -ForegroundColor Yellow
 }

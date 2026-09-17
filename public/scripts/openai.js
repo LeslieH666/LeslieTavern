@@ -81,7 +81,7 @@ import { ToolManager } from './tool-calling.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { COMETAPI_IGNORE_PATTERNS, IGNORE_SYMBOL, MEDIA_DISPLAY, MEDIA_TYPE } from './constants.js';
 import { syncNanoGptProvidersForModel, syncOpenRouterProvidersForModel, updateNanoGptProvidersWarning, updateOpenRouterProvidersWarning } from './textgen-models.js';
-import { getReasoningSafeTokenBudget } from './leslie-reasoning-budget.js';
+import { getGenerationTokenBudget } from './leslie-reasoning-budget.js';
 
 export {
     openai_messages_count,
@@ -1556,12 +1556,13 @@ export async function prepareOpenAIMessages({
     if (power_user.console_log_prompts) chatCompletion.enableLogging();
 
     const userSettings = promptManager.serviceSettings;
-    const reasoningBudget = getReasoningSafeTokenBudget({
+    const reasoningBudget = getGenerationTokenBudget({
         chatCompletionSource: userSettings.chat_completion_source,
         showThoughts: userSettings.show_thoughts,
         reasoningEffort: userSettings.reasoning_effort,
         contextTokens: userSettings.openai_max_context,
         outputTokens: userSettings.openai_max_tokens,
+        type,
     });
     chatCompletion.setTokenBudget(reasoningBudget.contextTokens, reasoningBudget.outputTokens);
 
@@ -2747,12 +2748,13 @@ export async function createGenerationParameters(settings, model, type, messages
         logit_bias = undefined;
     }
 
-    const reasoningBudget = getReasoningSafeTokenBudget({
+    const reasoningBudget = getGenerationTokenBudget({
         chatCompletionSource: settings.chat_completion_source,
         showThoughts: settings.show_thoughts,
         reasoningEffort: settings.reasoning_effort,
         contextTokens: settings.openai_max_context,
         outputTokens: settings.openai_max_tokens,
+        type,
     });
 
     const generate_data = {
@@ -2763,7 +2765,7 @@ export async function createGenerationParameters(settings, model, type, messages
         'frequency_penalty': Number(settings.freq_pen_openai),
         'presence_penalty': Number(settings.pres_pen_openai),
         'top_p': Number(settings.top_p_openai),
-        'max_tokens': reasoningBudget.outputTokens,
+        'max_tokens': reasoningBudget.requestOutputTokens,
         'stream': stream,
         'logit_bias': logit_bias,
         'stop': getCustomStoppingStrings(openai_max_stop_strings),

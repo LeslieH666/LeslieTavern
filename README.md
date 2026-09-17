@@ -15,7 +15,8 @@ LeslieTavern 是基于 [SillyTavern](https://github.com/SillyTavern/SillyTavern)
 
 - 保留 SillyTavern 的角色卡、群聊、World Info、Swipe、模型适配和 JSONL 聊天格式。
 - 提供 Windows Electron 桌面入口、启动中心、诊断、联合启动和便携构建脚本。
-- 提供 Leslie 身份、Persona / 剧情线隔离、记忆、朋友圈时间线和角色语音模块。
+- 提供 Leslie 身份、Persona / 剧情线隔离、记忆，以及带真实已读、选择性点赞/评论和托盘后台运行的朋友圈时间线。
+- 提供火山引擎角色语音配置、试听与回复自动朗读。
 - 提供可选的互动引导输入：围绕当前用户 Persona 生成三个可点击回复，并回到原有聊天生成链路。
 - 提供 AI 角色工坊：可使用当前聊天 API（包括 DeepSeek 等）或本地 OpenAI-compatible 模型生成 CCV3 草稿；结果只在内存中预览，用户明确应用后才进入角色编辑器。
 - 提供 Peach 2.0 GGUF 的 KoboldCpp / llama.cpp 快捷配置。模型权重、推理程序和运行日志保持本地，不提交到 Git。

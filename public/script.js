@@ -113,6 +113,8 @@ import {
     initOpenAI,
 } from './scripts/openai.js';
 import { getLengthContinuationDecision, LESLIE_LENGTH_CONTINUATION_LIMIT } from './scripts/leslie-length-continuation.js';
+import { getGenerationTokenBudget } from './scripts/leslie-reasoning-budget.js';
+import { shouldDeferLeslieContinuationToUser } from './scripts/leslie-reply-style.js';
 import {
     getCharacterAvatarRevision,
     refreshCharacterAvatarState,
@@ -3952,6 +3954,8 @@ export function createRawPrompt(prompt, api, instructOverride, quietToLoud, syst
  * @prop {boolean} [trimNames] Whether to allow trimming "{{user}}:" and "{{char}}:" from the response.
  * @prop {string} [prefill] An optional prefill for the prompt.
  * @prop {JsonSchema} [jsonSchema] JSON schema to use for the structured generation. Usually requires a special instruction.
+ * @prop {AbortSignal} [signal] Optional external signal used to cancel this generation without stopping foreground chat.
+ * @prop {boolean} [skipPromptHooks] Whether to skip chat-context prompt hooks for an isolated background task.
  */
 
 /**
@@ -3960,7 +3964,7 @@ export function createRawPrompt(prompt, api, instructOverride, quietToLoud, syst
  * @param {GenerateRawParams} params Parameters for generating a message
  * @returns {Promise<object | string>} Raw API response data, or a JSON string extracted from the response when `jsonSchema` is provided.
  */
-export async function generateRawData({ prompt = '', api = null, instructOverride = false, quietToLoud = false, systemPrompt = '', responseLength = null, prefill = '', jsonSchema = null } = {}) {
+export async function generateRawData({ prompt = '', api = null, instructOverride = false, quietToLoud = false, systemPrompt = '', responseLength = null, prefill = '', jsonSchema = null, signal = null, skipPromptHooks = false } = {}) {
     if (!api) {
         api = main_api;
     }
@@ -3978,7 +3982,17 @@ export async function generateRawData({ prompt = '', api = null, instructOverrid
         abortController.abort(new Error('Cancelled by stop event'));
         eventAbortController.abort(new Error('Cancelled by extension'));
     };
+    const externalAbortHook = () => {
+        const reason = signal?.reason instanceof Error ? signal.reason : new Error('Cancelled by caller');
+        abortController.abort(reason);
+        eventAbortController.abort(reason);
+    };
     eventSource.on(event_types.GENERATION_STOPPED, abortHook);
+    if (signal?.aborted) {
+        externalAbortHook();
+    } else {
+        signal?.addEventListener('abort', externalAbortHook, { once: true });
+    }
 
     try {
         if (responseLengthCustomized) {
@@ -3987,18 +4001,21 @@ export async function generateRawData({ prompt = '', api = null, instructOverrid
         /** @type {object|any[]} */
         let generateData = {};
 
-        // Allow extensions to modify the prompt before generation
-        // 1. for text completion
-        if (typeof prompt === 'string') {
-            const eventData = { prompt: prompt, dryRun: false };
-            await eventSource.emit(event_types.GENERATE_AFTER_COMBINE_PROMPTS, eventData);
-            prompt = eventData.prompt;
-        }
-        // 2. for chat completion
-        if (Array.isArray(prompt)) {
-            const eventData = { chat: prompt, dryRun: false };
-            await eventSource.emit(event_types.CHAT_COMPLETION_PROMPT_READY, eventData);
-            prompt = eventData.chat;
+        // Allow extensions to modify ordinary chat prompts. Isolated background tasks can opt out
+        // so the currently open chat is never mixed into unrelated work.
+        if (!skipPromptHooks) {
+            // 1. for text completion
+            if (typeof prompt === 'string') {
+                const eventData = { prompt: prompt, dryRun: false };
+                await eventSource.emit(event_types.GENERATE_AFTER_COMBINE_PROMPTS, eventData);
+                prompt = eventData.prompt;
+            }
+            // 2. for chat completion
+            if (Array.isArray(prompt)) {
+                const eventData = { chat: prompt, dryRun: false };
+                await eventSource.emit(event_types.CHAT_COMPLETION_PROMPT_READY, eventData);
+                prompt = eventData.chat;
+            }
         }
 
         // Check if the generation was aborted during the event
@@ -4069,6 +4086,7 @@ export async function generateRawData({ prompt = '', api = null, instructOverrid
         return data;
     } finally {
         eventSource.removeListener(event_types.GENERATION_STOPPED, abortHook);
+        signal?.removeEventListener('abort', externalAbortHook);
         if (responseLengthCustomized && TempResponseLength.isCustomized()) {
             TempResponseLength.restore(api);
             TempResponseLength.removeEventHook(api, eventHook);
@@ -4082,13 +4100,13 @@ export async function generateRawData({ prompt = '', api = null, instructOverrid
  * @param {GenerateRawParams} params Parameters for generating a message
  * @returns {Promise<string>} Generated output: a cleaned-up message string when `jsonSchema` is not provided, or an extracted JSON string conforming to `jsonSchema` when it is.
  */
-export async function generateRaw({ prompt = '', api = null, instructOverride = false, quietToLoud = false, systemPrompt = '', responseLength = null, trimNames = true, prefill = '', jsonSchema = null } = {}) {
+export async function generateRaw({ prompt = '', api = null, instructOverride = false, quietToLoud = false, systemPrompt = '', responseLength = null, trimNames = true, prefill = '', jsonSchema = null, signal = null, skipPromptHooks = false } = {}) {
     if (arguments.length > 0 && typeof arguments[0] !== 'object') {
         console.trace('generateRaw called with positional arguments. Please use an object instead.');
         [prompt, api, instructOverride, quietToLoud, systemPrompt, responseLength, trimNames, prefill, jsonSchema] = arguments;
     }
 
-    const data = await generateRawData({ prompt, api, instructOverride, quietToLoud, systemPrompt, responseLength, prefill, jsonSchema });
+    const data = await generateRawData({ prompt, api, instructOverride, quietToLoud, systemPrompt, responseLength, prefill, jsonSchema, signal, skipPromptHooks });
 
     // JSON string (matching the provided schema) will already be extracted.
     if (jsonSchema) {
@@ -4534,7 +4552,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     }
 
     // Determine token limit
-    let this_max_context = getMaxPromptTokens();
+    let this_max_context = getMaxPromptTokens(null, type);
 
     if (!dryRun) {
         console.debug('Running extension interceptors');
@@ -5785,6 +5803,16 @@ export function triggerAutoContinue(messageChunk, isImpersonate, { finishReason 
             return;
         }
 
+        if (main_api === 'openai'
+            && shouldDeferLeslieContinuationToUser({
+                finishReason,
+                chatCompletionSource: oai_settings.chat_completion_source,
+                type: isImpersonate ? 'impersonate' : 'normal',
+            })) {
+            toastr.warning('模型已达到服务端输出边界，如需更多内容请点击“继续”。', '回复尚未完成', { preventDuplicates: true });
+            return;
+        }
+
         if (decision === 'limit-reached') {
             toastr.warning('回复仍达到模型上限，请点击“继续”完成剩余内容。', '回复尚未完成', { preventDuplicates: true });
             return;
@@ -5986,11 +6014,24 @@ export function getMaxResponseTokens() {
 /**
  * Gets the maximum usable prompt size for the current API.
  * @param {number|null} overrideResponseLength Optional override for the response length.
+ * @param {string} type Generation type.
  * @returns {number} Maximum usable prompt size.
  */
-export function getMaxPromptTokens(overrideResponseLength = null) {
+export function getMaxPromptTokens(overrideResponseLength = null, type = 'normal') {
     if (typeof overrideResponseLength !== 'number' || overrideResponseLength <= 0 || isNaN(overrideResponseLength)) {
         overrideResponseLength = null;
+    }
+
+    if (main_api === 'openai' && overrideResponseLength === null) {
+        const budget = getGenerationTokenBudget({
+            chatCompletionSource: oai_settings.chat_completion_source,
+            showThoughts: oai_settings.show_thoughts,
+            reasoningEffort: oai_settings.reasoning_effort,
+            contextTokens: oai_settings.openai_max_context,
+            outputTokens: oai_settings.openai_max_tokens,
+            type,
+        });
+        return budget.contextTokens - budget.outputTokens;
     }
 
     return getMaxContextTokens() - (overrideResponseLength || getMaxResponseTokens());

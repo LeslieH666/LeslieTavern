@@ -44,9 +44,16 @@ import {
     getWorkshopProviderLabel,
     probeLocalWorkshopProvider,
 } from './provider.js';
+import {
+    assessBlueprintFidelity,
+    buildCharacterBlueprintPrompt,
+    normalizeCharacterBlueprint,
+    renderCharacterBlueprintMarkup,
+} from './blueprint.js';
 
 const STAGES = ['brief', 'research', 'draft', 'review', 'ready'];
 const PREVIEW_FIELDS = [
+    ['name', '角色姓名', 'input'],
     ['description', '角色是谁'],
     ['personality', '性格与说话方式'],
     ['scenario', '世界、关系与开场'],
@@ -54,6 +61,10 @@ const PREVIEW_FIELDS = [
     ['mes_example', '示例对话'],
     ['system_prompt', '核心边界'],
     ['post_history_instructions', '每轮输出契约'],
+    ['creator_notes', '创作者备注'],
+    ['alternate_greetings', '备用开场（每段之间空一行）', 'list'],
+    ['tags', '标签（使用逗号分隔）', 'tags'],
+    ['depth_prompt', '核心锚点', 'depth'],
 ];
 
 const state = {
@@ -73,6 +84,10 @@ const state = {
     importNotices: [],
     provider: WORKSHOP_PROVIDER.CHAT,
     abortController: null,
+    blueprint: normalizeCharacterBlueprint({}),
+    manuallyEdited: false,
+    avatarFiles: null,
+    avatarPreviewUrl: '',
 };
 
 let overlay;
@@ -124,10 +139,9 @@ function createWorkshopMarkup() {
 
                 <main class="leslie-character-workshop-main">
                     <section class="leslie-character-workshop-intro">
-                        <span class="leslie-character-workshop-eyebrow">从一句想法开始</span>
-                        <h2>把你想要的角色告诉 AI</h2>
-                        <p>可以写得很短，也可以把姓名、年龄、关系、原作时间点、开场地点和禁区全部写清楚。越明确的内容越不会被改动。</p>
-                        <textarea data-workshop-prompt rows="7" maxlength="12000" placeholder="例如：原创成年女性角色，名字叫……她和玩家是刚认识的邻居。性格警觉但好奇，开场在深夜便利店。默认短对话，不要替玩家行动……"></textarea>
+                        <span class="leslie-character-workshop-eyebrow">结构化角色蓝图</span>
+                        <h2>确定的你来填，其余交给 AI</h2>
+                        <p>所有字段都可以留空。你填写的内容会被视为锁定事实，空白项由 AI 合理补全；生成后还可以直接手动修改，不会自动再次调用 AI。</p>
                         <div class="leslie-character-workshop-options">
                             <label>
                                 <span>创作类型</span>
@@ -142,6 +156,13 @@ function createWorkshopMarkup() {
                                 <span><strong>需要时由当前 AI 核对知识</strong><small>不需要第二套 API；模型不支持联网时只做非实时核对</small></span>
                             </label>
                         </div>
+                        <div class="leslie-character-workshop-blueprint" data-workshop-blueprint>
+                            ${renderCharacterBlueprintMarkup()}
+                        </div>
+                        <label class="leslie-character-workshop-freeform">
+                            <span><strong>自由补充</strong><small>上面没有覆盖的要求写在这里；留空也可以直接生成完整角色。</small></span>
+                            <textarea data-workshop-prompt rows="6" maxlength="12000" placeholder="例如：希望她表面冷淡但会用实际行动帮助别人；故事从一次意外停电开始……"></textarea>
+                        </label>
                         <div class="leslie-character-workshop-api-note">
                             <i class="fa-solid fa-link" aria-hidden="true"></i>
                             <span><strong>可切换角色卡生成接口</strong><small>默认复用当前聊天 API；选择本地 Peach 只作用于本次角色卡草稿生成，不改变聊天设置。生成结果只在内存中预览，不会自动保存。</small></span>
@@ -200,12 +221,27 @@ function createWorkshopMarkup() {
                     </section>
 
                     <section class="leslie-character-workshop-result" data-workshop-section="preview" hidden>
-                        <div class="leslie-character-workshop-section-heading"><div><span>05</span><div><h3 data-workshop-card-name>角色卡预览</h3><p>这里只是内存草稿，尚未写入正式角色目录。</p></div></div></div>
+                        <div class="leslie-character-workshop-section-heading"><div><span>05</span><div><h3 data-workshop-card-name>角色卡编辑与确认</h3><p>这是 AI 完成的第一版。你可以直接修改任意字段；修改后不会再让 AI 介入。</p></div></div></div>
                         <div class="leslie-character-workshop-preview" data-workshop-preview></div>
                     </section>
 
                     <section class="leslie-character-workshop-result" data-workshop-section="avatar" hidden>
-                        <div class="leslie-character-workshop-section-heading"><div><span>IMG</span><div><h3>手动生成头像提示词</h3><p>这里只提供文字，不调用图片 API，也不会生成或保存图片。</p></div></div></div>
+                        <div class="leslie-character-workshop-section-heading"><div><span>IMG</span><div><h3>角色头像</h3><p>可以直接上传照片，也可以复制 AI 提供的提示词去其他图片工具生成。</p></div></div></div>
+                        <div class="leslie-character-workshop-avatar-upload">
+                            <div class="leslie-character-workshop-avatar-preview" data-workshop-avatar-preview>
+                                <i class="fa-solid fa-user" aria-hidden="true"></i>
+                                <img data-workshop-avatar-image alt="角色头像预览" hidden>
+                            </div>
+                            <div>
+                                <strong>上传角色卡照片</strong>
+                                <p data-workshop-avatar-file-note>尚未选择图片；也可以稍后在原角色编辑器中添加。</p>
+                                <div class="leslie-character-workshop-avatar-actions">
+                                    <button type="button" class="leslie-character-workshop-button is-primary" data-workshop-action="choose-avatar">选择图片</button>
+                                    <button type="button" class="leslie-character-workshop-button is-quiet" data-workshop-action="remove-avatar" hidden>移除</button>
+                                </div>
+                                <input id="leslie-workshop-avatar-file" data-workshop-avatar-file type="file" accept="image/*" hidden>
+                            </div>
+                        </div>
                         <div class="leslie-character-workshop-avatar-prompt" data-workshop-avatar-prompt></div>
                     </section>
                 </main>
@@ -217,7 +253,7 @@ function createWorkshopMarkup() {
                     <button type="button" class="leslie-character-workshop-button is-quiet" data-workshop-action="manual">改用手动创建</button>
                     <button type="button" class="leslie-character-workshop-button is-quiet" data-workshop-action="download" hidden>下载 JSON 草稿</button>
                     <button type="button" class="leslie-character-workshop-button is-quiet" data-workshop-action="copy-avatar" hidden>复制头像提示词</button>
-                    <button type="button" class="leslie-character-workshop-button is-quiet" data-workshop-action="review" hidden>再审校一次</button>
+                    <button type="button" class="leslie-character-workshop-button is-quiet" data-workshop-action="review" hidden>可选：让 AI 再审校</button>
                     <button type="button" class="leslie-character-workshop-button is-danger" data-workshop-action="cancel" hidden>停止创作</button>
                     <button type="button" class="leslie-character-workshop-button is-primary" data-workshop-action="generate">开始深度创作</button>
                     <button type="button" class="leslie-character-workshop-button is-primary" data-workshop-action="apply" hidden>带入角色编辑器</button>
@@ -236,6 +272,24 @@ function setHidden(selector, hidden) {
     if (element) {
         element.hidden = hidden;
     }
+}
+
+function assessWorkshopCard(card, context = {}) {
+    const review = assessCharacterCard(card, context);
+    if (state.manuallyEdited) {
+        return review;
+    }
+    const fidelity = assessBlueprintFidelity(normalizeCharacterCard(card), state.blueprint);
+    if (fidelity.missing.length > 0) {
+        review.score = Math.max(0, review.score - Math.min(35, fidelity.missing.length * 7));
+        review.blocking.push(...fidelity.missing.map(fact => ({
+            code: `missing_locked_${fact.key}`,
+            message: `没有完整保留用户锁定字段“${fact.label}”：${fact.value}`,
+        })));
+    } else if (fidelity.total > 0) {
+        review.passed.push({ code: 'locked_facts', message: `已保留 ${fidelity.total} 项用户锁定设定。` });
+    }
+    return { ...review, fidelity };
 }
 
 function setConnectionBadge() {
@@ -317,12 +371,16 @@ function setRunning(running) {
     query('[data-workshop-mode]').disabled = running;
     query('[data-workshop-provider]').disabled = running;
     query('[data-workshop-knowledge-check]').disabled = running;
+    overlay.querySelectorAll('[data-workshop-field]').forEach(field => {
+        field.disabled = running;
+    });
     query('[data-workshop-import-json]').disabled = running;
     query('[data-workshop-action="paste-json"]').disabled = running;
     query('[data-workshop-action="inspect-json"]').disabled = running;
 }
 
 function resetResults() {
+    clearAvatarSelection();
     state.brief = null;
     state.knowledgeCheck = null;
     state.draft = null;
@@ -332,6 +390,8 @@ function resetResults() {
     state.localReview = null;
     state.importSource = '';
     state.importNotices = [];
+    state.blueprint = normalizeCharacterBlueprint({});
+    state.manuallyEdited = false;
     ['brief', 'knowledge', 'quality', 'preview', 'avatar'].forEach(section => setHidden(`[data-workshop-section="${section}"]`, true));
     setHidden('[data-workshop-action="download"]', true);
     setHidden('[data-workshop-action="review"]', true);
@@ -352,7 +412,7 @@ function openWorkshop() {
     document.body.classList.add('leslie-character-workshop-open');
     requestAnimationFrame(() => {
         overlay.dataset.open = 'true';
-        query('[data-workshop-prompt]').focus();
+        query('[data-workshop-field="name"]')?.focus();
     });
 }
 
@@ -455,15 +515,70 @@ function renderKnowledgeCheck() {
     section.hidden = false;
 }
 
+function clearAvatarSelection() {
+    if (state.avatarPreviewUrl) {
+        URL.revokeObjectURL(state.avatarPreviewUrl);
+    }
+    state.avatarFiles = null;
+    state.avatarPreviewUrl = '';
+    const input = query('[data-workshop-avatar-file]');
+    if (input) {
+        input.value = '';
+    }
+    const image = query('[data-workshop-avatar-image]');
+    const placeholder = query('[data-workshop-avatar-preview] i');
+    if (image) {
+        image.removeAttribute('src');
+        image.hidden = true;
+    }
+    if (placeholder) {
+        placeholder.hidden = false;
+    }
+    const note = query('[data-workshop-avatar-file-note]');
+    if (note) {
+        note.textContent = '尚未选择图片；也可以稍后在原角色编辑器中添加。';
+    }
+    setHidden('[data-workshop-action="remove-avatar"]', true);
+}
+
+function handleAvatarSelection(input) {
+    const file = input.files?.[0];
+    if (!file) {
+        clearAvatarSelection();
+        return;
+    }
+    if (!file.type.startsWith('image/')) {
+        clearAvatarSelection();
+        showError('请选择常见图片文件作为角色头像。');
+        return;
+    }
+    if (state.avatarPreviewUrl) {
+        URL.revokeObjectURL(state.avatarPreviewUrl);
+    }
+    state.avatarFiles = input.files;
+    state.avatarPreviewUrl = URL.createObjectURL(file);
+    const image = query('[data-workshop-avatar-image]');
+    image.src = state.avatarPreviewUrl;
+    image.hidden = false;
+    query('[data-workshop-avatar-preview] i').hidden = true;
+    query('[data-workshop-avatar-file-note]').textContent = `${file.name} · 带入编辑器后可继续裁剪和更换。`;
+    setHidden('[data-workshop-action="remove-avatar"]', false);
+    clearError();
+}
+
 function renderAvatarPrompt() {
     const section = query('[data-workshop-section="avatar"]');
     const container = query('[data-workshop-avatar-prompt]');
     const avatarPrompt = normalizeAvatarPrompt(state.avatarPrompt || {});
     container.replaceChildren();
 
+    section.hidden = !state.finalCard;
+    setHidden('[data-workshop-action="copy-avatar"]', !avatarPrompt.positive);
     if (!avatarPrompt.positive) {
-        section.hidden = true;
-        setHidden('[data-workshop-action="copy-avatar"]', true);
+        const note = document.createElement('div');
+        note.className = 'leslie-character-workshop-empty';
+        note.textContent = '当前草稿没有头像提示词，你仍然可以直接上传一张角色照片。';
+        container.append(note);
         return;
     }
 
@@ -487,7 +602,6 @@ function renderAvatarPrompt() {
     meta.textContent = `推荐比例：${avatarPrompt.aspectRatio || '2:3'}${avatarPrompt.notes ? ` · ${avatarPrompt.notes}` : ''}`;
     container.append(meta);
     section.hidden = false;
-    setHidden('[data-workshop-action="copy-avatar"]', false);
 }
 
 function renderQuality() {
@@ -541,42 +655,109 @@ function renderQuality() {
     setHidden('[data-workshop-section="quality"]', false);
 }
 
-function renderPreview() {
-    const data = state.finalCard.data;
-    const container = query('[data-workshop-preview]');
-    container.replaceChildren();
-    query('[data-workshop-card-name]').textContent = `${data.name} · 角色卡预览`;
-
-    for (const [field, label] of PREVIEW_FIELDS) {
-        const details = document.createElement('details');
-        if (field === 'first_mes') {
-            details.open = true;
-        }
-        const summary = document.createElement('summary');
-        summary.textContent = label;
-        const content = document.createElement('pre');
-        content.textContent = data[field];
-        details.append(summary, content);
-        container.append(details);
+function getEditableCardValue(data, field, type) {
+    if (type === 'list') {
+        return Array.isArray(data[field]) ? data[field].join('\n\n') : '';
     }
+    if (type === 'tags') {
+        return Array.isArray(data[field]) ? data[field].join(', ') : '';
+    }
+    if (type === 'depth') {
+        return data.extensions?.depth_prompt?.prompt || '';
+    }
+    return String(data[field] ?? '');
+}
 
-    setHidden('[data-workshop-section="preview"]', false);
-    setHidden('[data-workshop-action="download"]', false);
-    setHidden('[data-workshop-action="review"]', false);
-    const missingFields = state.localReview.blocking.length > 0;
-    const belowQualityFloor = state.localReview.score < 75;
+function syncManualCardEdits({ refreshQuality = false, markEdited = false } = {}) {
+    if (!state.finalCard) {
+        return;
+    }
+    const nextCard = normalizeCharacterCard(state.finalCard);
+    for (const control of overlay.querySelectorAll('[data-workshop-card-field]')) {
+        const field = control.dataset.workshopCardField;
+        const type = control.dataset.workshopCardType || '';
+        const value = control.value.replace(/\r\n/g, '\n').trim();
+        if (type === 'list') {
+            nextCard.data[field] = value.split(/\n\s*\n/g).map(item => item.trim()).filter(Boolean);
+        } else if (type === 'tags') {
+            nextCard.data[field] = value.split(/[,，\n]/g).map(item => item.trim()).filter(Boolean);
+        } else if (type === 'depth') {
+            nextCard.data.extensions.depth_prompt.prompt = value;
+        } else {
+            nextCard.data[field] = value;
+        }
+    }
+    state.finalCard = normalizeCharacterCard(nextCard);
+    if (markEdited) {
+        state.manuallyEdited = true;
+    }
+    state.localReview = assessWorkshopCard(state.finalCard, { brief: state.brief, knowledgeCheck: state.knowledgeCheck });
+    query('[data-workshop-card-name]').textContent = `${state.finalCard.data.name || '未命名角色'} · 角色卡编辑与确认`;
+    if (refreshQuality && state.manuallyEdited) {
+        state.modelReview = {
+            summary: '你已经手动修改了 AI 初稿；当前结果只进行本地规则检查，不会自动再次调用 AI。',
+            changesMade: ['保留用户手动修改，未进行 AI 重写。'],
+        };
+        renderQuality();
+        refreshDraftActions();
+    }
+}
+
+function refreshDraftActions() {
+    const missingFields = state.localReview?.blocking?.length > 0;
+    const belowQualityFloor = Number(state.localReview?.score ?? 0) < 75;
     setHidden('[data-workshop-action="apply"]', missingFields || belowQualityFloor);
     let footerNote = '草稿尚未保存。带入后请补头像并逐项确认。';
+    if (state.manuallyEdited) {
+        footerNote = '已保留你的手动修改；不会自动再次调用 AI。可直接带入原角色编辑器。';
+    }
     if (missingFields) {
-        footerNote = '存在缺失字段，暂不能带入编辑器。请先让 AI 审校补全。';
+        footerNote = '手动版本仍有关键字段为空，暂不能带入编辑器；可直接在上方补写，无需 AI。';
     } else if (belowQualityFloor) {
-        footerNote = `本地质量分 ${state.localReview.score}，低于 75 分门槛。请先让 AI 深度审校。`;
+        footerNote = `本地质量分 ${state.localReview.score}，低于 75 分门槛；可直接修改上方字段，也可主动选择 AI 再审校。`;
     } else if (state.brief?.mode === 'adaptation' && /(?:无法|不支持|没有).{0,8}(?:实时)?联网|不是实时检索/u.test(state.knowledgeCheck?.summary || '')) {
         footerNote = '草稿尚未保存；当前原作事实未经过实时网页来源验证，请先人工核对，再带入编辑器。';
     } else if (state.importSource) {
         footerNote = `${state.importSource} JSON 已通过结构检查，尚未保存。`;
     }
     query('[data-workshop-footer-note]').textContent = footerNote;
+}
+
+function renderPreview() {
+    const data = state.finalCard.data;
+    const container = query('[data-workshop-preview]');
+    container.replaceChildren();
+    query('[data-workshop-card-name]').textContent = `${data.name || '未命名角色'} · 角色卡编辑与确认`;
+
+    const notice = document.createElement('div');
+    notice.className = 'leslie-character-workshop-edit-notice';
+    notice.innerHTML = '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></i><span><strong>现在可以直接编辑</strong><small>修改会立即保留在当前草稿中；不会自动发送给 AI。失去焦点后会重新运行本地完整性检查。</small></span>';
+    container.append(notice);
+
+    for (const [field, label, type = 'textarea'] of PREVIEW_FIELDS) {
+        const details = document.createElement('details');
+        if (field === 'name' || field === 'first_mes') {
+            details.open = true;
+        }
+        const summary = document.createElement('summary');
+        summary.textContent = label;
+        const control = document.createElement(type === 'input' ? 'input' : 'textarea');
+        control.className = 'leslie-character-workshop-card-editor';
+        control.dataset.workshopCardField = field;
+        control.dataset.workshopCardType = type;
+        control.value = getEditableCardValue(data, field, type);
+        control.maxLength = type === 'input' ? 200 : 24000;
+        if (control instanceof HTMLTextAreaElement) {
+            control.rows = ['description', 'mes_example'].includes(field) ? 10 : 5;
+        }
+        details.append(summary, control);
+        container.append(details);
+    }
+
+    setHidden('[data-workshop-section="preview"]', false);
+    setHidden('[data-workshop-action="download"]', false);
+    setHidden('[data-workshop-action="review"]', false);
+    refreshDraftActions();
 }
 
 function createImportedCardBrief(card) {
@@ -617,9 +798,10 @@ function inspectPastedJson() {
             summary: `已完成 ${result.sourceLabel} ${result.sourceSpec} 的兼容性与本地质量检查，尚未调用 AI 改写。`,
             changesMade: result.notices,
         };
-        state.localReview = assessCharacterCard(state.finalCard);
+        state.localReview = assessWorkshopCard(state.finalCard);
         renderQuality();
         renderPreview();
+        renderAvatarPrompt();
         setStage('ready', 'complete');
         setRunning(false);
 
@@ -716,13 +898,26 @@ function ensureRunActive(runId) {
     }
 }
 
-async function runWorkshop() {
-    const prompt = query('[data-workshop-prompt]').value.trim();
-    if (prompt.length < 10) {
-        showError('请先写下至少一句完整的角色需求。姓名、身份、关系和开场写得越清楚，结果越稳定。');
-        query('[data-workshop-prompt]').focus();
-        return;
+function collectCharacterBlueprint() {
+    const values = {};
+    for (const field of overlay.querySelectorAll('[data-workshop-field]')) {
+        values[field.dataset.workshopField] = field.value;
     }
+    return normalizeCharacterBlueprint(values);
+}
+
+function updateBlueprintFieldState(control) {
+    const field = control.closest('.leslie-character-workshop-blueprint-field');
+    const note = field?.querySelector('small');
+    const hasValue = Boolean(control.value.trim());
+    field?.classList.toggle('has-value', hasValue);
+    if (note) {
+        note.textContent = hasValue ? '已锁定为用户事实' : '留空则由 AI 生成';
+    }
+}
+
+async function runWorkshop() {
+    const freeform = query('[data-workshop-prompt]').value.trim();
     state.provider = getSelectedProvider();
     if (state.provider === WORKSHOP_PROVIDER.CHAT && (!online_status || online_status === 'no_connection')) {
         showError('当前没有连接可用模型。请先到“设置 → 模型连接”完成连接，再回来创作。');
@@ -750,7 +945,9 @@ async function runWorkshop() {
         }
         showStatus('正在整理创作简报', 'AI 会先区分硬要求和可补全部分，避免一上来就堆设定。', 'brief');
         const selectedMode = query('[data-workshop-mode]').value;
-        const modelSafePrompt = protectRoleMacrosForGeneration(prompt);
+        state.blueprint = collectCharacterBlueprint();
+        const structuredPrompt = buildCharacterBlueprintPrompt({ blueprint: state.blueprint, freeform, mode: selectedMode });
+        const modelSafePrompt = protectRoleMacrosForGeneration(structuredPrompt);
         const briefResponse = await generateStructured(buildBriefRequest(modelSafePrompt, selectedMode), runId);
         state.brief = normalizeCreativeBrief(briefResponse);
         if (selectedMode !== 'auto') {
@@ -778,17 +975,17 @@ async function runWorkshop() {
         renderKnowledgeCheck();
 
         showStatus('正在创作完整角色卡', '只生成一个候选；同时附带一份可复制的头像图片提示词，但不会调用图片生成。', 'draft');
-        const draftResponse = await generateStructured(buildDraftRequest(state.brief, state.knowledgeCheck), runId);
+        const draftResponse = await generateStructured(buildDraftRequest(state.brief, state.knowledgeCheck, state.blueprint), runId);
         ensureRunActive(runId);
         state.draft = canonicalizeDialogueRoleLabels(draftResponse, {
             userLabel: name1,
             characterLabels: [name2],
         });
         state.avatarPrompt = normalizeAvatarPrompt(draftResponse);
-        const draftReview = assessCharacterCard(state.draft, { brief: state.brief, knowledgeCheck: state.knowledgeCheck });
+        const draftReview = assessWorkshopCard(state.draft, { brief: state.brief, knowledgeCheck: state.knowledgeCheck });
 
         showStatus('正在进行独立审校', 'AI 会重新检查硬事实、知识置信边界、人物一致性、用户控制权、关系节奏和头像提示词，再交付修订稿。', 'review');
-        const reviewResponse = await generateStructured(buildReviewRequest(state.brief, state.draft, state.knowledgeCheck, draftReview, state.avatarPrompt), runId);
+        const reviewResponse = await generateStructured(buildReviewRequest(state.brief, state.draft, state.knowledgeCheck, draftReview, state.avatarPrompt, state.blueprint), runId);
         ensureRunActive(runId);
         state.finalCard = canonicalizeDialogueRoleLabels(reviewResponse.card ?? reviewResponse, {
             userLabel: name1,
@@ -799,7 +996,8 @@ async function runWorkshop() {
             state.avatarPrompt = reviewedAvatarPrompt;
         }
         state.modelReview = reviewResponse.review ?? {};
-        state.localReview = assessCharacterCard(state.finalCard, { brief: state.brief, knowledgeCheck: state.knowledgeCheck });
+        state.manuallyEdited = false;
+        state.localReview = assessWorkshopCard(state.finalCard, { brief: state.brief, knowledgeCheck: state.knowledgeCheck });
         renderQuality();
         renderPreview();
         renderAvatarPrompt();
@@ -836,6 +1034,7 @@ async function rerunReview() {
     setHidden('[data-workshop-action="review"]', true);
     setHidden('[data-workshop-action="apply"]', true);
     try {
+        syncManualCardEdits();
         if (state.provider === WORKSHOP_PROVIDER.LOCAL) {
             showStatus('正在检查本地模型', '确认 KoboldCpp 仍在运行，再开始第二次审校。', 'review');
             const localConnection = await probeLocalWorkshopProvider({ signal: state.abortController.signal });
@@ -843,8 +1042,8 @@ async function rerunReview() {
             updateProviderStatus(`已连接：${localConnection.model}`, true);
         }
         showStatus('正在进行第二次审校', '这次会把上一版最终稿当作待审稿，只修复问题，不扩写无关设定。', 'review');
-        const currentReview = assessCharacterCard(state.finalCard, { brief: state.brief, knowledgeCheck: state.knowledgeCheck });
-        const response = await generateStructured(buildReviewRequest(state.brief, state.finalCard, state.knowledgeCheck, currentReview, state.avatarPrompt), runId);
+        const currentReview = assessWorkshopCard(state.finalCard, { brief: state.brief, knowledgeCheck: state.knowledgeCheck });
+        const response = await generateStructured(buildReviewRequest(state.brief, state.finalCard, state.knowledgeCheck, currentReview, state.avatarPrompt, state.blueprint), runId);
         ensureRunActive(runId);
         state.finalCard = canonicalizeDialogueRoleLabels(response.card ?? response, {
             userLabel: name1,
@@ -855,7 +1054,8 @@ async function rerunReview() {
             state.avatarPrompt = reviewedAvatarPrompt;
         }
         state.modelReview = response.review ?? {};
-        state.localReview = assessCharacterCard(state.finalCard, { brief: state.brief, knowledgeCheck: state.knowledgeCheck });
+        state.manuallyEdited = false;
+        state.localReview = assessWorkshopCard(state.finalCard, { brief: state.brief, knowledgeCheck: state.knowledgeCheck });
         renderQuality();
         renderPreview();
         renderAvatarPrompt();
@@ -883,15 +1083,17 @@ function openOriginalCreateEditor() {
 }
 
 function applyDraft() {
+    syncManualCardEdits({ refreshQuality: true });
     if (!state.finalCard || state.localReview?.blocking?.length || state.localReview?.score < 75) {
         return;
     }
 
     const card = buildAuditedCard();
-    Object.assign(create_save, cardToCreateState(card), { avatar: null });
+    Object.assign(create_save, cardToCreateState(card), { avatar: state.avatarFiles });
     openOriginalCreateEditor();
     const source = state.importSource || 'AI 草稿';
-    window.toastr?.success(`${source}已带入原角色编辑器。请补头像并逐项确认后再保存。`, '角色卡尚未保存');
+    const avatarNote = state.avatarFiles ? '所选头像也已带入，可继续裁剪。' : '请补头像。';
+    window.toastr?.success(`${source}已带入原角色编辑器。${avatarNote}逐项确认后再保存。`, '角色卡尚未保存');
 }
 
 function downloadDraft() {
@@ -899,6 +1101,7 @@ function downloadDraft() {
         return;
     }
 
+    syncManualCardEdits({ refreshQuality: true });
     const card = buildAuditedCard();
     const safeName = card.data.name.replace(/[\\/:*?"<>|]/g, '_') || 'character-draft';
     const blob = new Blob([JSON.stringify(card, null, 2)], { type: 'application/json;charset=utf-8' });
@@ -966,8 +1169,38 @@ function bindWorkshopEvents() {
         if (action === 'apply') applyDraft();
         if (action === 'download') downloadDraft();
         if (action === 'copy-avatar') copyAvatarPrompt();
+        if (action === 'choose-avatar') query('[data-workshop-avatar-file]').click();
+        if (action === 'remove-avatar') clearAvatarSelection();
         if (action === 'paste-json') pasteAndInspectJson();
         if (action === 'inspect-json') inspectPastedJson();
+    });
+
+    overlay.addEventListener('input', event => {
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+            if (event.target.matches('[data-workshop-field]')) {
+                updateBlueprintFieldState(event.target);
+            }
+            if (event.target.matches('[data-workshop-card-field]')) {
+                syncManualCardEdits({ markEdited: true });
+            }
+        }
+    });
+
+    overlay.addEventListener('change', event => {
+        if (event.target instanceof HTMLInputElement && event.target.matches('[data-workshop-avatar-file]')) {
+            handleAvatarSelection(event.target);
+            return;
+        }
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) {
+            if (event.target.matches('[data-workshop-field]')) {
+                updateBlueprintFieldState(event.target);
+            }
+        }
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+            if (event.target.matches('[data-workshop-card-field]')) {
+                syncManualCardEdits({ refreshQuality: true, markEdited: true });
+            }
+        }
     });
 
     document.addEventListener('keydown', event => {

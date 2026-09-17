@@ -1,9 +1,14 @@
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+    assessBlueprintFidelity,
+    normalizeCharacterBlueprint,
+} from '../public/scripts/leslie-character-workshop/blueprint.js';
 
 /* global WebSocket */
 
@@ -15,11 +20,15 @@ const DESKTOP_SCREENSHOT = path.join(OUTPUT_DIR, 'leslie-character-workshop.png'
 const LIGHT_SCREENSHOT = path.join(OUTPUT_DIR, 'leslie-character-workshop-light.png');
 const MOBILE_SCREENSHOT = path.join(OUTPUT_DIR, 'leslie-character-workshop-mobile.png');
 const IMPORT_SCREENSHOT = path.join(OUTPUT_DIR, 'leslie-character-workshop-json-import.png');
-const RUN_LIVE_GENERATION = process.env.LESLIE_LIVE_GENERATION === '1';
-const LIVE_MODE = process.env.LESLIE_LIVE_MODE || 'original';
-const LIVE_PROMPT = process.env.LESLIE_LIVE_PROMPT || '原创成年女性角色，名字叫林雾遥，24岁，在临海旧城区经营一家只在傍晚营业的旧书修复铺。她外表安静克制，真正的矛盾是很想理解别人、又害怕承诺超出自己能力的事。她和玩家是第一次见面，开场是暴雨导致停电后，玩家来归还一本被海水打湿的书。她不能知道玩家未说出口的经历，不替玩家行动，关系与信任必须慢慢发展。默认真人短对话，一个即时反应，最多两行。';
-const LIVE_EXPECTED_NAME = process.env.LESLIE_LIVE_EXPECTED_NAME || '林雾遥';
-const LIVE_ARTIFACT_NAME = process.env.LESLIE_LIVE_ARTIFACT || LIVE_MODE;
+const LIVE_CASE_ARGUMENT = process.argv.find(argument => argument.startsWith('--live-case='))?.slice('--live-case='.length);
+const LIVE_CASE_PATH = LIVE_CASE_ARGUMENT ? path.resolve(PROJECT_ROOT, LIVE_CASE_ARGUMENT) : '';
+const LIVE_CASE = LIVE_CASE_PATH ? JSON.parse(readFileSync(LIVE_CASE_PATH, 'utf8')) : {};
+const RUN_LIVE_GENERATION = process.env.LESLIE_LIVE_GENERATION === '1' || Boolean(LIVE_CASE_PATH);
+const LIVE_MODE = process.env.LESLIE_LIVE_MODE || LIVE_CASE.mode || 'original';
+const LIVE_PROMPT = process.env.LESLIE_LIVE_PROMPT || LIVE_CASE.freeform || '原创成年女性角色，名字叫林雾遥，24岁，在临海旧城区经营一家只在傍晚营业的旧书修复铺。她外表安静克制，真正的矛盾是很想理解别人、又害怕承诺超出自己能力的事。她和玩家是第一次见面，开场是暴雨导致停电后，玩家来归还一本被海水打湿的书。她不能知道玩家未说出口的经历，不替玩家行动，关系与信任必须慢慢发展。默认真人短对话，一个即时反应，最多两行。';
+const LIVE_EXPECTED_NAME = process.env.LESLIE_LIVE_EXPECTED_NAME || LIVE_CASE.expectedName || '林雾遥';
+const LIVE_BLUEPRINT = normalizeCharacterBlueprint(LIVE_CASE.fields || JSON.parse(process.env.LESLIE_LIVE_BLUEPRINT_JSON || '{}'));
+const LIVE_ARTIFACT_NAME = process.env.LESLIE_LIVE_ARTIFACT || LIVE_CASE.artifact || LIVE_MODE;
 const LIVE_ARTIFACT_SUFFIX = LIVE_ARTIFACT_NAME === 'original' ? '' : `-${LIVE_ARTIFACT_NAME.replace(/[^a-z0-9_-]/gi, '-')}`;
 const LIVE_SCREENSHOT = path.join(OUTPUT_DIR, `leslie-character-workshop${LIVE_ARTIFACT_SUFFIX}-live-generation.png`);
 const LIVE_REPORT = path.join(OUTPUT_DIR, `leslie-character-workshop${LIVE_ARTIFACT_SUFFIX}-live-report.json`);
@@ -209,6 +218,8 @@ async function main() {
                 panelVisible: getComputedStyle(overlay).display !== 'none',
                 statusHidden: status.hidden && getComputedStyle(status).display === 'none',
                 promptVisible: getComputedStyle(overlay.querySelector('[data-workshop-prompt]')).display !== 'none',
+                blueprintFields: overlay.querySelectorAll('[data-workshop-field]').length,
+                blueprintSections: overlay.querySelectorAll('[data-blueprint-section]').length,
                 steps: overlay.querySelectorAll('[data-workshop-stage]').length,
                 initialResultsHidden: Array.from(overlay.querySelectorAll('[data-workshop-section]')).every(section => section.hidden),
                 usesCurrentChatApi: overlay.querySelector('.leslie-character-workshop-api-note')?.textContent.includes('当前聊天 API'),
@@ -216,7 +227,7 @@ async function main() {
                 legacySearchInputs: overlay.querySelectorAll('[data-workshop-provider], [data-workshop-searxng-url]').length,
             };
         })()`);
-        if (!desktop.panelVisible || !desktop.statusHidden || !desktop.promptVisible || desktop.steps !== 5 || !desktop.initialResultsHidden || !desktop.usesCurrentChatApi || !desktop.knowledgeCheckVisible || desktop.legacySearchInputs !== 0) {
+        if (!desktop.panelVisible || !desktop.statusHidden || !desktop.promptVisible || desktop.blueprintFields < 40 || desktop.blueprintSections !== 7 || desktop.steps !== 5 || !desktop.initialResultsHidden || !desktop.usesCurrentChatApi || !desktop.knowledgeCheckVisible || desktop.legacySearchInputs !== 0) {
             throw new Error(`Desktop workshop state is invalid: ${JSON.stringify(desktop)}`);
         }
         await captureScreenshot(client, DESKTOP_SCREENSHOT);
@@ -272,6 +283,13 @@ async function main() {
         if (RUN_LIVE_GENERATION) {
             await client.evaluate(`(() => {
                 const overlay = document.querySelector('#leslie-character-workshop');
+                const blueprintFields = ${JSON.stringify(LIVE_BLUEPRINT.fields)};
+                for (const [key, value] of Object.entries(blueprintFields)) {
+                    const control = overlay.querySelector('[data-workshop-field="' + CSS.escape(key) + '"]');
+                    if (!control) throw new Error('Missing blueprint control: ' + key);
+                    control.value = value;
+                    control.dispatchEvent(new Event(control.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
+                }
                 overlay.querySelector('[data-workshop-prompt]').value = ${JSON.stringify(LIVE_PROMPT)};
                 overlay.querySelector('[data-workshop-mode]').value = ${JSON.stringify(LIVE_MODE)};
                 overlay.querySelector('[data-workshop-action=generate]').click();
@@ -292,7 +310,7 @@ async function main() {
                     avatarVisible: !overlay.querySelector('[data-workshop-section=avatar]').hidden,
                     copyAvatarVisible: !overlay.querySelector('[data-workshop-action=copy-avatar]').hidden,
                     avatarTextLength: avatarText.length,
-                    containsGeneratedImage: Boolean(overlay.querySelector('[data-workshop-section=avatar] img, [data-workshop-section=avatar] canvas')),
+                    containsGeneratedImage: Boolean(overlay.querySelector('[data-workshop-section=avatar] canvas, [data-workshop-section=avatar] img:not([data-workshop-avatar-image])')),
                     score,
                     cardName: overlay.querySelector('[data-workshop-card-name]')?.textContent.trim() || '',
                     applyVisible: !overlay.querySelector('[data-workshop-action=apply]').hidden,
@@ -311,13 +329,20 @@ async function main() {
                     knowledge: overlay.querySelector('[data-workshop-knowledge]').textContent.trim(),
                     preview: Array.from(overlay.querySelectorAll('[data-workshop-preview] details')).map(details => ({
                         field: details.querySelector('summary').textContent.trim(),
-                        value: details.querySelector('pre').textContent.trim(),
+                        value: details.querySelector('[data-workshop-card-field]').value.trim(),
                     })),
+                    cardData: Object.fromEntries(Array.from(overlay.querySelectorAll('[data-workshop-card-field]')).map(control => [
+                        control.dataset.workshopCardField,
+                        control.value.trim(),
+                    ])),
                     avatar: Array.from(overlay.querySelectorAll('[data-workshop-avatar-prompt] pre')).map(pre => pre.textContent.trim()),
                     avatarMeta: overlay.querySelector('.leslie-character-workshop-avatar-meta')?.textContent.trim() || '',
                     footerNote: overlay.querySelector('[data-workshop-footer-note]').textContent.trim(),
                 };
             })()`);
+            const blueprintFidelity = assessBlueprintFidelity({ data: liveReport.cardData }, LIVE_BLUEPRINT);
+            liveReport.blueprint = LIVE_BLUEPRINT;
+            liveReport.blueprintFidelity = blueprintFidelity;
             const exampleDialogue = liveReport.preview.find(item => item.field === '示例对话')?.value || '';
             const firstMessage = liveReport.preview.find(item => item.field === '首条消息')?.value || '';
             const userTurns = (exampleDialogue.match(/\{\{user\}\}\s*:/gi) || []).length;
@@ -326,8 +351,9 @@ async function main() {
             await client.evaluate('document.querySelector("[data-workshop-section=avatar]").scrollIntoView({ block: "start" })');
             await delay(150);
             await captureScreenshot(client, LIVE_SCREENSHOT);
-            if (liveReport.preview.length !== 7
-                || liveReport.preview.some(item => item.value.length < 20)
+            const requiredPreviewFields = ['角色姓名', '角色是谁', '性格与说话方式', '世界、关系与开场', '首条消息', '示例对话', '核心边界', '每轮输出契约'];
+            if (liveReport.preview.length !== 12
+                || requiredPreviewFields.some(field => !liveReport.preview.find(item => item.field === field)?.value)
                 || !/[“”「」『』"']/.test(firstMessage)
                 || /你.{0,5}(?:浑身湿透|湿透的(?:肩|衣|袖)|正站在|推门)/u.test(firstMessage)
                 || userTurns < 4
@@ -335,6 +361,7 @@ async function main() {
                 || /缘分|命中注定|比.{0,8}(?:书|工作|一切|什么都)重要|(?:在这|我会).{0,5}等你/u.test(`${firstMessage}\n${exampleDialogue}`)
                 || liveReport.quality.includes('没有明确禁止替用户')
                 || liveReport.quality.includes('示例缺少用户触发标签')
+                || blueprintFidelity.missing.length > 0
                 || liveReport.avatar.length !== 2
                 || !/(adult|(?:18|19|[2-9]\d)[- ]year[- ]old|(?:18|19|[2-9]\d) years old)/i.test(liveReport.avatar[0])
                 || !/(watermark|text|multiple people)/i.test(liveReport.avatar[1])) {
@@ -418,19 +445,31 @@ async function main() {
                 cardName: overlay.querySelector('[data-workshop-card-name]').textContent.trim(),
                 importNote: overlay.querySelector('[data-workshop-import-note]').textContent.trim(),
                 applyVisible: !overlay.querySelector('[data-workshop-action=apply]').hidden,
+                avatarVisible: !overlay.querySelector('[data-workshop-section=avatar]').hidden,
+                editableFields: overlay.querySelectorAll('[data-workshop-card-field]').length,
             };
         })()`);
-        if (!imported.importOpen || !imported.qualityVisible || !imported.previewVisible || !imported.cardName.includes('网站导入验收') || !imported.importNote.includes('结构读取成功') || !imported.applyVisible) {
+        if (!imported.importOpen || !imported.qualityVisible || !imported.previewVisible || !imported.avatarVisible || imported.editableFields !== 12 || !imported.cardName.includes('网站导入验收') || !imported.importNote.includes('结构读取成功') || !imported.applyVisible) {
             throw new Error(`JSON import state is invalid: ${JSON.stringify(imported)}`);
         }
         await captureScreenshot(client, IMPORT_SCREENSHOT);
+        const requestsBeforeManualEdit = generationRequests.length;
+        await client.evaluate(`(() => {
+            const name = document.querySelector('[data-workshop-card-field=name]');
+            name.value = '网站导入验收·手动版';
+            name.dispatchEvent(new Event('input', { bubbles: true }));
+            name.dispatchEvent(new Event('change', { bubbles: true }));
+        })()`);
+        if (generationRequests.length !== requestsBeforeManualEdit) {
+            throw new Error('Manual card editing unexpectedly called an AI or image API.');
+        }
         await client.evaluate('document.querySelector("[data-workshop-action=apply]").click()');
-        await waitFor(client, 'document.querySelector("#leslie-character-workshop").hidden && document.querySelector("#character_name_pole").value === "网站导入验收"');
+        await waitFor(client, 'document.querySelector("#leslie-character-workshop").hidden && document.querySelector("#character_name_pole").value === "网站导入验收·手动版"');
         const handoff = await client.evaluate(`import('./script.js').then(({ create_save }) => ({
             name: create_save.name,
             clarixTone: create_save.extensions?.clarix_personalization?.tone,
         }))`);
-        if (handoff.name !== '网站导入验收' || handoff.clarixTone !== 'restrained') {
+        if (handoff.name !== '网站导入验收·手动版' || handoff.clarixTone !== 'restrained') {
             throw new Error(`JSON handoff did not preserve the card state: ${JSON.stringify(handoff)}`);
         }
 

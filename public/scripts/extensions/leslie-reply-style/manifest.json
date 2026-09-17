@@ -1,0 +1,14 @@
+{
+    "display_name": "Leslie 回复范式",
+    "loading_order": 120,
+    "requires": [],
+    "optional": [],
+    "generate_interceptor": "LeslieReplyStylePreparePrompt",
+    "js": "index.js",
+    "author": "Leslie Project",
+    "version": "0.1.0",
+    "homePage": "https://github.com/LeslieH666/LeslieTavern",
+    "hooks": {
+        "activate": "init"
+    }
+}

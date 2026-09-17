@@ -8,6 +8,7 @@ LeslieTavern explores a desktop-first character-chat experience while retaining 
 
 ```text
 Electron shell
+├─ System tray and background activity clock
 └─ SillyTavern server
    ├─ Existing chat, character, group, World Info, model, and JSONL flows
    ├─ Leslie identity service
@@ -18,7 +19,7 @@ Electron shell
 Browser UI
 ├─ Existing SillyTavern interface and event system
 ├─ Leslie desktop chat and settings layers
-├─ Memory and moments extensions
+├─ Memory and moments extensions, including an isolated model-backed activity worker
 └─ Character workshop and voice settings
 
 Optional companion boundary

@@ -6,6 +6,9 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 
 ### Added
 
+- Persistent Leslie Moments background activity with genuine per-character read receipts, selective AI likes and comments, bounded retry/rate controls, and sidecar storage that leaves the original timeline intact.
+- A LeslieTavern system tray with background Moments status, pause/resume controls, window restoration, and an explicit application exit action.
+- Semantic Leslie reply modes that inject a fail-open presentation instruction before foreground character replies without modifying character cards, memories, sampling temperature, or stored chats.
 - Electron desktop workflow and Windows portable-package tooling.
 - Leslie memory, identity isolation, moments, character workshop, and voice modules.
 - Repository privacy guard, public documentation, community templates, and read-only CI.
@@ -21,6 +24,11 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 
 ### Changed
 
+- Closing the Electron window now hides LeslieTavern to the system tray so approved Moments activity can continue until the user explicitly exits the process.
+- Isolated background generations can opt out of current-chat prompt hooks and can be cancelled independently when a foreground reply starts.
+- Upgraded the AI character workshop with an optional structured blueprint, AI completion for blank fields, a directly editable post-generation card, and a local avatar picker that hands images to the existing character editor without an extra AI pass.
+- Replaced the fixed 180/360/500/1500-token reply-style presets with qualitative balanced, novel, dialogue, concise, and no-injection modes. Verified DeepSeek foreground requests now let the provider choose the output allowance while prompt assembly keeps a separate safety reservation; quiet jobs and other providers retain explicit compatibility limits.
+- Stopped issuing hidden automatic continuation requests when a provider-controlled DeepSeek reply reaches its service-side output boundary; the UI now leaves continuation to the user.
 - Consolidated development and portable workspaces into one Git repository.
 - Made allowlisted LAN access follow the directly connected private subnet so changing Wi-Fi no longer requires per-device IP entries.
 - Integrated the complete AIRI source tree under `airi/`, removed its nested Git metadata, and made the LeslieTavern repository the single versioning and push boundary.

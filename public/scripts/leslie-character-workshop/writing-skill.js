@@ -1,6 +1,6 @@
 export const LESLIE_CHARACTER_WRITING_SKILL = Object.freeze({
     id: 'leslie.character-card-writer',
-    version: '1.1.0',
+    version: '1.2.0',
     name: 'Leslie 高质量角色卡写作',
     principles: [
         '一次只创作一张角色卡，先做创作简报，再写作，再独立审校。',
@@ -37,7 +37,7 @@ export function buildBriefRequest(userPrompt, mode = 'auto') {
     return {
         systemPrompt: SHARED_SYSTEM_PROMPT,
         responseLength: 1800,
-        prompt: `阶段 1/4：建立创作简报。\n\n用户原始需求：\n<user-request>\n${userPrompt}\n</user-request>\n\n用户选择的模式：${mode}（auto 表示由你判断原创或原作复刻）。\n\n把需求拆成硬事实、主题核心、性格矛盾、认知边界、用户身份、关系起点、回复节奏、内容边界和开场钩子。用户未指定的内容可以克制补全，但要列入 assumptions；不得修改明确要求。仅当需要核对原作、现实人物、真实历史/地点或用户明确要求核实时，requiresKnowledgeCheck 才为 true。知识问题最多 3 条，不包含现有角色卡、聊天、私密资料或 API 信息。\n\n返回：\n<leslie-json>{\n  "mode": "original 或 adaptation",\n  "workingTitle": "暂定角色名",\n  "hardFacts": ["..."],\n  "themeCore": ["..."],\n  "personalityTensions": ["..."],\n  "knowledgeBoundaries": ["..."],\n  "userIdentity": "...",\n  "relationshipStart": "...",\n  "openingHook": "...",\n  "replyStyle": "...",\n  "contentBoundaries": ["..."],\n  "assumptions": ["..."],\n  "requiresKnowledgeCheck": true,\n  "knowledgeQuestions": ["..."],\n  "qualityTargets": ["..."]\n}</leslie-json>`,
+        prompt: `阶段 1/4：建立创作简报。\n\n用户提交的是 Leslie 结构化角色蓝图：\n<user-request>\n${userPrompt}\n</user-request>\n\n用户选择的模式：${mode}（auto 表示由你判断原创或原作复刻；完全空白时默认创作原创角色）。\n\n输入中的 lockedFacts 是用户明确填写并锁定的事实，必须原样尊重，不得概括到丢失精确数值，不得为了“更合理”而改写。aiFillFields 是用户主动留空并授权你生成的项目；请围绕一个鲜明主题做克制、相互一致的补全，并把重要补全列入 assumptions。freeformNotes 是补充要求，不能覆盖 lockedFacts。即使所有输入都留空，也要生成一个完整、自然、有独立意志的原创角色简报。\n\n把需求拆成硬事实、主题核心、性格矛盾、认知边界、用户身份、关系起点、回复节奏、内容边界和开场钩子。仅当需要核对原作、现实人物、真实历史/地点或用户明确要求核实时，requiresKnowledgeCheck 才为 true。知识问题最多 3 条，不包含现有角色卡、聊天、私密资料或 API 信息。\n\n返回：\n<leslie-json>{\n  "mode": "original 或 adaptation",\n  "workingTitle": "暂定角色名",\n  "hardFacts": ["..."],\n  "themeCore": ["..."],\n  "personalityTensions": ["..."],\n  "knowledgeBoundaries": ["..."],\n  "userIdentity": "...",\n  "relationshipStart": "...",\n  "openingHook": "...",\n  "replyStyle": "...",\n  "contentBoundaries": ["..."],\n  "assumptions": ["..."],\n  "requiresKnowledgeCheck": true,\n  "knowledgeQuestions": ["..."],\n  "qualityTargets": ["..."]\n}</leslie-json>`,
     };
 }
 
@@ -58,16 +58,29 @@ export function buildKnowledgeCheckRequest(brief) {
  * @param {object} knowledgeCheck Knowledge check from the current chat model.
  * @returns {{systemPrompt: string, prompt: string, responseLength: number}}
  */
-export function buildDraftRequest(brief, knowledgeCheck = {}) {
+export function buildDraftRequest(sourceBrief, knowledgeCheck = {}, blueprint = {}) {
+    const brief = {
+        ...sourceBrief,
+        structuredInput: blueprint,
+        structuredInputRule: 'structuredInput 中所有非空字段都是用户锁定事实；空白字段由 AI 合理补全。',
+    };
     const knowledge = knowledgeCheck?.summary || knowledgeCheck?.facts?.length || knowledgeCheck?.uncertainties?.length
         ? JSON.stringify(knowledgeCheck, null, 2)
         : '本次不需要知识核对。只能依据用户需求进行克制创作，不得捏造来源。';
 
-    return {
+    const request = {
         systemPrompt: SHARED_SYSTEM_PROMPT,
         responseLength: 5200,
         prompt: `阶段 3/4：只创作一张 Character Card V3 草稿，并附带一份手动头像生成提示词。\n\n创作简报：\n${JSON.stringify(brief, null, 2)}\n\n当前聊天模型的知识核对（不是网页来源，不得把低置信内容写成事实）：\n<knowledge-check>\n${knowledge}\n</knowledge-check>\n\n字段要求：\n- description：身份、外貌、背景、硬事实、知道与不知道什么；不要塞回复格式规则。\n- personality：至少一组能产生自然反应的性格矛盾、习惯、说话方式、自主性和边界。\n- scenario：当前世界、用户身份、关系起点、开场状态；绝不替用户行动或产生情绪。\n- first_mes：一个可立即接话的即时反应，不写整章背景。\n- mes_example：4～8 组正例，每组以 <START> 开头，展示短、自然、不同情绪的反应；示例不是已经发生的事实。\n- system_prompt：角色身份、用户控制权、认知边界、慢速关系发展和内容边界。\n- post_history_instructions：只保留本轮输出契约，明确一个节拍、最多两行、最多一个短动作、不替用户说话、不用问题/邀请/承诺机械收尾。\n- alternate_greetings：2～3 个同一时间线的不同开场。\n- extensions.depth_prompt：深度 0、system 角色，写最短的身份与回复节奏锚点，不写动态回忆。\n- creator_notes：用简短中文说明设计核心；复刻角色要区分“已知事实 / 推断 / 补充”，不得伪造引用编号。\n- avatar_prompt：供用户复制到独立图片工具。positive 使用清晰英文，固定成年外观、服装、表情、构图、光线和背景；negative 排除畸形、文字、水印、多人和不符设定的特征；默认 2:3 头像画幅；不得写在世艺术家姓名。\n- 不调用图片模型，不生成图片数据，角色卡 avatar 保持 none。\n\n返回完整结构：\n<leslie-json>{\n  "card": {\n    "spec": "chara_card_v3",\n    "spec_version": "3.0",\n    "data": {\n      "name": "",\n      "description": "",\n      "personality": "",\n      "scenario": "",\n      "first_mes": "",\n      "mes_example": "",\n      "creator_notes": "",\n      "system_prompt": "",\n      "post_history_instructions": "",\n      "alternate_greetings": [""],\n      "tags": [""],\n      "creator": "Leslie AI 角色工坊",\n      "character_version": "1.0",\n      "extensions": {\n        "talkativeness": 0.5,\n        "fav": false,\n        "world": "",\n        "depth_prompt": {"prompt": "", "depth": 0, "role": "system"}\n      }\n    }\n  },\n  "avatar_prompt": {\n    "positive": "English prompt",\n    "negative": "English negative prompt",\n    "aspect_ratio": "2:3",\n    "notes": "中文使用说明"\n  }\n}</leslie-json>`,
     };
+    request.prompt = request.prompt.replace(
+        'fixed adult appearance, clothing',
+        'appearance and clothing consistent with the user-specified age',
+    ).replace(
+        '固定成年外观、服装',
+        '严格符合用户指定年龄的外观与服装',
+    );
+    return request;
 }
 
 /**
@@ -78,12 +91,22 @@ export function buildDraftRequest(brief, knowledgeCheck = {}) {
  * @param {object} avatarPrompt Manual image-generation prompt.
  * @returns {{systemPrompt: string, prompt: string, responseLength: number}}
  */
-export function buildReviewRequest(brief, card, knowledgeCheck, deterministicReview, avatarPrompt = {}) {
-    return {
+export function buildReviewRequest(sourceBrief, card, knowledgeCheck, deterministicReview, avatarPrompt = {}, blueprint = {}) {
+    const brief = {
+        ...sourceBrief,
+        structuredInput: blueprint,
+        structuredInputRule: '逐项保留 structuredInput 中的用户锁定事实；用户留空的项目不是缺失错误。',
+    };
+    const request = {
         systemPrompt: `${SHARED_SYSTEM_PROMPT}\n\n现在你是独立审校者。先找出会导致角色扮演失真的问题，再修订；不要因为原稿来自另一个模型而宽松评分。所有评分字段都使用 0～100 的整数。每组示例必须包含 [USER]: 触发和 [CHAR]: 回应；不要改成当前会话姓名。首条消息必须含一句角色台词，不能只有动作；删除用户没有明确指定的外貌、身体状态、位置或动作。初识关系删除“缘分、比某物重要、等你”等过早亲密套话。review.summary 只描述修订后的最终稿；原稿问题写入 issuesFound，不得把已修复问题继续说成遗留问题。`,
         responseLength: 6200,
         prompt: `阶段 4/4：审校并修订一张角色卡及其手动头像提示词。只交付一张最终卡。\n\n创作简报：\n${JSON.stringify(brief, null, 2)}\n\n当前聊天模型的知识核对：\n${JSON.stringify(knowledgeCheck, null, 2)}\n\n待审草稿：\n${JSON.stringify(card, null, 2)}\n\n待审头像提示词：\n${JSON.stringify(avatarPrompt, null, 2)}\n\n本地规则检查：\n${JSON.stringify(deterministicReview, null, 2)}\n\n逐项检查：硬事实忠实度、角色内在一致性、独立意志、认知边界、关系节奏、真人短对话、示例有效性、开场可接话性、知识置信边界、安全边界、CCV3 字段职责。修复问题，但不要增加无关设定和篇幅。复刻角色不得把推断写成原作事实。头像提示词必须与最终角色外观一致、明确为成年人、适合单人 2:3 头像，不含在世艺术家姓名；只返回提示词，不生成图片。\n\n返回：\n<leslie-json>{\n  "review": {\n    "summary": "一句话结论",\n    "scores": {\n      "fidelity": 0,\n      "consistency": 0,\n      "autonomy": 0,\n      "dialogue": 0,\n      "grounding": 0,\n      "safety": 0,\n      "total": 0\n    },\n    "issuesFound": ["..."],\n    "changesMade": ["..."]\n  },\n  "card": {\n    "spec": "chara_card_v3",\n    "spec_version": "3.0",\n    "data": {\n      "name": "",\n      "description": "",\n      "personality": "",\n      "scenario": "",\n      "first_mes": "",\n      "mes_example": "",\n      "creator_notes": "",\n      "system_prompt": "",\n      "post_history_instructions": "",\n      "alternate_greetings": [""],\n      "tags": [""],\n      "creator": "Leslie AI 角色工坊",\n      "character_version": "1.0",\n      "extensions": {\n        "talkativeness": 0.5,\n        "fav": false,\n        "world": "",\n        "depth_prompt": {"prompt": "", "depth": 0, "role": "system"}\n      }\n    }\n  },\n  "avatar_prompt": {\n    "positive": "English prompt",\n    "negative": "English negative prompt",\n    "aspect_ratio": "2:3",\n    "notes": "中文使用说明"\n  }\n}</leslie-json>`,
     };
+    request.prompt = request.prompt.replace(
+        '头像提示词必须与最终角色外观一致、明确为成年人',
+        '头像提示词必须与最终角色外观和用户指定年龄一致；只有明确成年时才能写为成年人',
+    );
+    return request;
 }
 
 /**

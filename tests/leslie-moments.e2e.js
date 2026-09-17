@@ -53,7 +53,7 @@ test('Leslie moments publishes, edits, archives and restores a selected-audience
     await openMoments(page);
 
     await expect(page.locator('[data-moments-action="mode"][data-mode="story"]')).toBeDisabled();
-    await expect(page.locator('.leslie-moments-notice')).toContainText('不会伪造互动');
+    await expect(page.locator('.leslie-moments-notice')).toContainText('模型真正处理动态后才会显示已读');
     await page.locator('#leslie-moments-content').fill(originalContent);
     await page.locator('[data-moments-action="audience"]').click();
     await page.locator('[data-moments-action="visibility"][data-visibility="selected"]').click();
@@ -67,6 +67,7 @@ test('Leslie moments publishes, edits, archives and restores a selected-audience
     await expect(post).toBeVisible();
     await expect(post).toContainText('现实分享');
     await expect(post).toContainText('Seraphina');
+    await expect(post).toContainText('等待角色查看');
 
     await post.locator('[data-moments-action="edit"]').click();
     await page.locator('#leslie-moments-content').fill(editedContent);

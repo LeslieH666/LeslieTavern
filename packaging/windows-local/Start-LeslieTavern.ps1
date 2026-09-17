@@ -98,7 +98,7 @@ for ($attempt = 0; $attempt -lt 90; $attempt++) {
 }
 
 if ($started) {
-    Write-Host "LeslieTavern started on $actualListener. Close its window or run the stop shortcut to exit safely." -ForegroundColor Green
+    Write-Host "LeslieTavern started on $actualListener. Closing the window keeps it in the system tray; use the tray Exit command or the stop shortcut to end it." -ForegroundColor Green
     if ($expectedIpv4 -eq '0.0.0.0') {
         $lanUrls = foreach ($networkInterface in [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
             if ($networkInterface.OperationalStatus -ne [Net.NetworkInformation.OperationalStatus]::Up) {

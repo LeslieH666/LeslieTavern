@@ -7,9 +7,15 @@
  */
 
 import { eventSource, event_types, saveSettingsDebounced, setGenerationParamsFromPreset } from '../script.js';
+import { extension_settings } from './extensions.js';
 import { getLeslieConnectionState } from './leslie-connection-state.js';
 import { textgen_types, textgenerationwebui_settings } from './textgen-settings.js';
 import { LESLIE_LOCAL_MODEL, getLeslieLocalRuntime, getLeslieLocalSettings } from './leslie-local-model-core.js';
+import {
+    LESLIE_REPLY_STYLE_SETTINGS_KEY,
+    migrateLeslieReplyStyleSettings,
+    setLeslieReplyStyleRuntimeSettings,
+} from './leslie-reply-style.js';
 import './leslie-voice-settings.js';
 
 const SECONDARY_DRAWERS = [
@@ -151,9 +157,12 @@ const COPY = {
         settingUnavailable: '当前接口没有提供这项常用设置，可在完整设置中调整。',
         replyDetailTitle: '回复方式',
         replyDetailBody: '只保留最常调整的生成选项，并解释它们会怎样影响回复。',
-        stylePresetsTitle: '选择一种写作节奏',
-        stylePresetsBody: '先用场景预设找到合适的起点，再用下方滑块继续微调。',
-        stylePresetsSafe: '预设只调整回复长度和自由发挥程度，不会改动提示词或角色设定；DeepSeek 开启思考时会自动预留思考与正文额度。',
+        stylePresetsTitle: '选择回复范式',
+        stylePresetsBody: '范式会在每次角色回复前作为表达规则交给模型，不再用固定 token 数模拟长短。',
+        stylePresetsSafe: '只影响回复的表达方式，不改写角色卡、世界设定或记忆。DeepSeek 前台回复由 API 自行决定输出长度。',
+        styleOff: '跟随角色原设',
+        styleOffBody: '不注入额外写作范式，完全沿用角色卡和当前对话要求。',
+        styleOffTag: '关闭注入',
         styleBalanced: '均衡叙事',
         styleBalancedBody: '叙述与对话保持适中，适合大多数日常角色扮演。',
         styleBalancedTag: '适中 · 自然',
@@ -166,17 +175,10 @@ const COPY = {
         styleConcise: '简洁回复',
         styleConciseBody: '快速给出重点，适合短回合、指令或轻量聊天。',
         styleConciseTag: '短小 · 稳定',
-        styleCustom: '手动微调',
         styleApplied: '已应用',
-        styleAppliedTail: '，你仍可继续调整下方选项。',
-        styleRestored: '已恢复应用预设前的设置。',
-        undoPreset: '撤回刚才的预设',
-        preset: '回复预设',
-        presetHelp: '一次套用一组已经保存好的生成参数。',
-        responseLength: '单次回复长度',
-        responseLengthHelp: '数值越大，模型一次可以写得越长；DeepSeek 开启思考时会在请求中额外保护思考与正文的共享额度。',
-        contextSize: '对话记忆范围',
-        contextSizeHelp: '模型一次能读取的历史内容上限；不要超过模型支持的范围。',
+        styleAppliedTail: '，之后的角色回复会使用这套表达规则。',
+        providerOutput: '回复长度由模型服务决定',
+        providerOutputHelp: 'DeepSeek 前台聊天不再发送 Leslie 的输出 token 上限；模型仍受自身上下文、服务端上限和停止条件约束。其他接口保留兼容性上限。',
         creativity: '自由发挥程度',
         creativityHelp: '较低更稳定，较高更多变化；它对应原来的 Temperature。',
         streaming: '逐字显示回复',
@@ -338,9 +340,12 @@ const COPY = {
         settingUnavailable: 'This common control is not available for the current API. You can adjust it in all settings.',
         replyDetailTitle: 'Reply style',
         replyDetailBody: 'Keep the generation options people change most often, with plain-language explanations.',
-        stylePresetsTitle: 'Choose a writing rhythm',
-        stylePresetsBody: 'Start with a scene preset, then fine-tune it with the controls below.',
-        stylePresetsSafe: 'Presets only adjust response length and creative freedom. DeepSeek thinking automatically reserves room for reasoning and final text.',
+        stylePresetsTitle: 'Choose a response mode',
+        stylePresetsBody: 'The selected mode is injected as a presentation rule before each character reply instead of simulating style with a fixed token count.',
+        stylePresetsSafe: 'This changes presentation only, not character cards, world facts, or memories. DeepSeek foreground replies let the API choose the output length.',
+        styleOff: 'Follow character defaults',
+        styleOffBody: 'Inject no extra writing mode and follow the character card and current conversation.',
+        styleOffTag: 'Injection off',
         styleBalanced: 'Balanced story',
         styleBalancedBody: 'A natural mix of narration and dialogue for most roleplay chats.',
         styleBalancedTag: 'Medium · Natural',
@@ -353,17 +358,10 @@ const COPY = {
         styleConcise: 'Concise replies',
         styleConciseBody: 'Quickly reaches the point for short turns, instructions, and lightweight chat.',
         styleConciseTag: 'Short · Steady',
-        styleCustom: 'Fine-tuned',
         styleApplied: 'Applied ',
-        styleAppliedTail: '. You can still adjust the controls below.',
-        styleRestored: 'Restored the settings from before the preset was applied.',
-        undoPreset: 'Undo the last preset',
-        preset: 'Reply preset',
-        presetHelp: 'Apply a previously saved group of generation parameters.',
-        responseLength: 'Response length',
-        responseLengthHelp: 'Higher values allow longer replies. DeepSeek thinking protects additional shared room for reasoning and final text.',
-        contextSize: 'Conversation memory',
-        contextSizeHelp: 'The maximum history the model can read at once. Do not exceed the model’s limit.',
+        styleAppliedTail: '. Future character replies will use this presentation rule.',
+        providerOutput: 'The model service decides reply length',
+        providerOutputHelp: 'DeepSeek foreground chat no longer receives a Leslie output-token cap. The model still obeys its own context window, service limits, and stop conditions. Other APIs retain compatibility limits.',
         creativity: 'Creative freedom',
         creativityHelp: 'Lower is steadier; higher allows more variation. This is the original Temperature setting.',
         streaming: 'Show text as it is generated',
@@ -407,7 +405,6 @@ let closeTimer;
 let activeDetail;
 let detailBindingController;
 let detailObservers = [];
-let lastReplyPresetSnapshot;
 
 /**
  * Determine which of the two built-in Leslie translations to display.
@@ -553,33 +550,31 @@ const MODEL_SERVICES = {
 let activeModelKind;
 
 const REPLY_STYLE_PRESETS = {
+    off: {
+        icon: 'fa-solid fa-feather-pointed',
+        titleKey: 'styleOff',
+        bodyKey: 'styleOffBody',
+        tagKey: 'styleOffTag',
+    },
     balanced: {
-        length: 500,
-        temperature: 0.85,
         icon: 'fa-solid fa-scale-balanced',
         titleKey: 'styleBalanced',
         bodyKey: 'styleBalancedBody',
         tagKey: 'styleBalancedTag',
     },
     novel: {
-        length: 1500,
-        temperature: 1.05,
         icon: 'fa-solid fa-book-open',
         titleKey: 'styleNovel',
         bodyKey: 'styleNovelBody',
         tagKey: 'styleNovelTag',
     },
     dialogue: {
-        length: 360,
-        temperature: 0.92,
         icon: 'fa-solid fa-comments',
         titleKey: 'styleDialogue',
         bodyKey: 'styleDialogueBody',
         tagKey: 'styleDialogueTag',
     },
     concise: {
-        length: 180,
-        temperature: 0.65,
         icon: 'fa-solid fa-bolt',
         titleKey: 'styleConcise',
         bodyKey: 'styleConciseBody',
@@ -808,43 +803,31 @@ function renderModelDetail() {
 
 /**
  * Resolve reply controls for the currently active API family.
- * @returns {{preset?: string, temperature?: string, streaming?: string, responseLength: string, contextSize: string}} Control ids.
+ * @returns {{temperature?: string, streaming?: string}} Control ids.
  */
 function getReplyControlIds() {
     const mainApi = document.getElementById('main_api')?.value;
     if (mainApi === 'openai') {
         return {
-            preset: 'settings_preset_openai',
             temperature: 'temp_openai',
             streaming: 'stream_toggle',
-            responseLength: 'openai_max_tokens',
-            contextSize: 'openai_max_context',
         };
     }
     if (mainApi === 'textgenerationwebui') {
         return {
-            preset: 'settings_preset_textgenerationwebui',
             temperature: 'temp_textgenerationwebui',
             streaming: 'streaming_textgenerationwebui',
-            responseLength: 'amount_gen',
-            contextSize: 'max_context',
         };
     }
     if (mainApi === 'novel') {
         return {
-            preset: 'settings_preset_novel',
             temperature: 'temp_novel',
             streaming: 'streaming_novel',
-            responseLength: 'amount_gen',
-            contextSize: 'max_context',
         };
     }
     return {
-        preset: 'settings_preset',
         temperature: 'temp',
         streaming: 'streaming_kobold',
-        responseLength: 'amount_gen',
-        contextSize: 'max_context',
     };
 }
 
@@ -872,35 +855,27 @@ function renderDetailRange({ sourceId, mirrorId, label, help }) {
 }
 
 /**
- * Constrain a suggested preset value to an original control's supported range.
- * @param {HTMLInputElement} source Original numeric control.
- * @param {number} value Suggested preset value.
- * @returns {number} Supported value.
+ * Read and normalize the persisted semantic reply style.
+ * @returns {{schemaVersion: number, style: string, outputPolicy: 'provider' | 'manual'}} Reply-style settings.
  */
-function clampReplyPresetValue(source, value) {
-    const minimum = source.min === '' ? Number.NEGATIVE_INFINITY : Number(source.min);
-    const maximum = source.max === '' ? Number.POSITIVE_INFINITY : Number(source.max);
-    return Math.min(maximum, Math.max(minimum, value));
+function getReplyStyleSettings() {
+    const legacySourceId = document.getElementById('main_api')?.value === 'openai'
+        ? 'openai_max_tokens'
+        : 'amount_gen';
+    const normalized = migrateLeslieReplyStyleSettings(extension_settings[LESLIE_REPLY_STYLE_SETTINGS_KEY], {
+        legacyOutputTokens: document.getElementById(legacySourceId)?.value,
+    });
+    extension_settings[LESLIE_REPLY_STYLE_SETTINGS_KEY] = normalized;
+    setLeslieReplyStyleRuntimeSettings(normalized);
+    return normalized;
 }
 
 /**
- * Detect whether current reply values still match one of Leslie's presets.
- * @returns {string | undefined} Matching preset id.
+ * Read the selected semantic reply style.
+ * @returns {string} Active style id.
  */
 function getActiveReplyStylePreset() {
-    const ids = getReplyControlIds();
-    const lengthSource = document.getElementById(ids.responseLength);
-    const temperatureSource = document.getElementById(ids.temperature);
-    if (!(lengthSource instanceof HTMLInputElement) || !(temperatureSource instanceof HTMLInputElement)) {
-        return undefined;
-    }
-    const length = Number(lengthSource.value);
-    const temperature = Number(temperatureSource.value);
-    return Object.entries(REPLY_STYLE_PRESETS).find(([, preset]) => {
-        const expectedLength = clampReplyPresetValue(lengthSource, preset.length);
-        const expectedTemperature = clampReplyPresetValue(temperatureSource, preset.temperature);
-        return Math.abs(length - expectedLength) < 1 && Math.abs(temperature - expectedTemperature) < 0.011;
-    })?.[0];
+    return getReplyStyleSettings().style;
 }
 
 /**
@@ -929,8 +904,7 @@ function renderReplyStylePresets() {
             <div class="leslie-style-presets">${cards}</div>
             <div class="leslie-style-preset-note"><i class="fa-solid fa-shield-heart" aria-hidden="true"></i><span>${copy.stylePresetsSafe}</span></div>
             <div class="leslie-style-preset-feedback" aria-live="polite">
-                <span data-leslie-preset-feedback>${activePreset ? `${copy.styleApplied}“${copy[REPLY_STYLE_PRESETS[activePreset].titleKey]}”${copy.styleAppliedTail}` : `${copy.styleCustom}`}</span>
-                <button type="button" data-leslie-preset-undo${lastReplyPresetSnapshot ? '' : ' hidden'}><i class="fa-solid fa-rotate-left" aria-hidden="true"></i>${copy.undoPreset}</button>
+                <span data-leslie-preset-feedback>${copy.styleApplied}“${copy[REPLY_STYLE_PRESETS[activePreset].titleKey]}”${copy.styleAppliedTail}</span>
             </div>
         </section>`;
 }
@@ -943,9 +917,6 @@ function renderReplyDetail() {
     const copy = COPY[getCopyLocale()];
     const ids = getReplyControlIds();
     const controls = [
-        renderDetailField({ sourceId: ids.preset, mirrorId: 'leslie-reply-preset', label: copy.preset, help: copy.presetHelp, kind: 'select' }),
-        renderDetailRange({ sourceId: ids.responseLength, mirrorId: 'leslie-reply-length', label: copy.responseLength, help: copy.responseLengthHelp }),
-        renderDetailRange({ sourceId: ids.contextSize, mirrorId: 'leslie-reply-context', label: copy.contextSize, help: copy.contextSizeHelp }),
         renderDetailRange({ sourceId: ids.temperature, mirrorId: 'leslie-reply-creativity', label: copy.creativity, help: copy.creativityHelp }),
     ].join('');
     const streaming = document.getElementById(ids.streaming) ? `
@@ -956,6 +927,9 @@ function renderReplyDetail() {
     const emptyNote = controls || streaming ? '' : `<div class="leslie-detail-callout"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>${copy.settingUnavailable}</span></div>`;
     const content = `
         ${renderReplyStylePresets()}
+        <section class="leslie-detail-card">
+            <div class="leslie-detail-callout"><i class="fa-solid fa-infinity" aria-hidden="true"></i><span><strong>${copy.providerOutput}</strong><br>${copy.providerOutputHelp}</span></div>
+        </section>
         <section class="leslie-detail-card">
             <div class="leslie-detail-grid">${controls}${emptyNote}</div>
             ${streaming}
@@ -1630,7 +1604,7 @@ function bindDetailRange(sourceId, mirrorId) {
 }
 
 /**
- * Update preset selection and feedback after reply values change.
+ * Update reply-style selection and feedback.
  * @param {string} [message] Optional feedback message.
  */
 function updateReplyPresetState(message) {
@@ -1644,66 +1618,26 @@ function updateReplyPresetState(message) {
     const feedback = settingsOverlay?.querySelector('[data-leslie-preset-feedback]');
     if (feedback) {
         feedback.textContent = message
-            || (activePreset ? `${copy.styleApplied}“${copy[REPLY_STYLE_PRESETS[activePreset].titleKey]}”${copy.styleAppliedTail}` : copy.styleCustom);
-    }
-    const undoButton = settingsOverlay?.querySelector('[data-leslie-preset-undo]');
-    if (undoButton instanceof HTMLButtonElement) {
-        undoButton.hidden = !lastReplyPresetSnapshot;
+            || `${copy.styleApplied}“${copy[REPLY_STYLE_PRESETS[activePreset].titleKey]}”${copy.styleAppliedTail}`;
     }
 }
 
 /**
- * Assign a suggested reply value through the original SillyTavern handler.
- * @param {HTMLInputElement} source Original numeric control.
- * @param {number | string} value New value.
- */
-function setReplyControlValue(source, value) {
-    source.value = String(clampReplyPresetValue(source, Number(value)));
-    source.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
-/**
- * Apply one scene-based reply preset while preserving a one-step undo.
+ * Persist one semantic reply style without changing generation parameters.
  * @param {string} presetId Reply preset id.
  */
 function applyReplyStylePreset(presetId) {
     const preset = REPLY_STYLE_PRESETS[presetId];
-    const ids = getReplyControlIds();
-    const lengthSource = document.getElementById(ids.responseLength);
-    const temperatureSource = document.getElementById(ids.temperature);
-    if (!preset || !(lengthSource instanceof HTMLInputElement) || !(temperatureSource instanceof HTMLInputElement)) {
+    if (!preset) {
         return;
     }
-    lastReplyPresetSnapshot = {
-        lengthId: lengthSource.id,
-        length: lengthSource.value,
-        temperatureId: temperatureSource.id,
-        temperature: temperatureSource.value,
-    };
-    setReplyControlValue(lengthSource, preset.length);
-    setReplyControlValue(temperatureSource, preset.temperature);
+    const settings = getReplyStyleSettings();
+    const updated = { ...settings, style: presetId };
+    extension_settings[LESLIE_REPLY_STYLE_SETTINGS_KEY] = updated;
+    setLeslieReplyStyleRuntimeSettings(updated);
+    saveSettingsDebounced();
     const copy = COPY[getCopyLocale()];
     updateReplyPresetState(`${copy.styleApplied}“${copy[preset.titleKey]}”${copy.styleAppliedTail}`);
-}
-
-/**
- * Restore the reply values captured before the most recently applied preset.
- */
-function undoReplyStylePreset() {
-    if (!lastReplyPresetSnapshot) {
-        return;
-    }
-    const snapshot = lastReplyPresetSnapshot;
-    const lengthSource = document.getElementById(snapshot.lengthId);
-    const temperatureSource = document.getElementById(snapshot.temperatureId);
-    lastReplyPresetSnapshot = undefined;
-    if (lengthSource instanceof HTMLInputElement) {
-        setReplyControlValue(lengthSource, snapshot.length);
-    }
-    if (temperatureSource instanceof HTMLInputElement) {
-        setReplyControlValue(temperatureSource, snapshot.temperature);
-    }
-    updateReplyPresetState(COPY[getCopyLocale()].styleRestored);
 }
 
 /**
@@ -1748,14 +1682,8 @@ function bindDetailPage(detailId) {
         bindThinkingMode();
     } else if (detailId === 'reply') {
         const ids = getReplyControlIds();
-        bindDetailSelect(ids.preset, 'leslie-reply-preset');
-        bindDetailRange(ids.responseLength, 'leslie-reply-length');
-        bindDetailRange(ids.contextSize, 'leslie-reply-context');
         bindDetailRange(ids.temperature, 'leslie-reply-creativity');
         bindDetailCheckbox(ids.streaming, 'leslie-reply-streaming', 'input');
-        [document.getElementById(ids.responseLength), document.getElementById(ids.temperature)].forEach((source) => {
-            source?.addEventListener('input', () => updateReplyPresetState(), { signal: detailBindingController.signal });
-        });
         updateReplyPresetState();
     } else if (detailId === 'character') {
         const copy = COPY[getCopyLocale()];
@@ -2109,12 +2037,6 @@ function initLeslieSettings() {
             event.preventDefault();
             event.stopPropagation();
             applyReplyStylePreset(replyStyleButton.dataset.leslieReplyStyle);
-            return;
-        }
-        if (target?.closest('[data-leslie-preset-undo]')) {
-            event.preventDefault();
-            event.stopPropagation();
-            undoReplyStylePreset();
             return;
         }
         const apiKindButton = target?.closest('[data-leslie-api-kind]');

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, powerMonitor, Tray } from 'electron';
 import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -37,6 +37,15 @@ let appUrl;
 /** @type {BrowserWindow | undefined} Keep the desktop window alive until it is explicitly closed. */
 let mainWindow;
 let companionHostSeen = false;
+let tray;
+let backgroundTickTimer;
+let isQuitting = false;
+let backgroundNoticeShown = false;
+let momentsBackgroundState = {
+    state: 'starting',
+    paused: false,
+    pendingCount: 0,
+};
 
 function isMainWindowSender(event) {
     return Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
@@ -68,6 +77,98 @@ ipcMain.handle('leslie:companion:publish', (event, message) => {
     });
 });
 
+ipcMain.on('leslie:moments:status', (event, message) => {
+    if (!isMainWindowSender(event)) {
+        return;
+    }
+    momentsBackgroundState = {
+        state: String(message?.state || 'starting').slice(0, 40),
+        paused: Boolean(message?.paused),
+        pendingCount: Math.max(0, Number(message?.pendingCount) || 0),
+    };
+    updateTrayMenu();
+});
+
+function showMainWindow() {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        createSillyTavernWindow();
+        return;
+    }
+    if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+}
+
+function getMomentsStatusLabel() {
+    if (momentsBackgroundState.paused || momentsBackgroundState.state === 'paused') {
+        return '朋友圈后台：已暂停';
+    }
+    if (momentsBackgroundState.state === 'waiting_model') {
+        return '朋友圈后台：等待模型连接';
+    }
+    if (momentsBackgroundState.state === 'busy') {
+        return '朋友圈后台：角色正在查看动态';
+    }
+    if (momentsBackgroundState.state === 'error') {
+        return '朋友圈后台：稍后重试';
+    }
+    return momentsBackgroundState.pendingCount > 0
+        ? `朋友圈后台：运行中（待处理 ${momentsBackgroundState.pendingCount}）`
+        : '朋友圈后台：运行中';
+}
+
+function updateTrayMenu() {
+    if (!tray || tray.isDestroyed()) {
+        return;
+    }
+    const statusLabel = getMomentsStatusLabel();
+    tray.setToolTip(`LeslieTavern · ${statusLabel.replace('朋友圈后台：', '')}`);
+    tray.setContextMenu(Menu.buildFromTemplate([
+        { label: '打开 LeslieTavern', click: showMainWindow },
+        { type: 'separator' },
+        { label: statusLabel, enabled: false },
+        {
+            label: momentsBackgroundState.paused ? '继续朋友圈互动' : '暂停朋友圈互动',
+            click: () => {
+                const paused = !momentsBackgroundState.paused;
+                momentsBackgroundState.paused = paused;
+                momentsBackgroundState.state = paused ? 'paused' : 'running';
+                mainWindow?.webContents.send('leslie:moments:set-paused', paused);
+                updateTrayMenu();
+            },
+        },
+        { type: 'separator' },
+        {
+            label: '退出 LeslieTavern',
+            click: () => {
+                isQuitting = true;
+                app.quit();
+            },
+        },
+    ]));
+}
+
+function installTray() {
+    if (tray && !tray.isDestroyed()) {
+        return;
+    }
+    const iconFile = process.platform === 'win32' ? 'favicon.ico' : path.join('img', 'apple-icon-192x192.png');
+    const iconPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../public', iconFile);
+    tray = new Tray(iconPath);
+    tray.on('double-click', showMainWindow);
+    tray.on('click', showMainWindow);
+    updateTrayMenu();
+}
+
+function sendBackgroundTick(reason = 'timer') {
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isLoading()) {
+        return;
+    }
+    mainWindow.webContents.send('leslie:moments:tick', { reason, at: new Date().toISOString() });
+}
+
 function createSillyTavernWindow() {
     if (!appUrl) {
         console.error('The server has not started yet.');
@@ -87,7 +188,24 @@ function createSillyTavernWindow() {
             // Character speech is generated after an asynchronous model/API
             // response, so it must not depend on a second user gesture.
             autoplayPolicy: 'no-user-gesture-required',
+            // The moments worker must continue while the window is hidden in the system tray.
+            backgroundThrottling: false,
         },
+    });
+    mainWindow.on('close', (event) => {
+        if (isQuitting) {
+            return;
+        }
+        event.preventDefault();
+        mainWindow.hide();
+        if (!backgroundNoticeShown) {
+            backgroundNoticeShown = true;
+            tray?.displayBalloon?.({
+                title: 'LeslieTavern 已转入后台',
+                content: '朋友圈互动会继续运行。需要完全关闭时，请从托盘选择“退出 LeslieTavern”。',
+                iconType: 'info',
+            });
+        }
     });
     mainWindow.once('closed', () => {
         mainWindow = undefined;
@@ -99,6 +217,7 @@ function createSillyTavernWindow() {
                 true,
             );
             console.info(`Leslie companion preload: ${companionHostReady ? 'ready' : 'missing'}.`);
+            setTimeout(() => sendBackgroundTick('window-ready'), 2_000);
         } catch (error) {
             console.warn('Failed to inspect the Leslie companion preload.', error);
         }
@@ -126,30 +245,22 @@ if (!hasSingleInstanceLock) {
     app.quit();
 } else {
     app.on('second-instance', () => {
-        if (!mainWindow) {
-            createSillyTavernWindow();
-            return;
-        }
-        if (mainWindow.isMinimized()) {
-            mainWindow.restore();
-        }
-        mainWindow.show();
-        mainWindow.focus();
+        showMainWindow();
     });
 
     app.whenReady().then(() => {
         app.on('activate', () => {
-            if (BrowserWindow.getAllWindows().length === 0) {
-                createSillyTavernWindow();
-            }
+            showMainWindow();
         });
 
+        installTray();
+        powerMonitor.on('resume', () => sendBackgroundTick('resume'));
+        backgroundTickTimer = setInterval(() => sendBackgroundTick('timer'), 60_000);
         startServer();
     });
 
-    app.on('window-all-closed', () => {
-        if (process.platform !== 'darwin') {
-            app.quit();
-        }
+    app.on('before-quit', () => {
+        isQuitting = true;
+        clearInterval(backgroundTickTimer);
     });
 }

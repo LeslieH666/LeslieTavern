@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import express from 'express';
 
 import { router as momentsRouter } from '../src/leslie-moments/router.js';
+import { LeslieMomentsActivityStore } from '../src/leslie-moments/activity-store.js';
 import { LeslieMomentsStore } from '../src/leslie-moments/store.js';
 import {
     describeMomentVisibility,
@@ -144,6 +145,135 @@ describe('Leslie moments store', () => {
     });
 });
 
+describe('Leslie moments background activity store', () => {
+    let temporaryRoot;
+    let moments;
+    let activity;
+
+    beforeEach(() => {
+        temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'leslie-moments-activity-'));
+        moments = new LeslieMomentsStore(temporaryRoot);
+        activity = new LeslieMomentsActivityStore(temporaryRoot);
+    });
+
+    afterEach(() => {
+        fs.rmSync(temporaryRoot, { recursive: true, force: true });
+    });
+
+    test('does not create activity files merely because status was read', () => {
+        expect(activity.getStatus().pendingCount).toBe(0);
+        expect(fs.existsSync(activity.activityPath)).toBe(false);
+        expect(fs.existsSync(activity.queuePath)).toBe(false);
+    });
+
+    test('records a genuine read without changing the original timeline', () => {
+        const post = moments.createPost(realityDraft());
+        const timelineBefore = fs.readFileSync(moments.timelinePath, 'utf8');
+        activity.planPost(post, [SISTER], {
+            now: '2026-09-17T01:00:00.000Z',
+            random: () => 0,
+        });
+        const claim = activity.claimJob(moments.readTimeline().posts, {
+            now: '2026-09-17T01:02:00.000Z',
+        });
+
+        expect(claim.job.actor.label).toBe('妹妹');
+        activity.completeJob(claim.job.id, { action: 'read', comment: '' }, {
+            now: '2026-09-17T01:02:10.000Z',
+        });
+        const decorated = activity.decoratePosts([post])[0];
+
+        expect(decorated.readReceipts).toHaveLength(1);
+        expect(decorated.reactions.likes).toHaveLength(0);
+        expect(decorated.reactions.comments).toHaveLength(0);
+        expect(fs.readFileSync(moments.timelinePath, 'utf8')).toBe(timelineBefore);
+    });
+
+    test('completes a comment idempotently and limits a post to three scheduled roles', () => {
+        const post = moments.createPost(realityDraft());
+        const fourth = { ...CLASSMATE, entityId: '44444444-4444-4444-8444-444444444444', sourceKey: '第四人.png', label: '第四人' };
+        const fifth = { ...CLASSMATE, entityId: '55555555-5555-4555-8555-555555555555', sourceKey: '第五人.png', label: '第五人' };
+        const planned = activity.planPost(post, [SISTER, CLASSMATE, fourth, fifth], {
+            now: '2026-09-17T01:00:00.000Z',
+            random: () => 0,
+        });
+        expect(planned.jobs).toHaveLength(3);
+
+        const claim = activity.claimJob(moments.readTimeline().posts, {
+            now: '2026-09-17T01:02:00.000Z',
+        });
+        activity.completeJob(claim.job.id, { action: 'comment', comment: '今天看起来很开心。' }, {
+            now: '2026-09-17T01:02:10.000Z',
+        });
+        activity.completeJob(claim.job.id, { action: 'comment', comment: '今天看起来很开心。' }, {
+            now: '2026-09-17T01:02:11.000Z',
+        });
+
+        const decorated = activity.decoratePosts([post])[0];
+        expect(decorated.readReceipts).toHaveLength(1);
+        expect(decorated.reactions.comments).toHaveLength(1);
+        expect(decorated.reactions.comments[0].content).toBe('今天看起来很开心。');
+    });
+
+    test('hides old receipts after an edit and cancels obsolete jobs', () => {
+        const post = moments.createPost(realityDraft());
+        activity.planPost(post, [SISTER], {
+            now: '2026-09-17T01:00:00.000Z',
+            random: () => 0,
+        });
+        const claim = activity.claimJob(moments.readTimeline().posts, {
+            now: '2026-09-17T01:02:00.000Z',
+        });
+        activity.completeJob(claim.job.id, { action: 'like', comment: '' }, {
+            now: '2026-09-17T01:02:10.000Z',
+        });
+        const edited = moments.updatePost(post.id, {
+            authorEntityId: PERSONA.entityId,
+            content: '修改后的动态。',
+            visibility: { type: 'all', targets: [] },
+        });
+        activity.planPost(edited, [CLASSMATE], {
+            now: '2026-09-17T01:03:00.000Z',
+            random: () => 0,
+        });
+
+        const decorated = activity.decoratePosts([edited])[0];
+        expect(decorated.readReceipts).toEqual([]);
+        expect(decorated.reactions.likes).toEqual([]);
+        expect(activity.getStatus({ now: '2026-09-17T01:03:00.000Z' }).pendingCount).toBe(1);
+    });
+
+    test('caps generated comments at two while keeping every successful read receipt', () => {
+        const post = moments.createPost(realityDraft());
+        const third = { ...CLASSMATE, entityId: '44444444-4444-4444-8444-444444444444', sourceKey: '第三人.png', label: '第三人' };
+        activity.planPost(post, [SISTER, CLASSMATE, third], {
+            now: '2026-09-17T01:00:00.000Z',
+            random: () => 0,
+        });
+
+        for (let index = 0; index < 3; index++) {
+            const claim = activity.claimJob(moments.readTimeline().posts, {
+                now: `2026-09-17T01:0${5 + index}:00.000Z`,
+            });
+            activity.completeJob(claim.job.id, { action: 'comment', comment: `评论 ${index + 1}` }, {
+                now: `2026-09-17T01:0${5 + index}:10.000Z`,
+            });
+        }
+
+        const decorated = activity.decoratePosts([post])[0];
+        expect(decorated.readReceipts).toHaveLength(3);
+        expect(decorated.reactions.comments).toHaveLength(2);
+    });
+
+    test('stops on corrupt activity data without replacing it', () => {
+        fs.mkdirSync(path.dirname(activity.activityPath), { recursive: true });
+        fs.writeFileSync(activity.activityPath, '{broken', 'utf8');
+
+        expect(() => activity.decoratePosts([])).toThrow('Could not read');
+        expect(fs.readFileSync(activity.activityPath, 'utf8')).toBe('{broken');
+    });
+});
+
 describe('Leslie moments API', () => {
     let temporaryRoot;
     let server;
@@ -191,6 +321,70 @@ describe('Leslie moments API', () => {
         expect(created.post.author.entityId).toMatch(/^[0-9a-f-]{36}$/);
         expect(created.post.visibility.targets[0].label).toBe('妹妹');
         expect(timeline.posts[0].content).toBe('API 发布验收。');
+    });
+
+    test('claims and completes a background read through the API', async () => {
+        const createResponse = await fetch(baseUrl, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                mode: 'reality',
+                content: '后台已读验收。',
+                author: { sourceKey: '哥哥.png', label: '哥哥' },
+                visibility: {
+                    type: 'selected',
+                    targets: [{ type: 'character', sourceKey: '妹妹.png', label: '妹妹' }],
+                },
+            }),
+        });
+        expect(createResponse.status).toBe(201);
+
+        const activityStore = new LeslieMomentsActivityStore(temporaryRoot);
+        const previousQueue = activityStore.readQueue();
+        const dueQueue = structuredClone(previousQueue);
+        dueQueue.jobs[0].dueAt = '2000-01-01T00:00:00.000Z';
+        activityStore.saveQueue(previousQueue, dueQueue);
+
+        const claimResponse = await fetch(`${baseUrl}/activity/jobs/claim`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: '{}',
+        });
+        const claim = await claimResponse.json();
+        expect(claimResponse.status).toBe(200);
+        expect(claim.job.actor.label).toBe('妹妹');
+
+        const completeResponse = await fetch(`${baseUrl}/activity/jobs/${claim.job.id}/complete`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ action: 'read', comment: '' }),
+        });
+        expect(completeResponse.status).toBe(200);
+
+        const timeline = await (await fetch(baseUrl)).json();
+        expect(timeline.posts[0].readReceipts).toHaveLength(1);
+        expect(timeline.posts[0].readReceipts[0].actor.label).toBe('妹妹');
+    });
+
+    test('keeps the original timeline available when the activity sidecar is corrupt', async () => {
+        const momentsStore = new LeslieMomentsStore(temporaryRoot);
+        momentsStore.createPost(realityDraft({ content: '旁路损坏时仍应可见。' }));
+        const activityStore = new LeslieMomentsActivityStore(temporaryRoot);
+        fs.mkdirSync(path.dirname(activityStore.activityPath), { recursive: true });
+        fs.writeFileSync(activityStore.activityPath, '{broken', 'utf8');
+
+        const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            const response = await fetch(baseUrl);
+            const timeline = await response.json();
+
+            expect(response.status).toBe(200);
+            expect(timeline.posts[0].content).toBe('旁路损坏时仍应可见。');
+            expect(timeline.activityStatus.state).toBe('error');
+            expect(fs.readFileSync(activityStore.activityPath, 'utf8')).toBe('{broken');
+        } finally {
+            warning.mockRestore();
+        }
     });
 });
 
