@@ -157,7 +157,7 @@ function decoratePostsFailOpen(activityStore, posts) {
 function planActivityFailOpen(stores, post, body) {
     try {
         const candidates = resolveActivityCandidates(stores.identity, post, body);
-        stores.activity.planPost(post, candidates);
+        stores.activity.planPost(post, candidates, { enthusiasm: body?.enthusiasm });
     } catch (error) {
         logActivityFailure(error);
     }

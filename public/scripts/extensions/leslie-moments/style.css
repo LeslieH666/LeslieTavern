@@ -235,6 +235,96 @@ body.leslie-moments-page-open {
     font-size: 12px;
 }
 
+.leslie-moments-enthusiasm {
+    display: grid;
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto 14px;
+    padding: 13px 15px;
+    gap: 8px;
+    color: var(--tg-text-secondary, #9aabba);
+    background: var(--tg-layer-1, #17212b);
+    border: 1px solid var(--tg-border, rgb(255 255 255 / 8%));
+    border-radius: 12px;
+    box-sizing: border-box;
+}
+
+.leslie-moments-enthusiasm-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.leslie-moments-enthusiasm-heading > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.leslie-moments-enthusiasm-heading i {
+    color: #ff8a5b;
+}
+
+.leslie-moments-enthusiasm-heading strong {
+    color: var(--tg-text-primary, #f5f5f5);
+    font-size: 13px;
+}
+
+.leslie-moments-enthusiasm output {
+    min-width: 28px;
+    padding: 3px 10px;
+    color: #ff9e72;
+    background: rgb(255 138 91 / 11%);
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+}
+
+#leslie-moments-enthusiasm-slider {
+    width: 100%;
+    height: 18px;
+    margin: 0;
+    accent-color: #ff8a5b;
+    cursor: pointer;
+}
+
+.leslie-moments-enthusiasm-labels {
+    display: grid;
+    padding: 0 2px;
+    grid-template-columns: repeat(3, 1fr);
+    color: var(--tg-text-secondary, #9aabba);
+    font-size: 10px;
+}
+
+.leslie-moments-enthusiasm-labels span:nth-child(2) {
+    text-align: center;
+}
+
+.leslie-moments-enthusiasm-labels span:last-child {
+    text-align: right;
+}
+
+.leslie-moments-enthusiasm p {
+    display: flex;
+    margin: 0;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 10px;
+    line-height: 1.5;
+}
+
+.leslie-moments-enthusiasm p strong {
+    color: var(--tg-text-primary, #f5f5f5);
+    font-size: 11px;
+}
+
+.leslie-moments-enthusiasm p span {
+    text-align: right;
+}
+
 .leslie-moments-error {
     color: var(--tg-danger, #ef6b73);
     background: color-mix(in srgb, var(--tg-danger, #ef6b73) 9%, var(--tg-layer-1, #17212b));
@@ -1082,6 +1172,20 @@ body.leslie-moments-page-open {
     .leslie-moments-activity-status {
         grid-column: 2;
         justify-self: start;
+    }
+
+    .leslie-moments-enthusiasm {
+        padding: 12px;
+        border-radius: 10px;
+    }
+
+    .leslie-moments-enthusiasm p {
+        display: grid;
+        gap: 2px;
+    }
+
+    .leslie-moments-enthusiasm p span {
+        text-align: left;
     }
 
     .leslie-moments-composer {

@@ -7,6 +7,7 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 ### Added
 
 - Persistent Leslie Moments background activity with genuine per-character read receipts, selective AI likes and comments, bounded retry/rate controls, and sidecar storage that leaves the original timeline intact.
+- A persisted three-level Leslie Moments enthusiasm slider that adjusts public-interaction probability, participating character count, and initial response delay while retaining the hourly model-call and comment caps.
 - A LeslieTavern system tray with background Moments status, pause/resume controls, window restoration, and an explicit application exit action.
 - Semantic Leslie reply modes that inject a fail-open presentation instruction before foreground character replies without modifying character cards, memories, sampling temperature, or stored chats.
 - Electron desktop workflow and Windows portable-package tooling.

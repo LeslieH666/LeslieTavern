@@ -54,6 +54,17 @@ test('Leslie moments publishes, edits, archives and restores a selected-audience
 
     await expect(page.locator('[data-moments-action="mode"][data-mode="story"]')).toBeDisabled();
     await expect(page.locator('.leslie-moments-notice')).toContainText('模型真正处理动态后才会显示已读');
+    const enthusiasmSlider = page.locator('#leslie-moments-enthusiasm-slider');
+    await expect(enthusiasmSlider).toBeVisible();
+    await expect(enthusiasmSlider).toHaveAttribute('min', '0');
+    await expect(enthusiasmSlider).toHaveAttribute('max', '2');
+    await enthusiasmSlider.evaluate((element) => {
+        element.value = '2';
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await expect(page.locator('#leslie-moments-enthusiasm-value')).toHaveText('高');
+    await expect(page.locator('#leslie-moments-enthusiasm-detail')).toContainText('95%');
     await page.locator('#leslie-moments-content').fill(originalContent);
     await page.locator('[data-moments-action="audience"]').click();
     await page.locator('[data-moments-action="visibility"][data-visibility="selected"]').click();
