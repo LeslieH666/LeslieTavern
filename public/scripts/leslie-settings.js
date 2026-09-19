@@ -422,7 +422,6 @@ let closeTimer;
 let activeDetail;
 let detailBindingController;
 let detailObservers = [];
-let lastReplyPresetSnapshot;
 let activeModelServiceId;
 
 /**
