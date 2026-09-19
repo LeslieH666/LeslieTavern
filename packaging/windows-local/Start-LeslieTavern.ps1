@@ -8,6 +8,7 @@ $CachePath = Join-Path $ProjectRoot 'Cache'
 $LogsPath = Join-Path $ProjectRoot 'logs\desktop'
 $RunPath = Join-Path $ProjectRoot 'Run'
 $PidPath = Join-Path $RunPath 'LeslieTavern.pid'
+$LanAddressPath = Join-Path $RunPath 'LeslieTavern-lan-addresses.txt'
 
 foreach ($required in @($ElectronPath, $AppEntry, $ConfigPath, $DataPath)) {
     if (-not (Test-Path -LiteralPath $required)) {
@@ -27,6 +28,67 @@ $configuredIpv4 = if ($listenAddressMatch.Success) { $listenAddressMatch.Groups[
 $expectedIpv4 = if ($listenEnabled) { $configuredIpv4 } else { '127.0.0.1' }
 $expectedListener = '{0}:{1}' -f $expectedIpv4, $expectedPort
 
+function Get-LanAccessDetails {
+    param([int]$Port)
+
+    $lanAddresses = [Collections.Generic.List[string]]::new()
+    $dnsSuffixes = [Collections.Generic.List[string]]::new()
+
+    foreach ($networkInterface in [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
+        if ($networkInterface.OperationalStatus -ne [Net.NetworkInformation.OperationalStatus]::Up) {
+            continue
+        }
+
+        $ipProperties = $networkInterface.GetIPProperties()
+        $hasIpv4Gateway = $ipProperties.GatewayAddresses | Where-Object {
+            $_.Address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork
+        }
+        if (-not $hasIpv4Gateway) {
+            continue
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($ipProperties.DnsSuffix)) {
+            $dnsSuffixes.Add($ipProperties.DnsSuffix.Trim('.'))
+        }
+
+        foreach ($unicastAddress in $ipProperties.UnicastAddresses) {
+            $address = $unicastAddress.Address
+            if ($address.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) {
+                continue
+            }
+
+            $addressBytes = $address.GetAddressBytes()
+            $isPrivateAddress = $addressBytes[0] -eq 10 -or
+                ($addressBytes[0] -eq 172 -and $addressBytes[1] -ge 16 -and $addressBytes[1] -le 31) -or
+                ($addressBytes[0] -eq 192 -and $addressBytes[1] -eq 168)
+            if ($isPrivateAddress) {
+                $lanAddresses.Add($address.IPAddressToString)
+            }
+        }
+    }
+
+    $lanAddresses = @($lanAddresses | Sort-Object -Unique)
+    $hostName = [Net.Dns]::GetHostName()
+    $hostCandidates = @($hostName) + @($dnsSuffixes | Sort-Object -Unique | ForEach-Object { "$hostName.$_" })
+    $resolvableHostNames = foreach ($candidate in ($hostCandidates | Sort-Object -Unique)) {
+        try {
+            $resolvedAddresses = @([Net.Dns]::GetHostAddresses($candidate) | Where-Object {
+                $_.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork
+            } | ForEach-Object { $_.IPAddressToString })
+            if ($resolvedAddresses | Where-Object { $_ -in $lanAddresses }) {
+                $candidate
+            }
+        } catch {
+            # A hostname URL is optional. The numeric LAN URL remains available.
+        }
+    }
+
+    [pscustomobject]@{
+        HostUrls = @($resolvableHostNames | ForEach-Object { 'http://{0}:{1}/' -f $_, $Port })
+        IpUrls = @($lanAddresses | ForEach-Object { 'http://{0}:{1}/' -f $_, $Port })
+    }
+}
+
 foreach ($directory in @($CachePath, $LogsPath, $RunPath)) {
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
 }
@@ -40,6 +102,7 @@ if (Test-Path -LiteralPath $PidPath) {
     }
     Remove-Item -LiteralPath $PidPath -Force -ErrorAction SilentlyContinue
 }
+Remove-Item -LiteralPath $LanAddressPath -Force -ErrorAction SilentlyContinue
 
 $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $stdoutLog = Join-Path $LogsPath "LeslieTavern-$timestamp.stdout.log"
@@ -100,35 +163,25 @@ for ($attempt = 0; $attempt -lt 90; $attempt++) {
 if ($started) {
     Write-Host "LeslieTavern started on $actualListener. Closing the window keeps it in the system tray; use the tray Exit command or the stop shortcut to end it." -ForegroundColor Green
     if ($expectedIpv4 -eq '0.0.0.0') {
-        $lanUrls = foreach ($networkInterface in [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
-            if ($networkInterface.OperationalStatus -ne [Net.NetworkInformation.OperationalStatus]::Up) {
-                continue
-            }
-            $ipProperties = $networkInterface.GetIPProperties()
-            $hasIpv4Gateway = $ipProperties.GatewayAddresses | Where-Object {
-                $_.Address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork
-            }
-            if (-not $hasIpv4Gateway) {
-                continue
-            }
-            foreach ($unicastAddress in $ipProperties.UnicastAddresses) {
-                $address = $unicastAddress.Address
-                if ($address.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) {
-                    continue
-                }
-                $addressBytes = $address.GetAddressBytes()
-                $isPrivateAddress = $addressBytes[0] -eq 10 -or
-                    ($addressBytes[0] -eq 172 -and $addressBytes[1] -ge 16 -and $addressBytes[1] -le 31) -or
-                    ($addressBytes[0] -eq 192 -and $addressBytes[1] -eq 168)
-                if ($isPrivateAddress) {
-                    'http://{0}:{1}/' -f $address.IPAddressToString, $expectedPort
-                }
-            }
+        $lanAccess = Get-LanAccessDetails -Port $expectedPort
+        [string[]]$addressFileLines = @(
+            'Stable LAN names (use these first when available):'
+            $lanAccess.HostUrls
+            ''
+            'Current numeric LAN addresses:'
+            $lanAccess.IpUrls
+            ''
+            'This file is regenerated whenever LeslieTavern starts.'
+        )
+        [IO.File]::WriteAllLines($LanAddressPath, $addressFileLines, [Text.UTF8Encoding]::new($false))
+
+        if ($lanAccess.HostUrls) {
+            Write-Host ('Stable LAN URL: ' + ($lanAccess.HostUrls -join '  ')) -ForegroundColor Cyan
         }
-        $lanUrls = $lanUrls | Sort-Object -Unique
-        if ($lanUrls) {
-            Write-Host ('LAN URL: ' + ($lanUrls -join '  ')) -ForegroundColor Cyan
+        if ($lanAccess.IpUrls) {
+            Write-Host ('Current LAN URL: ' + ($lanAccess.IpUrls -join '  ')) -ForegroundColor Cyan
         }
+        Write-Host "LAN addresses were saved to $LanAddressPath" -ForegroundColor DarkCyan
         Write-Host 'Devices on the directly connected private subnet are allowed automatically; Windows Firewall still enforces the inbound boundary.' -ForegroundColor Yellow
     }
 } else {

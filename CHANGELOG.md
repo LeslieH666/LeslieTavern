@@ -31,6 +31,7 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 - Stopped issuing hidden automatic continuation requests when a provider-controlled DeepSeek reply reaches its service-side output boundary; the UI now leaves continuation to the user.
 - Consolidated development and portable workspaces into one Git repository.
 - Made allowlisted LAN access follow the directly connected private subnet so changing Wi-Fi no longer requires per-device IP entries.
+- Made the Windows launcher prefer resolvable hostname URLs and record both stable and numeric LAN addresses for recovery after DHCP address changes.
 - Integrated the complete AIRI source tree under `airi/`, removed its nested Git metadata, and made the LeslieTavern repository the single versioning and push boundary.
 - Separated source-controlled files from local data, runtimes, caches, logs, and backups.
 - Made the local Windows launcher verify the listener resolved from its actual configuration and report available LAN URLs when allowlisted LAN access is explicitly enabled.
