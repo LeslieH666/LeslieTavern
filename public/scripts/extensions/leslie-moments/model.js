@@ -16,6 +16,55 @@ export const MOMENT_MODE_DETAILS = Object.freeze({
     },
 });
 
+export const LESLIE_MOMENTS_SETTINGS_KEY = 'leslieMoments';
+export const LESLIE_MOMENTS_SETTINGS_SCHEMA_VERSION = 1;
+export const MOMENT_ENTHUSIASM_LEVELS = Object.freeze(['low', 'medium', 'high']);
+export const MOMENT_ENTHUSIASM_PROFILES = Object.freeze({
+    low: Object.freeze({
+        label: '低',
+        publicInteractionChance: 0.3,
+        actorLimit: 1,
+        scheduleLabel: '约 5–15 分钟后首次查看',
+        description: '30% 公开互动机会 · 每条最多 1 位角色',
+        prompt: '保持克制。只有非常符合角色性格和关系时才公开点赞或评论，多数情况下安静读完。',
+    }),
+    medium: Object.freeze({
+        label: '中',
+        publicInteractionChance: 0.7,
+        actorLimit: 3,
+        scheduleLabel: '约 1–3 分钟后首次查看',
+        description: '70% 公开互动机会 · 每条最多 3 位角色',
+        prompt: '自然参与。内容与角色相关时优先点赞或留下简短评论，不相关时可以安静读完。',
+    }),
+    high: Object.freeze({
+        label: '高',
+        publicInteractionChance: 0.95,
+        actorLimit: 5,
+        scheduleLabel: '约 20–90 秒后首次查看',
+        description: '95% 公开互动机会 · 每条最多 5 位角色',
+        prompt: '表现得热情主动。只要不违背角色人格，应优先公开互动，并在有具体话可说时优先留下简短评论。',
+    }),
+});
+
+export const DEFAULT_LESLIE_MOMENTS_SETTINGS = Object.freeze({
+    schemaVersion: LESLIE_MOMENTS_SETTINGS_SCHEMA_VERSION,
+    enthusiasm: 'medium',
+});
+
+export function normalizeLeslieMomentsSettings(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    return {
+        schemaVersion: LESLIE_MOMENTS_SETTINGS_SCHEMA_VERSION,
+        enthusiasm: MOMENT_ENTHUSIASM_LEVELS.includes(source.enthusiasm)
+            ? source.enthusiasm
+            : DEFAULT_LESLIE_MOMENTS_SETTINGS.enthusiasm,
+    };
+}
+
+export function getMomentEnthusiasmProfile(level) {
+    return MOMENT_ENTHUSIASM_PROFILES[level] ?? MOMENT_ENTHUSIASM_PROFILES.medium;
+}
+
 export function getMomentModeDetails(mode) {
     return MOMENT_MODE_DETAILS[mode] ?? MOMENT_MODE_DETAILS.reality;
 }

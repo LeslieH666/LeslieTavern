@@ -7,7 +7,7 @@
 - Modern desktop chat layout and settings adaptations.
 - Semantic reply modes that guide balanced, novel, dialogue-driven, or concise presentation through prompt injection instead of fixed per-style token caps; DeepSeek foreground replies can use provider-controlled output length.
 - First versions of Leslie memory and Persona/storyline identity isolation.
-- Moments publishing and timeline storage, plus model-backed read receipts and selective likes/comments that continue while the Electron app is hidden in the system tray.
+- Moments publishing and timeline storage, plus model-backed read receipts, persisted low/medium/high enthusiasm controls, and selective likes/comments that continue while the Electron app is hidden in the system tray.
 - Volcengine character voice settings and playback integration.
 - Character workshop prototype.
 - Character-card and chat-record export from the Leslie chat menu, including a combined ZIP that preserves CCV3 PNG and SillyTavern JSONL files.

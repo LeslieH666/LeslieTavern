@@ -5,12 +5,17 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 import express from 'express';
 
 import { router as momentsRouter } from '../src/leslie-moments/router.js';
-import { LeslieMomentsActivityStore } from '../src/leslie-moments/activity-store.js';
+import {
+    getMomentsActivityEnthusiasmProfile,
+    LeslieMomentsActivityStore,
+} from '../src/leslie-moments/activity-store.js';
 import { LeslieMomentsStore } from '../src/leslie-moments/store.js';
 import {
     describeMomentVisibility,
     filterMomentPosts,
     formatMomentTime,
+    getMomentEnthusiasmProfile,
+    normalizeLeslieMomentsSettings,
 } from '../public/scripts/extensions/leslie-moments/model.js';
 
 const PERSONA = {
@@ -265,6 +270,36 @@ describe('Leslie moments background activity store', () => {
         expect(decorated.reactions.comments).toHaveLength(2);
     });
 
+    test('uses bounded low, medium, and high scheduling profiles', () => {
+        const lowPost = moments.createPost(realityDraft({ content: '低热情排程。' }));
+        const highPost = moments.createPost(realityDraft({ content: '高热情排程。' }));
+        const extraActors = [
+            { ...CLASSMATE, entityId: '44444444-4444-4444-8444-444444444444', sourceKey: '第三人.png', label: '第三人' },
+            { ...CLASSMATE, entityId: '55555555-5555-4555-8555-555555555555', sourceKey: '第四人.png', label: '第四人' },
+            { ...CLASSMATE, entityId: '66666666-6666-4666-8666-666666666666', sourceKey: '第五人.png', label: '第五人' },
+            { ...CLASSMATE, entityId: '77777777-7777-4777-8777-777777777777', sourceKey: '第六人.png', label: '第六人' },
+        ];
+        const candidates = [SISTER, CLASSMATE, ...extraActors];
+
+        const low = activity.planPost(lowPost, candidates, {
+            now: '2026-09-17T01:00:00.000Z',
+            random: () => 0,
+            enthusiasm: 'low',
+        });
+        const high = activity.planPost(highPost, candidates, {
+            now: '2026-09-17T02:00:00.000Z',
+            random: () => 0,
+            enthusiasm: 'high',
+        });
+
+        expect(low.jobs).toHaveLength(1);
+        expect(low.jobs[0].dueAt).toBe('2026-09-17T01:05:00.000Z');
+        expect(high.jobs).toHaveLength(5);
+        expect(high.jobs[0].dueAt).toBe('2026-09-17T02:00:20.000Z');
+        expect(high.jobs[1].dueAt).toBe('2026-09-17T02:02:00.000Z');
+        expect(getMomentsActivityEnthusiasmProfile('unexpected').actorLimit).toBe(3);
+    });
+
     test('stops on corrupt activity data without replacing it', () => {
         fs.mkdirSync(path.dirname(activity.activityPath), { recursive: true });
         fs.writeFileSync(activity.activityPath, '{broken', 'utf8');
@@ -321,6 +356,28 @@ describe('Leslie moments API', () => {
         expect(created.post.author.entityId).toMatch(/^[0-9a-f-]{36}$/);
         expect(created.post.visibility.targets[0].label).toBe('妹妹');
         expect(timeline.posts[0].content).toBe('API 发布验收。');
+    });
+
+    test('passes the selected enthusiasm profile into background scheduling', async () => {
+        const activityCandidates = Array.from({ length: 6 }, (_, index) => ({
+            type: 'character',
+            sourceKey: `热情测试角色-${index}.png`,
+            label: `热情测试角色 ${index}`,
+        }));
+        const response = await fetch(baseUrl, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                ...realityDraft(),
+                author: { sourceKey: PERSONA.sourceKey, label: PERSONA.label },
+                enthusiasm: 'high',
+                activityCandidates,
+            }),
+        });
+        const activityStore = new LeslieMomentsActivityStore(temporaryRoot);
+
+        expect(response.status).toBe(201);
+        expect(activityStore.readQueue().jobs.filter(job => job.status === 'pending')).toHaveLength(5);
     });
 
     test('claims and completes a background read through the API', async () => {
@@ -404,5 +461,14 @@ describe('Leslie moments browser model', () => {
         expect(filterMomentPosts(posts, { mode: 'reality' }).map(post => post.id)).toEqual(['1']);
         expect(filterMomentPosts(posts, { includeArchived: true })).toHaveLength(2);
         expect(formatMomentTime('2026-08-05T11:59:00.000Z', now)).toBe('1 分钟前');
+    });
+
+    test('migrates enthusiasm settings and exposes the three bounded profiles', () => {
+        expect(normalizeLeslieMomentsSettings(null)).toEqual({ schemaVersion: 1, enthusiasm: 'medium' });
+        expect(normalizeLeslieMomentsSettings({ schemaVersion: 0, enthusiasm: 'high' })).toEqual({ schemaVersion: 1, enthusiasm: 'high' });
+        expect(normalizeLeslieMomentsSettings({ enthusiasm: 'unexpected' }).enthusiasm).toBe('medium');
+        expect(getMomentEnthusiasmProfile('low')).toMatchObject({ publicInteractionChance: 0.3, actorLimit: 1 });
+        expect(getMomentEnthusiasmProfile('medium')).toMatchObject({ publicInteractionChance: 0.7, actorLimit: 3 });
+        expect(getMomentEnthusiasmProfile('high')).toMatchObject({ publicInteractionChance: 0.95, actorLimit: 5 });
     });
 });

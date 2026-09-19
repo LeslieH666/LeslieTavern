@@ -13,6 +13,28 @@ const HEARTBEAT_STATES = Object.freeze(['starting', 'running', 'busy', 'busy_for
 const MAX_MODEL_RUNS_PER_HOUR = 8;
 const LEASE_DURATION_MS = 5 * 60_000;
 
+export const MOMENTS_ACTIVITY_ENTHUSIASM_PROFILES = Object.freeze({
+    low: Object.freeze({
+        actorLimit: 1,
+        firstDelayRange: Object.freeze([5 * 60_000, 15 * 60_000]),
+        laterDelayRange: Object.freeze([20 * 60_000, 60 * 60_000]),
+    }),
+    medium: Object.freeze({
+        actorLimit: 3,
+        firstDelayRange: Object.freeze([60_000, 3 * 60_000]),
+        laterDelayRange: Object.freeze([4 * 60_000, 20 * 60_000]),
+    }),
+    high: Object.freeze({
+        actorLimit: 5,
+        firstDelayRange: Object.freeze([20_000, 90_000]),
+        laterDelayRange: Object.freeze([2 * 60_000, 8 * 60_000]),
+    }),
+});
+
+export function getMomentsActivityEnthusiasmProfile(level) {
+    return MOMENTS_ACTIVITY_ENTHUSIASM_PROFILES[level] ?? MOMENTS_ACTIVITY_ENTHUSIASM_PROFILES.medium;
+}
+
 export class LeslieMomentsActivityStoreError extends Error {
     constructor(code, message) {
         super(message);
@@ -263,10 +285,11 @@ export class LeslieMomentsActivityStore {
         });
     }
 
-    planPost(post, candidates, { now = new Date().toISOString(), random = Math.random } = {}) {
+    planPost(post, candidates, { now = new Date().toISOString(), random = Math.random, enthusiasm = 'medium' } = {}) {
+        const enthusiasmProfile = getMomentsActivityEnthusiasmProfile(enthusiasm);
         const actors = [...new Map((Array.isArray(candidates) ? candidates : [])
             .map(normalizeActor)
-            .map(actor => [actor.entityId, actor])).values()].slice(0, 3);
+            .map(actor => [actor.entityId, actor])).values()].slice(0, enthusiasmProfile.actorLimit);
         const previous = this.readQueue();
         const next = structuredClone(previous);
         let changed = false;
@@ -281,8 +304,9 @@ export class LeslieMomentsActivityStore {
         }
 
         actors.forEach((actor, index) => {
-            const minimum = index === 0 ? 60_000 : 4 * 60_000;
-            const maximum = index === 0 ? 3 * 60_000 : 20 * 60_000;
+            const [minimum, maximum] = index === 0
+                ? enthusiasmProfile.firstDelayRange
+                : enthusiasmProfile.laterDelayRange;
             const offset = Math.round(minimum + Math.max(0, Math.min(1, Number(random()) || 0)) * (maximum - minimum));
             next.jobs.push({
                 id: randomUUID(),
