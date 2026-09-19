@@ -6,11 +6,18 @@
  * the source of truth.
  */
 
-import { eventSource, event_types, saveSettingsDebounced, setGenerationParamsFromPreset } from '../script.js';
+import { eventSource, event_types, saveSettingsDebounced, setGenerationParamsFromPreset, setOnlineStatus, stopStatusLoading } from '../script.js';
 import { extension_settings } from './extensions.js';
 import { getLeslieConnectionState } from './leslie-connection-state.js';
 import { textgen_types, textgenerationwebui_settings } from './textgen-settings.js';
-import { LESLIE_LOCAL_MODEL, getLeslieLocalRuntime, getLeslieLocalSettings } from './leslie-local-model-core.js';
+import {
+    LESLIE_LOCAL_MODEL,
+    detectLeslieLocalModel,
+    getLeslieLocalRuntime,
+    getLeslieLocalSettings,
+    isLocalModelLoadingEnabled,
+    setLocalModelLoadingEnabled,
+} from './leslie-local-model-core.js';
 import {
     LESLIE_REPLY_STYLE_SETTINGS_KEY,
     migrateLeslieReplyStyleSettings,
@@ -129,14 +136,19 @@ const COPY = {
         serviceTextGenBody: '连接 oobabooga WebUI 接口。',
         serviceLocalGeneric: '通用本地接口',
         serviceLocalGenericBody: '连接兼容接口的其他本地推理程序。',
-        localModelTitle: 'Peach 2.0 本地快捷设置',
-        localModelBody: '已下载 Q4_K_M 量化，适合 8GB 显存。选择已启动的本地服务即可自动填充设置。',
+        localModelTitle: 'Peach 2.0 本地模型',
+        localModelBody: '已下载 Q4_K_M 量化，适合 8GB 显存。点击按钮后会自动识别正在运行的适配服务并填充设置。',
         localModelPath: '模型文件',
-        localModelKobold: 'KoboldCpp（推荐）',
-        localModelLlama: 'llama.cpp',
-        localModelKoboldHelp: '127.0.0.1:5001 · 支持 CPU offload',
-        localModelLlamaHelp: '127.0.0.1:8080 · llama-server',
-        localModelApply: '应用并连接',
+        localModelDetect: '一键识别并自动配置',
+        localModelDetectHelp: '检查 127.0.0.1:5001 和 127.0.0.1:8080，只识别当前适配的 Peach 模型。',
+        localModelDetectChecking: '正在识别本地模型，请稍候…',
+        localModelDetectSuccess: '已识别并配置：',
+        localModelDetectFailure: '未找到正在运行的适配 Peach 模型。请先启动本地模型，再重试。',
+        localModelLoading: '启用本地模型加载',
+        localModelLoadingHelp: '关闭后，LeslieTavern 不会自动连接或调用本地模型；不会删除模型文件。',
+        localModelLoadingDisabled: '本地模型加载已关闭，请先打开开关。',
+        localModelLoadingEnabledStatus: '本地模型加载已开启。',
+        localModelLoadingDisabledStatus: '本地模型加载已关闭；项目不会连接本地模型。',
         serviceOpenAI: 'OpenAI',
         serviceOpenAIBody: '直接连接 OpenAI 官方接口。',
         endpoint: '服务地址',
@@ -312,14 +324,19 @@ const COPY = {
         serviceTextGenBody: 'Connect to an oobabooga WebUI API.',
         serviceLocalGeneric: 'Generic local API',
         serviceLocalGenericBody: 'Connect to another compatible local inference server.',
-        localModelTitle: 'Peach 2.0 local setup',
-        localModelBody: 'The Q4_K_M download is ready for an 8GB GPU. Choose a running local service to apply the connection and RP defaults.',
+        localModelTitle: 'Peach 2.0 local model',
+        localModelBody: 'The Q4_K_M download is ready for an 8GB GPU. Detect a running compatible service to apply the connection and RP defaults.',
         localModelPath: 'Model file',
-        localModelKobold: 'KoboldCpp (recommended)',
-        localModelLlama: 'llama.cpp',
-        localModelKoboldHelp: '127.0.0.1:5001 · CPU offload supported',
-        localModelLlamaHelp: '127.0.0.1:8080 · llama-server',
-        localModelApply: 'Apply and connect',
+        localModelDetect: 'Detect and configure automatically',
+        localModelDetectHelp: 'Check 127.0.0.1:5001 and 127.0.0.1:8080 for the adapted Peach model.',
+        localModelDetectChecking: 'Detecting the local model…',
+        localModelDetectSuccess: 'Detected and configured:',
+        localModelDetectFailure: 'No running compatible Peach model was found. Start the local model, then try again.',
+        localModelLoading: 'Enable local model loading',
+        localModelLoadingHelp: 'When disabled, LeslieTavern will not connect to or call the local model. Model files are not deleted.',
+        localModelLoadingDisabled: 'Local model loading is disabled. Turn on the switch first.',
+        localModelLoadingEnabledStatus: 'Local model loading is enabled.',
+        localModelLoadingDisabledStatus: 'Local model loading is disabled; the project will not connect to a local model.',
         serviceOpenAI: 'OpenAI',
         serviceOpenAIBody: 'Connect directly to the official OpenAI API.',
         endpoint: 'Server address',
@@ -405,6 +422,8 @@ let closeTimer;
 let activeDetail;
 let detailBindingController;
 let detailObservers = [];
+let lastReplyPresetSnapshot;
+let activeModelServiceId;
 
 /**
  * Determine which of the two built-in Leslie translations to display.
@@ -666,20 +685,27 @@ function renderDetailField({ sourceId, mirrorId, label, help, kind, multiple = f
  */
 function getActiveModelService() {
     const mainApi = document.getElementById('main_api')?.value;
-    return Object.entries(MODEL_SERVICES).find(([, service]) => {
+    const serviceId = Object.entries(MODEL_SERVICES).find(([, service]) => {
         return mainApi === service.mainApi
             && document.getElementById(service.secondaryId)?.value === service.secondaryValue;
     })?.[0];
+
+    // The original settings loader changes the main API and provider controls
+    // in separate steps. Keep the last explicit Leslie selection available
+    // during that short refresh window so the connect button cannot silently
+    // lose its target.
+    return serviceId || (activeModelServiceId && MODEL_SERVICES[activeModelServiceId] ? activeModelServiceId : undefined);
 }
 
 /**
  * Render the local Peach setup without taking ownership of the original API
- * controls. The action below delegates to the existing Text Completion
- * handlers after selecting a runtime.
+ * controls. The action below detects a running runtime and delegates to the
+ * existing Text Completion handlers after selecting it.
  * @param {Record<string, string>} copy Active UI copy.
  * @returns {string} Local model setup markup.
  */
 function renderLocalModelSetup(copy) {
+    const localModelLoadingEnabled = isLocalModelLoadingEnabled();
     return `
         <section class="leslie-detail-card leslie-local-model-card" aria-labelledby="leslie-local-model-title">
             <div class="leslie-local-model-card-heading">
@@ -693,18 +719,19 @@ function renderLocalModelSetup(copy) {
                 <span>${copy.localModelPath}</span>
                 <code>${escapeHtml(LESLIE_LOCAL_MODEL.modelPath)}</code>
             </div>
+            <label class="leslie-detail-switch-row leslie-local-model-loading-toggle" for="leslie-local-model-loading">
+                <span><strong>${copy.localModelLoading}</strong><small>${copy.localModelLoadingHelp}</small></span>
+                <input id="leslie-local-model-loading" type="checkbox" role="switch" data-leslie-local-model-toggle ${localModelLoadingEnabled ? 'checked' : ''}>
+            </label>
+            <small class="leslie-local-model-loading-status" data-leslie-local-model-loading-status>${localModelLoadingEnabled ? copy.localModelLoadingEnabledStatus : copy.localModelLoadingDisabledStatus}</small>
             <div class="leslie-local-model-actions">
-                <button type="button" class="leslie-settings-primary-button" data-leslie-local-model-setup="koboldcpp">
-                    <i class="fa-solid fa-dragon" aria-hidden="true"></i>
-                    <span>${copy.localModelKobold}</span>
-                    <small>${copy.localModelKoboldHelp}</small>
-                </button>
-                <button type="button" class="leslie-settings-secondary-button" data-leslie-local-model-setup="llamacpp">
-                    <i class="fa-solid fa-microchip" aria-hidden="true"></i>
-                    <span>${copy.localModelLlama}</span>
-                    <small>${copy.localModelLlamaHelp}</small>
+                <button type="button" class="leslie-settings-primary-button" data-leslie-local-model-detect ${localModelLoadingEnabled ? '' : 'disabled title="' + copy.localModelLoadingDisabled + '"'}>
+                    <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+                    <span>${copy.localModelDetect}</span>
+                    <small>${copy.localModelDetectHelp}</small>
                 </button>
             </div>
+            <small class="leslie-local-model-detect-status" data-leslie-local-model-detect-status aria-live="polite"></small>
         </section>`;
 }
 
@@ -1800,6 +1827,7 @@ function selectModelService(serviceId, afterSelect) {
     if (!service || !(mainApi instanceof HTMLSelectElement)) {
         return;
     }
+    activeModelServiceId = serviceId;
     activeModelKind = service.kind;
     mainApi.value = service.mainApi;
     mainApi.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1815,60 +1843,186 @@ function selectModelService(serviceId, afterSelect) {
 }
 
 /**
- * Apply the downloaded Peach GGUF defaults through SillyTavern's existing
- * local API controls, then run the normal connection check.
- * @param {string} runtime Local runtime id.
+ * Apply detected Peach defaults through SillyTavern's existing local API
+ * controls, then run the normal connection check.
+ * @param {{runtime: string, endpoint: string, model: string}} detected Detected runtime metadata.
+ * @returns {Promise<void>} Resolves after the original connection action was triggered.
  */
-function applyLocalPeachModel(runtime) {
+function applyLocalPeachModel(detected) {
+    const runtime = detected.runtime;
     const runtimeConfig = getLeslieLocalRuntime(runtime);
     const settings = getLeslieLocalSettings(runtime);
     const serviceId = runtimeConfig.apiType === textgen_types.LLAMACPP ? 'llamacpp' : 'koboldcpp';
+    const endpointValue = String(detected.endpoint || settings.endpoint).trim();
+    const mainApi = document.getElementById('main_api');
+    if (!(mainApi instanceof HTMLSelectElement)) {
+        return Promise.reject(new Error('当前页面还没有加载完整的模型连接设置。'));
+    }
 
     textgenerationwebui_settings.server_urls ??= {};
     // Prevent the original provider change handler from issuing a duplicate
-    // request before the quick setup has filled all generation parameters.
+    // request before the detector has filled all generation parameters.
     textgenerationwebui_settings.server_urls[runtimeConfig.apiType] = '';
-    selectModelService(serviceId, () => {
-        const endpointId = runtimeConfig.apiType === textgen_types.LLAMACPP
-            ? 'llamacpp_api_url_text'
-            : 'koboldcpp_api_url_text';
-        const endpoint = document.getElementById(endpointId);
-        if (endpoint instanceof HTMLInputElement) {
-            endpoint.value = settings.endpoint;
-            endpoint.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-
-        for (const [name, value] of Object.entries(settings.generation)) {
-            const source = document.getElementById(`${name}_textgenerationwebui`);
-            if (!(source instanceof HTMLInputElement)) {
-                continue;
+    return new Promise((resolve) => {
+        selectModelService(serviceId, () => {
+            const endpointId = runtimeConfig.apiType === textgen_types.LLAMACPP
+                ? 'llamacpp_api_url_text'
+                : 'koboldcpp_api_url_text';
+            const endpoint = document.getElementById(endpointId);
+            if (endpoint instanceof HTMLInputElement) {
+                endpoint.value = endpointValue;
+                endpoint.dispatchEvent(new Event('input', { bubbles: true }));
             }
-            if (source.type === 'checkbox') {
-                source.checked = Boolean(value);
-            } else {
-                source.value = String(value);
-            }
-            source.dispatchEvent(new Event('input', { bubbles: true }));
-        }
 
-        setGenerationParamsFromPreset({
-            max_length: settings.context,
-            genamt: settings.responseTokens,
+            if (runtimeConfig.apiType === textgen_types.LLAMACPP) {
+                textgenerationwebui_settings.llamacpp_model = String(detected.model);
+                const model = document.getElementById('llamacpp_model');
+                if (model instanceof HTMLSelectElement) {
+                    model.value = String(detected.model);
+                }
+            }
+
+            for (const [name, value] of Object.entries(settings.generation)) {
+                const source = document.getElementById(`${name}_textgenerationwebui`);
+                if (!(source instanceof HTMLInputElement)) {
+                    continue;
+                }
+                if (source.type === 'checkbox') {
+                    source.checked = Boolean(value);
+                } else {
+                    source.value = String(value);
+                }
+                source.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            setGenerationParamsFromPreset({
+                max_length: settings.context,
+                genamt: settings.responseTokens,
+            });
+            saveSettingsDebounced();
+            document.getElementById('api_button_textgenerationwebui')?.click();
+            resolve();
         });
-        saveSettingsDebounced();
-        document.getElementById('api_button_textgenerationwebui')?.click();
     });
+}
+
+/**
+ * Detect and configure the bundled Peach model without exposing it as another
+ * API provider. KoboldCpp and llama.cpp remain available as underlying local
+ * runtimes in the full connection settings.
+ * @param {HTMLButtonElement} button Detection button.
+ */
+async function detectAndApplyLocalPeachModel(button) {
+    if (!isLocalModelLoadingEnabled()) {
+        const copy = COPY[getCopyLocale()];
+        toastr.warning(copy.localModelLoadingDisabled, copy.localModelTitle);
+        return;
+    }
+
+    const copy = COPY[getCopyLocale()];
+    const status = settingsOverlay?.querySelector('[data-leslie-local-model-detect-status]');
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    if (status) {
+        status.dataset.state = 'checking';
+        status.textContent = copy.localModelDetectChecking;
+    }
+
+    try {
+        const detected = await detectLeslieLocalModel();
+        if (!detected) {
+            throw new Error(copy.localModelDetectFailure);
+        }
+        await applyLocalPeachModel(detected);
+        const runtimeLabel = getLeslieLocalRuntime(detected.runtime).label;
+        toastr.success(`${copy.localModelDetectSuccess} ${runtimeLabel} · ${detected.model}`, copy.localModelTitle);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : copy.localModelDetectFailure;
+        if (status) {
+            status.dataset.state = 'error';
+            status.textContent = message;
+        }
+        toastr.error(message, copy.localModelTitle);
+    } finally {
+        button.disabled = !isLocalModelLoadingEnabled();
+        button.setAttribute('aria-busy', 'false');
+    }
 }
 
 /**
  * Trigger the original connect action for the selected service.
  */
 function connectSelectedModelService() {
-    const service = MODEL_SERVICES[getActiveModelService()];
-    document.getElementById(service?.connectId)?.click();
+    const serviceId = getActiveModelService();
+    const service = MODEL_SERVICES[serviceId];
+    if (service?.kind === 'local' && !isLocalModelLoadingEnabled()) {
+        const copy = COPY[getCopyLocale()];
+        toastr.warning(copy.localModelLoadingDisabled, copy.modelTitle);
+        return;
+    }
+    const connectButton = document.getElementById(service?.connectId);
+    if (!(service && connectButton)) {
+        toastr.error('请先选择一个有效的模型连接方式。', '模型连接');
+        stopStatusLoading();
+        updateConnectionStatus();
+        return;
+    }
+
+    // Re-apply the visible mirror values immediately before the original
+    // handler runs. This protects the endpoint/model from a concurrent
+    // settings refresh that replaced the hidden SillyTavern controls.
+    service.fields.forEach(([sourceId, mirrorId, , , kind]) => {
+        const source = document.getElementById(sourceId);
+        const mirror = document.getElementById(mirrorId);
+        if (!(source instanceof HTMLInputElement || source instanceof HTMLSelectElement) || !(mirror instanceof HTMLInputElement || mirror instanceof HTMLSelectElement)) {
+            return;
+        }
+        if (kind === 'password' && !mirror.value) {
+            return;
+        }
+        source.value = mirror.value;
+        source.dispatchEvent(new Event(kind === 'select' ? 'change' : 'input', { bubbles: true }));
+    });
+
+    connectButton.click();
     const secretMirror = document.getElementById('leslie-model-key');
     if (secretMirror instanceof HTMLInputElement) {
         secretMirror.value = '';
+    }
+}
+
+/**
+ * Keep the application-side connection state honest when local usage is
+ * disabled. The external runtime is intentionally not managed here: users
+ * may run KoboldCpp or llama.cpp independently of LeslieTavern.
+ */
+function disconnectLocalModelInApp() {
+    const service = MODEL_SERVICES[getActiveModelService()];
+    if (service?.kind === 'local') {
+        setOnlineStatus('no_connection');
+    }
+}
+
+/**
+ * Apply the local-model gate to the visible quick-setup controls.
+ * @param {HTMLInputElement} toggle Leslie local-model switch.
+ */
+function handleLocalModelLoadingToggle(toggle) {
+    const enabled = setLocalModelLoadingEnabled(toggle.checked);
+    if (!enabled) {
+        disconnectLocalModelInApp();
+        stopStatusLoading();
+    }
+    const copy = COPY[getCopyLocale()];
+    settingsOverlay?.querySelectorAll('[data-leslie-local-model-detect]').forEach((button) => {
+        if (button instanceof HTMLButtonElement) {
+            button.disabled = !enabled;
+            button.title = enabled ? '' : copy.localModelLoadingDisabled;
+        }
+    });
+    const status = settingsOverlay?.querySelector('[data-leslie-local-model-loading-status]');
+    if (status) {
+        status.textContent = enabled ? copy.localModelLoadingEnabledStatus : copy.localModelLoadingDisabledStatus;
     }
 }
 
@@ -1891,6 +2045,11 @@ function updateConnectionStatus() {
         if (text) {
             text.textContent = getConnectionStatusText(connectionState, copy);
         }
+    }
+    const connectButton = settingsOverlay?.querySelector('[data-leslie-model-connect]');
+    if (connectButton instanceof HTMLButtonElement) {
+        connectButton.disabled = connectionState.checking;
+        connectButton.setAttribute('aria-busy', String(connectionState.checking));
     }
 }
 
@@ -2047,11 +2206,13 @@ function initLeslieSettings() {
             showDetail('model');
             return;
         }
-        const localModelButton = target?.closest('[data-leslie-local-model-setup]');
+        const localModelButton = target?.closest('[data-leslie-local-model-detect]');
         if (localModelButton instanceof HTMLElement) {
             event.preventDefault();
             event.stopPropagation();
-            applyLocalPeachModel(localModelButton.dataset.leslieLocalModelSetup);
+            if (localModelButton instanceof HTMLButtonElement) {
+                detectAndApplyLocalPeachModel(localModelButton);
+            }
             return;
         }
         const serviceButton = target?.closest('[data-leslie-service]');
@@ -2091,6 +2252,12 @@ function initLeslieSettings() {
             event.preventDefault();
             event.stopPropagation();
             closeSettings();
+        }
+    });
+    settingsOverlay.addEventListener('change', (event) => {
+        const target = event.target instanceof HTMLInputElement ? event.target : null;
+        if (target?.matches('[data-leslie-local-model-toggle]')) {
+            handleLocalModelLoadingToggle(target);
         }
     });
     document.getElementById('leslie-advanced-unlock')?.addEventListener('click', unlockAdvancedSettings);

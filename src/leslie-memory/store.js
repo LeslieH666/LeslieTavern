@@ -12,6 +12,7 @@ import {
     normalizeCoreSnapshot,
     normalizeEvent,
     normalizeIdentityBinding,
+    normalizeMemoryState,
 } from './schema.js';
 import { selectMemoryEvents } from './scoring.js';
 
@@ -227,13 +228,45 @@ export class LeslieMemoryStore {
             throw new LeslieMemoryStoreError('NOT_FOUND', 'Leslie memory was not found.');
         }
 
+        const manifest = readJson(paths.manifest);
+        const rawState = readJson(paths.state);
+        const state = this.migrateStateIfNeeded(memoryId, manifest, rawState);
+
         return {
-            manifest: readJson(paths.manifest),
+            manifest: state.manifest,
             coreSnapshot: readJson(paths.core),
-            state: readJson(paths.state),
+            state: state.state,
             events: this.readEvents(memoryId),
             history: this.listHistory(memoryId),
         };
+    }
+
+    migrateStateIfNeeded(memoryId, manifest, rawState) {
+        const rawVersion = Number(rawState?.schemaVersion ?? 0);
+        const manifestVersion = Number(manifest?.schemaVersion ?? 0);
+        const needsMigration = rawVersion < MEMORY_SCHEMA_VERSION
+            || manifestVersion < MEMORY_SCHEMA_VERSION
+            || !rawState?.settings?.memoryModel;
+        if (!needsMigration) {
+            return { manifest, state: normalizeMemoryState(rawState) };
+        }
+
+        const paths = this.getPaths(memoryId);
+        const migrationVersion = Math.min(rawVersion || 1, manifestVersion || 1);
+        const migrationStamp = Date.now();
+        fs.mkdirSync(paths.history, { recursive: true });
+        writeJson(path.join(paths.history, `state-migration-v${migrationVersion}-${migrationStamp}.json`), rawState);
+        writeJson(path.join(paths.history, `manifest-migration-v${migrationVersion}-${migrationStamp}.json`), manifest);
+
+        const state = normalizeMemoryState(rawState);
+        const nextManifest = {
+            ...manifest,
+            schemaVersion: MEMORY_SCHEMA_VERSION,
+            updatedAt: new Date().toISOString(),
+        };
+        writeJson(paths.state, state);
+        writeJson(paths.manifest, nextManifest);
+        return { manifest: nextManifest, state };
     }
 
     readEvents(memoryId) {
@@ -326,10 +359,11 @@ export class LeslieMemoryStore {
 
     updateState(memoryId, patch) {
         const paths = this.getPaths(memoryId);
-        const current = readJson(paths.state);
+        const rawCurrent = readJson(paths.state);
+        const current = normalizeMemoryState(rawCurrent);
         fs.mkdirSync(paths.history, { recursive: true });
         writeJson(path.join(paths.history, `state-r${current.revision}-${Date.now()}.json`), current);
-        const next = mergeState(current, patch);
+        const next = mergeState(rawCurrent, patch);
         writeJson(paths.state, next);
         this.touchManifest(memoryId);
         return next;

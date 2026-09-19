@@ -371,8 +371,16 @@ async function main() {
 
         await client.evaluate('document.querySelector("[data-workshop-action=manual]").click()');
         await waitFor(client, 'document.querySelector("#leslie-character-workshop").hidden && document.querySelector("#form_create").getAttribute("actiontype") === "createcharacter"');
-        const manualEditorVisible = await client.evaluate('getComputedStyle(document.querySelector("#rm_ch_create_block")).display !== "none"');
-        if (!manualEditorVisible) throw new Error('The manual character editor did not open after leaving the workshop.');
+        const manualEditor = await client.evaluate(`(() => ({
+            editorVisible: getComputedStyle(document.querySelector('#rm_ch_create_block')).display !== 'none',
+            importPanelVisible: getComputedStyle(document.querySelector('#leslie-character-card-import')).display !== 'none',
+            jsonInput: Boolean(document.querySelector('#leslie-character-json-file')),
+            avatarInput: Boolean(document.querySelector('#leslie-character-avatar-file')),
+            importButtonDisabled: document.querySelector('[data-leslie-character-import-action]')?.disabled === true,
+        }))()`);
+        if (!manualEditor.editorVisible || !manualEditor.importPanelVisible || !manualEditor.jsonInput || !manualEditor.avatarInput || !manualEditor.importButtonDisabled) {
+            throw new Error(`The manual character editor/import panel did not open correctly: ${JSON.stringify(manualEditor)}`);
+        }
 
         await client.command('Emulation.setDeviceMetricsOverride', {
             width: 390,

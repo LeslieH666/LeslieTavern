@@ -70,6 +70,16 @@ test('Leslie settings keeps essentials clear and advanced tools guarded', async 
     await expect(page.locator('[data-leslie-api-kind="local"]')).toHaveClass(/is-active/);
     await expect(page.locator('.leslie-service-card')).toHaveCount(5);
     await expect(page.locator('[data-leslie-service="ollama"]')).toBeVisible();
+    await expect(page.locator('#leslie-local-model-loading')).toBeChecked();
+    await expect(page.locator('[data-leslie-local-model-detect]')).toBeEnabled();
+    await expect(page.locator('[data-leslie-local-model-setup]')).toHaveCount(0);
+    await page.locator('#leslie-local-model-loading').uncheck();
+    await expect(page.locator('[data-leslie-local-model-detect]')).toBeDisabled();
+    await page.locator('#leslie-local-model-loading').check();
+    await expect(page.locator('[data-leslie-local-model-detect]')).toBeEnabled();
+    await page.locator('[data-leslie-local-model-detect]').click();
+    await expect.poll(async () => page.locator('#textgen_type').inputValue()).toBe('koboldcpp');
+    await expect(page.locator('#koboldcpp_api_url_text')).toHaveValue(/^http:\/\/127\.0\.0\.1:5001\/?$/);
     await page.locator('[data-leslie-api-kind="online"]').click();
     await expect(page.locator('[data-leslie-drawer-target="sys-settings-button"]')).toBeVisible();
 

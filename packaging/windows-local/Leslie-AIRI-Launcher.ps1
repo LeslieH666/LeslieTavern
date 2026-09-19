@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Menu', 'Leslie', 'All', 'Stop', 'Doctor')]
+    [ValidateSet('Menu', 'Leslie', 'All', 'Stop', 'Doctor', 'Model', 'ModelStop')]
     [string]$Mode = 'Menu',
     [switch]$RebuildAiri
 )
@@ -9,6 +9,8 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $StartLeslieScript = Join-Path $PSScriptRoot 'Start-LeslieTavern.ps1'
 $StopLeslieScript = Join-Path $PSScriptRoot 'Stop-LeslieTavern.ps1'
+$StartLocalModelScript = Join-Path $PSScriptRoot 'Start-LocalModel.ps1'
+$StopLocalModelScript = Join-Path $PSScriptRoot 'Stop-LocalModel.ps1'
 $LesliePidPath = Join-Path $ProjectRoot 'Run\LeslieTavern.pid'
 $AiriStatePath = Join-Path $ProjectRoot 'Run\AIRI.state.json'
 $AiriLogsPath = Join-Path $ProjectRoot 'logs\airi'
@@ -317,6 +319,16 @@ function Start-LeslieOnly {
     & $StartLeslieScript
 }
 
+function Start-LocalModelOnly {
+    Write-Section 'Starting local Peach model'
+    & $StartLocalModelScript
+}
+
+function Stop-LocalModelOnly {
+    Write-Section 'Stopping local Peach model'
+    & $StopLocalModelScript
+}
+
 function Start-All([bool]$ForceBuild) {
     Write-Section 'Starting LeslieTavern + AIRI'
     if (Get-TrackedProcess $LesliePidPath) {
@@ -396,6 +408,8 @@ function Show-Menu {
     Write-Host '3. Stop AIRI + LeslieTavern'
     Write-Host '4. Run launcher diagnostics'
     Write-Host '5. Rebuild AIRI, then start both'
+    Write-Host '6. Start local Peach model'
+    Write-Host '7. Stop local Peach model'
     Write-Host '0. Exit'
     $selection = Read-Host 'Select an option'
 
@@ -405,6 +419,8 @@ function Show-Menu {
         '3' { Stop-All }
         '4' { Show-Doctor }
         '5' { Start-All $true }
+        '6' { Start-LocalModelOnly }
+        '7' { Stop-LocalModelOnly }
         '0' { return }
         default { throw "Unknown menu option: $selection" }
     }
@@ -416,4 +432,6 @@ switch ($Mode) {
     'All' { Start-All ([bool]$RebuildAiri) }
     'Stop' { Stop-All }
     'Doctor' { Show-Doctor }
+    'Model' { Start-LocalModelOnly }
+    'ModelStop' { Stop-LocalModelOnly }
 }

@@ -50,6 +50,7 @@ import {
     normalizeCharacterBlueprint,
     renderCharacterBlueprintMarkup,
 } from './blueprint.js';
+import { isLocalModelLoadingEnabled } from '../leslie-local-model-core.js';
 
 const STAGES = ['brief', 'research', 'draft', 'review', 'ready'];
 const PREVIEW_FIELDS = [
@@ -846,6 +847,9 @@ async function pasteAndInspectJson() {
 }
 
 async function generateLocalRaw(request) {
+    if (!isLocalModelLoadingEnabled()) {
+        throw new Error('本地模型加载已关闭，请先在“设置 → 模型连接”中打开。');
+    }
     const settings = getLocalWorkshopSettings();
     const response = await fetch(getLocalChatCompletionUrl(settings), {
         method: 'POST',
@@ -919,6 +923,10 @@ function updateBlueprintFieldState(control) {
 async function runWorkshop() {
     const freeform = query('[data-workshop-prompt]').value.trim();
     state.provider = getSelectedProvider();
+    if (state.provider === WORKSHOP_PROVIDER.LOCAL && !isLocalModelLoadingEnabled()) {
+        showError('本地模型加载已关闭，请先到“设置 → 模型连接”打开开关。');
+        return;
+    }
     if (state.provider === WORKSHOP_PROVIDER.CHAT && (!online_status || online_status === 'no_connection')) {
         showError('当前没有连接可用模型。请先到“设置 → 模型连接”完成连接，再回来创作。');
         return;
@@ -1020,6 +1028,10 @@ async function rerunReview() {
         return;
     }
     state.provider = getSelectedProvider();
+    if (state.provider === WORKSHOP_PROVIDER.LOCAL && !isLocalModelLoadingEnabled()) {
+        showError('本地模型加载已关闭，请先到“设置 → 模型连接”打开开关。');
+        return;
+    }
     if (state.provider === WORKSHOP_PROVIDER.CHAT && (!online_status || online_status === 'no_connection')) {
         showError('当前没有连接可用模型。你仍可查看本地检查结果，或连接模型后再做 AI 深度审校。');
         return;
@@ -1079,7 +1091,13 @@ function buildAuditedCard() {
 function openOriginalCreateEditor() {
     closeWorkshop();
     state.bypassNextCreateClick = true;
-    document.querySelector('#rm_button_create')?.click();
+    const rightNavPanel = document.querySelector('#right-nav-panel');
+    const rightNavDrawer = rightNavPanel?.closest('.drawer');
+    const drawerIsOpen = rightNavPanel?.classList.contains('openDrawer');
+    if (!drawerIsOpen) {
+        rightNavDrawer?.querySelector('.drawer-toggle')?.click();
+    }
+    window.setTimeout(() => document.querySelector('#rm_button_create')?.click(), drawerIsOpen ? 0 : 140);
 }
 
 function applyDraft() {

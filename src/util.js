@@ -653,7 +653,14 @@ export function removeOldBackups(directory, prefix, limit = null) {
                 break;
             }
 
-            fs.unlinkSync(oldest);
+            try {
+                fs.unlinkSync(oldest);
+            } catch (error) {
+                // Backup cleanup is maintenance work. A read-only or
+                // temporarily locked backup must not terminate the server or
+                // turn an otherwise successful settings save into a failure.
+                console.warn(`Could not remove old backup ${oldest}: ${error.message}`);
+            }
         }
     }
 }

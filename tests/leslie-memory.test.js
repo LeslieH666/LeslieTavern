@@ -7,6 +7,7 @@ import express from 'express';
 import { LeslieMemoryStore } from '../src/leslie-memory/store.js';
 import { resolveMemoryUserRoot, router as memoryRouter } from '../src/leslie-memory/router.js';
 import { scoreMemoryEvent, selectMemoryEvents } from '../src/leslie-memory/scoring.js';
+import { MEMORY_MODEL_PROVIDERS, normalizeMemoryModelSettings } from '../src/leslie-memory/schema.js';
 
 const STORY_BINDING = {
     storyScopeId: '11111111-1111-4111-8111-111111111111',
@@ -21,6 +22,11 @@ const STORY_BINDING = {
 };
 
 describe('Leslie memory request path', () => {
+    test('keeps the DeepSeek memory provider in the persisted schema allowlist', () => {
+        expect(MEMORY_MODEL_PROVIDERS).toContain('deepseek');
+        expect(normalizeMemoryModelSettings({ provider: 'deepseek' }).provider).toBe('deepseek');
+    });
+
     test('normalizes SillyTavern relative user roots without touching user data', () => {
         const relativeRoot = path.join('data', 'default-user');
         const request = { user: { directories: { root: relativeRoot } } };
@@ -119,7 +125,7 @@ describe('Leslie memory store', () => {
         });
 
         expect(result.identityStatus).toBe('matched');
-        expect(result.memory.manifest.schemaVersion).toBe(2);
+        expect(result.memory.manifest.schemaVersion).toBe(3);
         expect(result.memory.manifest.identityBinding.personaName).toBe('哥哥');
         expect(mismatch.identityStatus).toBe('mismatch');
         expect(() => store.assertStoryScope(result.memory.manifest.id, otherBinding.storyScopeId)).toThrow(/different Persona/);
@@ -251,6 +257,77 @@ describe('Leslie memory store', () => {
         expect(restored.relationship).toBeUndefined();
         expect(restored.growth.relationship).toBe('Cautious allies.');
         expect(restored.revision).toBe(3);
+    });
+
+    test('migrates legacy state to an independent memory-model setting and keeps a rollback copy', () => {
+        const { memory } = store.ensureMemory({ chatKey: 'legacy-chat', characterKey: 'character' });
+        const paths = store.getPaths(memory.manifest.id);
+        const legacyState = JSON.parse(fs.readFileSync(paths.state, 'utf8'));
+        delete legacyState.settings.memoryModel;
+        legacyState.schemaVersion = 2;
+        legacyState.growth.relationship = 'A preserved legacy relationship.';
+        const legacyManifest = JSON.parse(fs.readFileSync(paths.manifest, 'utf8'));
+        legacyManifest.schemaVersion = 2;
+        fs.writeFileSync(paths.state, `${JSON.stringify(legacyState)}\n`);
+        fs.writeFileSync(paths.manifest, `${JSON.stringify(legacyManifest)}\n`);
+
+        const migrated = store.getMemory(memory.manifest.id);
+        const historyFiles = fs.readdirSync(paths.history);
+
+        expect(migrated.manifest.schemaVersion).toBe(3);
+        expect(migrated.state.schemaVersion).toBe(3);
+        expect(migrated.state.settings.memoryModel.provider).toBe('chat');
+        expect(migrated.state.growth.relationship).toBe('A preserved legacy relationship.');
+        expect(historyFiles.some(file => file.startsWith('state-migration-v2-'))).toBe(true);
+        expect(historyFiles.some(file => file.startsWith('manifest-migration-v2-'))).toBe(true);
+    });
+
+    test('persists a separate memory model and restores the previous selection', () => {
+        const { memory } = store.ensureMemory({ chatKey: 'model-chat', characterKey: 'character' });
+        const id = memory.manifest.id;
+        const local = store.updateState(id, {
+            settings: {
+                memoryModel: {
+                    provider: 'local',
+                    endpoint: 'http://127.0.0.1:5001',
+                    model: 'peach-local',
+                    apiKey: 'local-only-secret',
+                    temperature: 0.4,
+                },
+            },
+        });
+
+        expect(local.settings.memoryModel).toMatchObject({
+            provider: 'local',
+            endpoint: 'http://127.0.0.1:5001',
+            model: 'peach-local',
+            temperature: 0.4,
+        });
+        expect(store.getMemory(id).state.settings.memoryModel.apiKey).toBe('local-only-secret');
+
+        const deepseek = store.updateState(id, {
+            settings: {
+                memoryModel: {
+                    provider: 'deepseek',
+                    endpoint: 'https://api.deepseek.com',
+                    model: 'deepseek-v4-flash',
+                    apiKey: 'synthetic-deepseek-key',
+                    temperature: 0.2,
+                },
+            },
+        });
+
+        expect(deepseek.settings.memoryModel).toMatchObject({
+            provider: 'deepseek',
+            endpoint: 'https://api.deepseek.com',
+            model: 'deepseek-v4-flash',
+            temperature: 0.2,
+        });
+        expect(store.getMemory(id).state.settings.memoryModel.apiKey).toBe('synthetic-deepseek-key');
+
+        const restored = store.restoreState(id, 0);
+        expect(restored.settings.memoryModel.provider).toBe('chat');
+        expect(store.getMemory(id).state.settings.memoryModel.provider).toBe('chat');
     });
 
     test('creates a separate branch and drops events after the branch point', () => {

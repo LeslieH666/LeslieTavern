@@ -8,7 +8,11 @@ The configured starter model is:
 
 Download source: <https://huggingface.co/QuantFactory/Peach-2.0-9B-8k-Roleplay-GGUF>
 
-For an 8GB GPU, start with an 8K context and use either:
+For an 8GB GPU, the project-provided Windows shortcut `启动本地模型.cmd` starts KoboldCpp with an 8K context, CUDA, and the local-only endpoint `http://127.0.0.1:5001`. Stop it with `关闭本地模型.cmd`.
+
+The LeslieTavern model connection page can identify the running Peach service and apply its compatible provider, model, and generation defaults with one click. Peach is not a separate API provider.
+
+If you configure a runtime manually, use either:
 
 - KoboldCpp on `http://127.0.0.1:5001` (recommended)
 - llama.cpp server on `http://127.0.0.1:8080`

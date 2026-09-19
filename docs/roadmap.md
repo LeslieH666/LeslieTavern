@@ -18,8 +18,13 @@
 - Dedicated AIRI mode with automatic provider selection, no onboarding window, and a reduced settings surface.
 - Windows launch center with LeslieTavern-only, combined AIRI, diagnostics, rebuild, and tracked shutdown modes.
 - Optional interactive-guidance input mode with three AI-generated replies anchored to the current user Persona, automatic collapse for free-form typing, and the existing model, character-card, World Info, Persona, memory, and chat pipeline as its source of truth.
-- One-click local Peach 2.0 GGUF API setup for KoboldCpp or llama.cpp, with the model weights kept outside Git.
+- One-click local Peach 2.0 GGUF detection and API configuration through the existing KoboldCpp or llama.cpp adapters, plus Windows start/stop shortcuts; model weights remain outside Git.
 - Character workshop provider switch between the existing chat API and local Peach generation, with structured-output budgeting and preview-only drafts.
+- Per-memory model selection for automatic memory extraction and growth synthesis, including the existing chat API, the DeepSeek OpenAI Chat Completions API, local OpenAI-compatible runtimes, and independent OpenAI-compatible endpoints.
+- Project-wide local-model loading gate shared by chat, character workshop, and memory-model adapters; disabling it leaves local model files intact while preventing local calls.
+- Model connection checks retain the selected provider and visible endpoint across settings refreshes, recover the button after failures, and keep autosave/backup maintenance from taking down the service.
+- Bundled Peach roleplay output now stops at its known bracketed state/scene continuation pattern before contaminated text can be saved into chat history.
+- One-click standard Character Card V2/V3 JSON import in the manual character editor, with an optional avatar upload synchronized to the native create form before saving.
 
 ## Stabilization priorities
 

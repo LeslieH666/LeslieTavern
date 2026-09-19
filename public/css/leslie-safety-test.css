@@ -1,0 +1,558 @@
+html.leslie-safety-test-open,
+body.leslie-safety-test-open {
+    overflow: hidden;
+}
+
+body.leslie-modern .leslie-safety-test-launcher {
+    position: relative;
+    display: grid;
+    width: 34px;
+    height: 34px;
+    margin: 0 3px;
+    place-items: center;
+    color: var(--leslie-text-soft);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+body.leslie-modern .leslie-safety-test-launcher:hover,
+body.leslie-modern .leslie-safety-test-launcher:focus-visible {
+    color: var(--leslie-accent-strong);
+    background: var(--leslie-accent-soft);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+body.leslie-modern .leslie-safety-test-overlay {
+    --safety-overlay: color-mix(in srgb, var(--leslie-canvas) 91%, transparent);
+    --safety-card: color-mix(in srgb, var(--leslie-surface-subtle) 80%, var(--leslie-surface-solid));
+    --safety-raised: color-mix(in srgb, var(--leslie-surface-solid) 88%, var(--leslie-accent-soft));
+    --safety-accent-text: color-mix(in srgb, var(--leslie-accent) 68%, var(--leslie-text));
+    --safety-success: color-mix(in srgb, var(--leslie-text) 72%, #25805a);
+    --safety-warning: color-mix(in srgb, var(--leslie-text) 72%, #b26a25);
+    --safety-danger: color-mix(in srgb, var(--leslie-text) 72%, #c94a4a);
+    position: fixed;
+    z-index: 52000;
+    inset: 0;
+    display: grid;
+    box-sizing: border-box;
+    width: 100dvw;
+    height: 100dvh;
+    padding: 16px;
+    color: var(--leslie-text);
+    background:
+        radial-gradient(circle at 8% 8%, rgb(47 125 244 / 18%), transparent 30%),
+        radial-gradient(circle at 93% 92%, rgb(201 74 74 / 10%), transparent 28%),
+        var(--safety-overlay);
+    opacity: 0;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    transition: opacity 180ms ease;
+}
+
+body.leslie-modern .leslie-safety-test-overlay[hidden] {
+    display: none !important;
+}
+
+body.leslie-modern .leslie-safety-test-overlay[data-open="true"] {
+    opacity: 1;
+}
+
+body.leslie-modern .leslie-safety-test-overlay [hidden] {
+    display: none !important;
+}
+
+body.leslie-modern .leslie-safety-test-panel {
+    display: grid;
+    grid-template-rows: auto auto auto auto minmax(150px, 0.85fr) auto auto;
+    width: min(1180px, calc(100dvw - 32px));
+    height: min(920px, calc(100dvh - 32px));
+    margin: auto;
+    overflow: hidden;
+    background: var(--leslie-surface-solid);
+    border: 1px solid var(--leslie-border);
+    border-radius: 28px;
+    box-shadow: 0 38px 110px rgb(24 48 76 / 28%);
+    transform: translateY(10px) scale(0.992);
+    transition: transform 180ms ease;
+}
+
+body.leslie-modern .leslie-safety-test-overlay[data-open="true"] .leslie-safety-test-panel {
+    transform: translateY(0) scale(1);
+}
+
+body.leslie-modern .leslie-safety-test-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 24px 26px 18px;
+    background: color-mix(in srgb, var(--leslie-surface-solid) 93%, var(--leslie-accent-soft));
+    border-bottom: 1px solid var(--leslie-border);
+}
+
+body.leslie-modern .leslie-safety-test-header h2 {
+    margin: 4px 0 5px;
+    color: var(--leslie-text);
+    font-size: 22px;
+    letter-spacing: -0.02em;
+}
+
+body.leslie-modern .leslie-safety-test-header h2 i {
+    margin-right: 7px;
+    color: var(--leslie-accent-strong);
+}
+
+body.leslie-modern .leslie-safety-test-header p,
+body.leslie-modern .leslie-safety-test-options p,
+body.leslie-modern .leslie-safety-test-section-heading p {
+    margin: 0;
+    color: var(--leslie-text-soft);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+body.leslie-modern .leslie-safety-test-eyebrow {
+    color: var(--safety-accent-text);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+}
+
+body.leslie-modern .leslie-safety-test-icon-button {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--leslie-text-soft);
+    background: var(--leslie-surface-subtle);
+    border: 1px solid var(--leslie-border);
+    border-radius: 12px;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+body.leslie-modern .leslie-safety-test-icon-button:hover,
+body.leslie-modern .leslie-safety-test-icon-button:focus-visible {
+    color: var(--leslie-text);
+    border-color: var(--leslie-accent);
+    outline: none;
+}
+
+body.leslie-modern .leslie-safety-test-context {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    padding: 11px 26px;
+    color: var(--leslie-text-soft);
+    background: var(--safety-card);
+    border-bottom: 1px solid var(--leslie-border);
+    font-size: 11px;
+}
+
+body.leslie-modern .leslie-safety-test-context strong {
+    color: var(--leslie-text);
+    font-weight: 750;
+}
+
+body.leslie-modern .leslie-safety-test-connection {
+    padding: 3px 8px;
+    color: var(--safety-warning);
+    background: rgb(217 135 54 / 10%);
+    border: 1px solid rgb(217 135 54 / 24%);
+    border-radius: 999px;
+    font-weight: 700;
+}
+
+body.leslie-modern .leslie-safety-test-notice {
+    padding: 9px 26px;
+    color: var(--leslie-text-soft);
+    background: color-mix(in srgb, var(--leslie-accent-soft) 45%, var(--leslie-surface-solid));
+    border-bottom: 1px solid var(--leslie-border);
+    font-size: 11px;
+}
+
+body.leslie-modern .leslie-safety-test-notice i {
+    margin-right: 6px;
+    color: var(--safety-accent-text);
+}
+
+body.leslie-modern .leslie-safety-test-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(240px, 0.75fr);
+    gap: 18px;
+    min-height: 0;
+    padding: 18px 26px 12px;
+    overflow: auto;
+}
+
+body.leslie-modern .leslie-safety-test-input-section,
+body.leslie-modern .leslie-safety-test-options {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    min-width: 0;
+}
+
+body.leslie-modern .leslie-safety-test-label,
+body.leslie-modern .leslie-safety-test-select-label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--leslie-text);
+    font-size: 12px;
+    font-weight: 750;
+}
+
+body.leslie-modern .leslie-safety-test-label small {
+    color: var(--leslie-text-soft);
+    font-size: 10px;
+    font-weight: 500;
+}
+
+body.leslie-modern .leslie-safety-test-body textarea,
+body.leslie-modern .leslie-safety-test-body select {
+    width: 100%;
+    box-sizing: border-box;
+    color: var(--leslie-text);
+    background: var(--leslie-surface-subtle);
+    border: 1px solid var(--leslie-border);
+    border-radius: 12px;
+}
+
+body.leslie-modern .leslie-safety-test-body textarea {
+    min-height: 74px;
+    padding: 11px 12px;
+    resize: vertical;
+    line-height: 1.5;
+}
+
+body.leslie-modern .leslie-safety-test-body textarea:first-of-type {
+    min-height: 122px;
+}
+
+body.leslie-modern .leslie-safety-test-body textarea:focus,
+body.leslie-modern .leslie-safety-test-body select:focus {
+    border-color: var(--leslie-accent);
+    outline: 2px solid color-mix(in srgb, var(--leslie-accent) 25%, transparent);
+}
+
+body.leslie-modern .leslie-safety-test-body textarea::placeholder {
+    color: var(--leslie-text-soft);
+    opacity: 0.8;
+}
+
+body.leslie-modern .leslie-safety-test-options {
+    padding: 14px;
+    background: var(--safety-card);
+    border: 1px solid var(--leslie-border);
+    border-radius: 16px;
+}
+
+body.leslie-modern .leslie-safety-test-options h3 {
+    margin: 0;
+    color: var(--leslie-text);
+    font-size: 14px;
+}
+
+body.leslie-modern .leslie-safety-test-options label:not(.leslie-safety-test-select-label) {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    color: var(--leslie-text);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+body.leslie-modern .leslie-safety-test-options input[type="checkbox"] {
+    accent-color: var(--leslie-accent);
+}
+
+body.leslie-modern .leslie-safety-test-select-label {
+    margin-top: 4px;
+}
+
+body.leslie-modern .leslie-safety-test-options select {
+    padding: 8px 10px;
+}
+
+body.leslie-modern .leslie-safety-test-prompt-section,
+body.leslie-modern .leslie-safety-test-results-section {
+    min-height: 0;
+    padding: 0 26px 12px;
+}
+
+body.leslie-modern .leslie-safety-test-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 8px;
+}
+
+body.leslie-modern .leslie-safety-test-section-heading > div > div {
+    display: grid;
+    gap: 2px;
+}
+
+body.leslie-modern .leslie-safety-test-section-heading > div {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+}
+
+body.leslie-modern .leslie-safety-test-section-heading > div > span {
+    display: grid;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 auto;
+    place-items: center;
+    color: #fff;
+    background: var(--leslie-accent);
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 800;
+}
+
+body.leslie-modern .leslie-safety-test-section-heading h3 {
+    margin: 0;
+    color: var(--leslie-text);
+    font-size: 13px;
+}
+
+body.leslie-modern .leslie-safety-test-prompt-section details {
+    overflow: hidden;
+    background: var(--safety-card);
+    border: 1px solid var(--leslie-border);
+    border-radius: 12px;
+}
+
+body.leslie-modern .leslie-safety-test-prompt-section summary {
+    padding: 8px 11px;
+    color: var(--leslie-text-soft);
+    cursor: pointer;
+    font-size: 11px;
+}
+
+body.leslie-modern .leslie-safety-test-prompt-preview {
+    max-height: 180px;
+    margin: 0;
+    padding: 11px;
+    overflow: auto;
+    color: var(--leslie-text);
+    background: color-mix(in srgb, var(--leslie-surface-subtle) 70%, transparent);
+    border-top: 1px solid var(--leslie-border);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 10px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+body.leslie-modern .leslie-safety-test-results-section {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    padding-bottom: 8px;
+}
+
+body.leslie-modern .leslie-safety-test-results {
+    display: grid;
+    min-height: 0;
+    gap: 8px;
+    overflow: auto;
+    padding-right: 4px;
+}
+
+body.leslie-modern .leslie-safety-test-results:empty::before {
+    display: block;
+    padding: 18px;
+    color: var(--leslie-text-soft);
+    background: var(--safety-card);
+    border: 1px dashed var(--leslie-border);
+    border-radius: 12px;
+    content: '运行后将在这里显示 DeepSeek 的逐条响应。';
+    font-size: 11px;
+    text-align: center;
+}
+
+body.leslie-modern .leslie-safety-test-result-card {
+    padding: 11px 13px;
+    background: var(--safety-card);
+    border: 1px solid var(--leslie-border);
+    border-left: 3px solid var(--leslie-border);
+    border-radius: 12px;
+}
+
+body.leslie-modern .leslie-safety-test-result-card[data-result-code="possible_refusal"] {
+    border-left-color: #4ba879;
+}
+
+body.leslie-modern .leslie-safety-test-result-card[data-result-code="contains_test_term"] {
+    border-left-color: #d98736;
+}
+
+body.leslie-modern .leslie-safety-test-result-card[data-result-code="error"] {
+    border-left-color: #c94a4a;
+}
+
+body.leslie-modern .leslie-safety-test-result-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+body.leslie-modern .leslie-safety-test-result-heading strong {
+    color: var(--leslie-text);
+    font-size: 11px;
+}
+
+body.leslie-modern .leslie-safety-test-result-heading span {
+    color: var(--leslie-text-soft);
+    font-size: 10px;
+    font-weight: 700;
+}
+
+body.leslie-modern .leslie-safety-test-result-card small {
+    color: var(--leslie-text-soft);
+    font-size: 10px;
+}
+
+body.leslie-modern .leslie-safety-test-result-input {
+    margin: 5px 0 8px;
+    color: var(--leslie-text);
+    font-size: 11px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+body.leslie-modern .leslie-safety-test-result-output {
+    max-height: 180px;
+    margin: 3px 0 7px;
+    padding: 9px 10px;
+    overflow: auto;
+    color: var(--leslie-text);
+    background: var(--leslie-surface-subtle);
+    border-radius: 9px;
+    font-family: inherit;
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+body.leslie-modern .leslie-safety-test-result-meta {
+    display: block;
+}
+
+body.leslie-modern .leslie-safety-test-status,
+body.leslie-modern .leslie-safety-test-error {
+    margin: 0 26px 8px;
+    padding: 8px 11px;
+    border-radius: 9px;
+    font-size: 11px;
+}
+
+body.leslie-modern .leslie-safety-test-status {
+    color: var(--leslie-text-soft);
+    background: var(--safety-card);
+}
+
+body.leslie-modern .leslie-safety-test-status[data-tone="working"] {
+    color: var(--safety-accent-text);
+}
+
+body.leslie-modern .leslie-safety-test-status[data-tone="success"] {
+    color: var(--safety-success);
+}
+
+body.leslie-modern .leslie-safety-test-status[data-tone="error"],
+body.leslie-modern .leslie-safety-test-error {
+    color: var(--safety-danger);
+    background: rgb(201 74 74 / 9%);
+    border: 1px solid rgb(201 74 74 / 22%);
+}
+
+body.leslie-modern .leslie-safety-test-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 26px 18px;
+    background: var(--safety-card);
+    border-top: 1px solid var(--leslie-border);
+}
+
+body.leslie-modern .leslie-safety-test-footer-spacer {
+    flex: 1;
+}
+
+body.leslie-modern .leslie-safety-test-button {
+    min-height: 34px;
+    padding: 7px 13px;
+    color: var(--leslie-text);
+    background: var(--leslie-surface-subtle);
+    border: 1px solid var(--leslie-border);
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+body.leslie-modern .leslie-safety-test-button:hover:not(:disabled),
+body.leslie-modern .leslie-safety-test-button:focus-visible {
+    border-color: var(--leslie-accent);
+    outline: none;
+}
+
+body.leslie-modern .leslie-safety-test-button.is-primary {
+    color: #fff;
+    background: var(--leslie-accent);
+    border-color: var(--leslie-accent);
+}
+
+body.leslie-modern .leslie-safety-test-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+@media (max-width: 760px) {
+    body.leslie-modern .leslie-safety-test-overlay {
+        padding: 0;
+    }
+
+    body.leslie-modern .leslie-safety-test-panel {
+        width: 100dvw;
+        height: 100dvh;
+        border-radius: 0;
+    }
+
+    body.leslie-modern .leslie-safety-test-header,
+    body.leslie-modern .leslie-safety-test-context,
+    body.leslie-modern .leslie-safety-test-notice,
+    body.leslie-modern .leslie-safety-test-body,
+    body.leslie-modern .leslie-safety-test-prompt-section,
+    body.leslie-modern .leslie-safety-test-results-section,
+    body.leslie-modern .leslie-safety-test-footer {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    body.leslie-modern .leslie-safety-test-body {
+        grid-template-columns: 1fr;
+    }
+
+    body.leslie-modern .leslie-safety-test-footer {
+        flex-wrap: wrap;
+    }
+
+    body.leslie-modern .leslie-safety-test-footer-spacer {
+        display: none;
+    }
+}

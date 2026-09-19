@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
-export const MEMORY_SCHEMA_VERSION = 2;
+export const MEMORY_SCHEMA_VERSION = 3;
 export const MEMORY_LEVELS = Object.freeze(['A', 'B', 'C']);
 export const MEMORY_STATUSES = Object.freeze(['active', 'pending', 'archived', 'invalid', 'superseded']);
+export const MEMORY_MODEL_PROVIDERS = Object.freeze(['chat', 'local', 'deepseek', 'openai-compatible']);
 
 const MAX_SUMMARY_LENGTH = 2000;
 const MAX_LABEL_LENGTH = 120;
@@ -139,6 +140,30 @@ export function normalizeGrowth(value) {
     };
 }
 
+export function createInitialMemoryModelSettings() {
+    return {
+        provider: 'chat',
+        endpoint: '',
+        model: '',
+        apiKey: '',
+        temperature: 0.2,
+        responseTokens: 1400,
+    };
+}
+
+export function normalizeMemoryModelSettings(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const defaults = createInitialMemoryModelSettings();
+    return {
+        provider: MEMORY_MODEL_PROVIDERS.includes(source.provider) ? source.provider : defaults.provider,
+        endpoint: cleanString(source.endpoint, 1000),
+        model: cleanString(source.model, 500),
+        apiKey: cleanString(source.apiKey, 1000),
+        temperature: clampNumber(source.temperature, 0, 1, defaults.temperature),
+        responseTokens: Math.round(clampNumber(source.responseTokens, 256, 4096, defaults.responseTokens)),
+    };
+}
+
 export function createInitialState() {
     const now = new Date().toISOString();
     return {
@@ -159,15 +184,59 @@ export function createInitialState() {
             maxMemories: 8,
             bDecayTurns: 40,
             cDecayTurns: 8,
+            memoryModel: createInitialMemoryModelSettings(),
         },
         createdAt: now,
         updatedAt: now,
     };
 }
 
+export function normalizeMemoryState(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const initial = createInitialState();
+    const settings = source.settings && typeof source.settings === 'object' && !Array.isArray(source.settings)
+        ? source.settings
+        : {};
+    const analysis = source.analysis && typeof source.analysis === 'object' && !Array.isArray(source.analysis)
+        ? source.analysis
+        : {};
+    const now = new Date().toISOString();
+    return {
+        schemaVersion: MEMORY_SCHEMA_VERSION,
+        revision: Math.round(clampNumber(source.revision, 0, Number.MAX_SAFE_INTEGER, initial.revision)),
+        enabled: source.enabled === true,
+        growth: normalizeGrowth(source.growth),
+        analysis: {
+            autoExtract: analysis.autoExtract === true,
+            interval: Math.round(clampNumber(analysis.interval, 1, 100, initial.analysis.interval)),
+            lastAnalyzedMessageId: Math.round(clampNumber(analysis.lastAnalyzedMessageId, -1, Number.MAX_SAFE_INTEGER, initial.analysis.lastAnalyzedMessageId)),
+            lastRunAt: analysis.lastRunAt ? cleanString(analysis.lastRunAt, 64) : null,
+            lastError: analysis.lastError ? cleanString(analysis.lastError, 2000) : null,
+        },
+        settings: {
+            memoryBudgetTokens: Math.round(clampNumber(settings.memoryBudgetTokens, 128, 8000, initial.settings.memoryBudgetTokens)),
+            contextShare: clampNumber(settings.contextShare, 0.02, 0.3, initial.settings.contextShare),
+            maxMemories: Math.round(clampNumber(settings.maxMemories, 1, 30, initial.settings.maxMemories)),
+            bDecayTurns: Math.round(clampNumber(settings.bDecayTurns, 4, 500, initial.settings.bDecayTurns)),
+            cDecayTurns: Math.round(clampNumber(settings.cDecayTurns, 1, 100, initial.settings.cDecayTurns)),
+            memoryModel: normalizeMemoryModelSettings(settings.memoryModel),
+        },
+        createdAt: cleanString(source.createdAt, 64) || now,
+        updatedAt: cleanString(source.updatedAt, 64) || now,
+    };
+}
+
 export function mergeState(current, patch) {
     const source = patch && typeof patch === 'object' && !Array.isArray(patch) ? patch : {};
-    const next = structuredClone(current);
+    const base = normalizeMemoryState(current);
+    const currentSource = current && typeof current === 'object' && !Array.isArray(current) ? structuredClone(current) : {};
+    const next = {
+        ...currentSource,
+        ...base,
+        growth: { ...(currentSource.growth ?? {}), ...base.growth },
+        analysis: { ...(currentSource.analysis ?? {}), ...base.analysis },
+        settings: { ...(currentSource.settings ?? {}), ...base.settings },
+    };
 
     if (typeof source.enabled === 'boolean') {
         next.enabled = source.enabled;
@@ -209,10 +278,13 @@ export function mergeState(current, patch) {
         if (settings.cDecayTurns !== undefined) {
             next.settings.cDecayTurns = Math.round(clampNumber(settings.cDecayTurns, 1, 100, next.settings.cDecayTurns));
         }
+        if (settings.memoryModel !== undefined) {
+            next.settings.memoryModel = normalizeMemoryModelSettings(settings.memoryModel);
+        }
     }
 
     next.schemaVersion = MEMORY_SCHEMA_VERSION;
-    next.revision = Number(current.revision ?? 0) + 1;
+    next.revision = Number(base.revision ?? 0) + 1;
     next.updatedAt = new Date().toISOString();
     return next;
 }

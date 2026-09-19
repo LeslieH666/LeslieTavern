@@ -26,9 +26,24 @@ body.leslie-modern .leslie-local-model-card-heading > div:first-child {
 
 body.leslie-modern .leslie-local-model-card-heading small,
 body.leslie-modern .leslie-local-model-description,
-body.leslie-modern .leslie-local-model-status {
+body.leslie-modern .leslie-local-model-status,
+body.leslie-modern .leslie-local-model-loading-status {
     color: var(--leslie-text-soft, #5e7188);
     font-size: 12px;
+}
+
+body.leslie-modern .leslie-local-model-loading-status {
+    margin-top: -2px;
+}
+
+body.leslie-modern .leslie-local-model-detect-status {
+    min-height: 16px;
+    color: var(--leslie-text-soft, #5e7188);
+    font-size: 12px;
+}
+
+body.leslie-modern .leslie-local-model-detect-status[data-state="error"] {
+    color: #b44a4a;
 }
 
 body.leslie-modern .leslie-local-model-description {
@@ -82,6 +97,10 @@ body.leslie-modern .leslie-local-model-actions button {
     justify-content: flex-start;
     flex-wrap: wrap;
     text-align: left;
+}
+
+body.leslie-modern .leslie-local-model-actions button:only-child {
+    flex-basis: 100%;
 }
 
 body.leslie-modern .leslie-local-model-actions button small {

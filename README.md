@@ -68,11 +68,13 @@ pnpm run dev
 
 本项目提供以下 Windows 快捷入口：
 
-- `启动中心.cmd`：选择只启动 LeslieTavern、联合启动 AIRI、停止或诊断。
+- `启动中心.cmd`：选择只启动 LeslieTavern、联合启动 AIRI、启动/关闭本地 Peach 模型、停止或诊断。
 - `启动 LeslieTavern.cmd`
 - `启动 LeslieTavern 与 AIRI.cmd`
 - `关闭 LeslieTavern.cmd`
 - `关闭 LeslieTavern 与 AIRI.cmd`
+- `启动本地模型.cmd`
+- `关闭本地模型.cmd`
 - `备份用户数据.cmd`
 - `打开用户数据目录.cmd`
 - `查看运行日志.cmd`
@@ -93,13 +95,20 @@ models/Peach-2.0-9B-8k-Roleplay/Peach-2.0-9B-8k-Roleplay.Q4_K_M.gguf
 
 使用流程：
 
-1. 启动本地推理服务并加载 GGUF。
-2. 在 LeslieTavern 的“设置 → 模型连接”中选择 KoboldCpp 或 llama.cpp，应用本地快捷配置并连接。
+1. 双击 `启动本地模型.cmd`，启动项目适配的 KoboldCpp 并加载 GGUF；关闭时使用 `关闭本地模型.cmd`。
+2. 在 LeslieTavern 的“设置 → 模型连接”中点击“**一键识别并自动配置**”。按钮会检查本机已启动的适配服务，自动选择底层运行时、模型和生成参数，然后执行原有连接流程。
 3. 打开“AI 角色工坊”，在“角色卡生成接口”中选择当前聊天 API 或本地 Peach。
 4. 检查简报、知识核对、JSON 草稿和质量审校；预览不会自动写入角色目录。
 5. 只有点击“带入角色编辑器”并在原有编辑流程中保存，才会创建正式角色卡。
+6. 也可以在“手动创建”的二级界面中选择标准 JSON 角色卡和头像，点击“导入并填充创建表单”，确认字段后使用原有“创建角色”按钮保存。
 
 本地模型是否遵循某条内容约束取决于模型权重、推理运行时和当前提示词；项目不把“无限制”作为稳定性或安全性保证。角色工坊的本地接口只负责本次草稿生成，不会替换全局聊天 API 设置。
+
+角色记忆的“自动整理”也支持独立模型分层：打开角色记忆面板的“设置与安全”，在“记忆整理模型”中选择跟随聊天 API、DeepSeek API、本地 KoboldCpp / llama.cpp，或独立 OpenAI-compatible 接口。DeepSeek 选项使用与聊天 API 相同的 OpenAI Chat Completions 格式；该选择按每个角色记忆档案保存，记忆抽取和成长整理不会改变角色正常聊天的模型设置；旧版记忆档案会自动迁移并保留迁移前备份。
+
+设置 → 模型连接中的“启用本地模型加载”是项目侧总开关。关闭后会阻止聊天、角色工坊和记忆整理调用本地模型，并把项目连接状态置为未连接；它不会删除 GGUF 文件。KoboldCpp / llama.cpp 是独立进程，需要单独停止才能释放显存。
+
+Peach 不会作为新的 API provider 出现在列表中；识别按钮只会在现有的 KoboldCpp 或 llama.cpp 兼容配置上完成自动填充。其他本地模型仍可在完整连接设置中手动配置。
 
 ## 项目结构
 
@@ -111,6 +120,7 @@ LeslieTavern/
 ├─ packaging/      Windows 本机与便携版脚本
 ├─ public/         浏览器端界面与扩展
 │  ├─ scripts/leslie-character-workshop/
+│  ├─ scripts/leslie-character-import*.js
 │  ├─ scripts/leslie-story-choices.js
 │  └─ scripts/leslie-local-model-core.js
 ├─ scripts/        仓库维护和数据迁移工具
