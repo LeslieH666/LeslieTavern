@@ -41,6 +41,7 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 - Made the local Windows launcher verify the listener resolved from its actual configuration and report available LAN URLs when allowlisted LAN access is explicitly enabled.
 - Simplified the dedicated AIRI frontend to auto-configure Leslie chat and speech, skip onboarding, hide provider and profile choices, and show only connection and display-model settings.
 - Made the combined launcher rebuild AIRI automatically when its source is newer than the existing desktop build.
+- Made the combined launcher build AIRI workspace dependencies before the desktop app, preventing missing package exports after branch switches or clean checkouts.
 - Removed cross-window `DataCloneError` failures from automatic Leslie provider setup.
 - Made character-avatar replacement preserve the existing character card and refresh character state, thumbnails, chat images, and editor previews without stale browser caches.
 - Made AIRI Live2D startup fail open when local IndexedDB hydration stalls, restored the bundled Hiyori model when the companion selection is empty, kept the companion renderer active in the background, and stopped opening DevTools during ordinary local launches.

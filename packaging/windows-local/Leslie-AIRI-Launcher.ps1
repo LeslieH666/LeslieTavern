@@ -172,20 +172,22 @@ function Ensure-AiriBuild([string]$AiriRoot, [bool]$ForceBuild) {
     }
 
     $nodePath = Resolve-NodeExecutable
-    $electronVite = Join-Path $appRoot 'node_modules\electron-vite\bin\electron-vite.js'
-    if (-not (Test-Path -LiteralPath $electronVite)) {
+    $turboPath = Join-Path $AiriRoot 'node_modules\.bin\turbo.cmd'
+    $pnpmCommand = Get-Command pnpm.cmd -ErrorAction SilentlyContinue
+    if (-not (Test-Path -LiteralPath $turboPath) -or -not $pnpmCommand) {
         throw 'AIRI dependencies are missing. Install them before building AIRI.'
     }
 
     Write-Host 'Building AIRI Desktop. This can take a few minutes...' -ForegroundColor Yellow
+    Remove-Item -LiteralPath $buildStampPath -Force -ErrorAction SilentlyContinue
     $oldPath = $env:Path
     try {
         $env:Path = "$(Split-Path -Parent $nodePath);$oldPath"
-        Push-Location $appRoot
+        Push-Location $AiriRoot
         try {
-            & $nodePath $electronVite build
+            & $turboPath run build '--filter=@proj-airi/stage-tamagotchi...'
             if ($LASTEXITCODE -ne 0) {
-                throw "AIRI build failed with exit code $LASTEXITCODE."
+                throw "AIRI dependency graph build failed with exit code $LASTEXITCODE."
             }
         } finally {
             Pop-Location
