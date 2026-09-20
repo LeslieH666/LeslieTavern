@@ -167,6 +167,7 @@ npm run check:repo
 - [项目概览](docs/project-overview.md)
 - [开发路线图](docs/roadmap.md)
 - [界面设计基线](docs/design.md)
+- [Cupertino UI 重构与回退说明](docs/cupertino-ui-refactor.md)
 - [角色卡工作流](docs/character-card-workflow.md)
 - [AIRI Bridge 说明](docs/airi-bridge.md)
 - [LeslieTavern 与 AIRI 启动指南](docs/airi-launcher.md)

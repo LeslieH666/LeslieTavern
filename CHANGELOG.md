@@ -6,6 +6,8 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 
 ### Added
 
+- A Cupertino design language for the conversation list, chat header, message bubbles, and composer, plus a persistent in-app switch back to the previous classic presentation.
+- A presentation-only design-language preference with unit coverage and a documented pre-refactor Git recovery point.
 - Persistent Leslie Moments background activity with genuine per-character read receipts, selective AI likes and comments, bounded retry/rate controls, and sidecar storage that leaves the original timeline intact.
 - A persisted three-level Leslie Moments enthusiasm slider that adjusts public-interaction probability, participating character count, and initial response delay while retaining the hourly model-call limit.
 - Threaded Leslie Moments replies that let Personas and AI characters continue conversations across repeated background selections, plus a clickable liker list with character identity and timestamps.

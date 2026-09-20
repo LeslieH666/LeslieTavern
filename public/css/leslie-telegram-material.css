@@ -452,6 +452,21 @@ body.leslie-modern .leslie-theme-menu[hidden] {
     display: none !important;
 }
 
+body.leslie-modern .leslie-theme-menu-heading {
+    padding: 5px 9px 3px;
+    color: var(--tg-text-secondary);
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+}
+
+body.leslie-modern .leslie-theme-menu-separator {
+    width: calc(100% - 12px);
+    margin: 5px 6px 3px;
+    border: 0;
+    border-top: 1px solid var(--tg-border-soft);
+}
+
 body.leslie-modern .leslie-theme-menu button {
     display: grid;
     width: 100%;

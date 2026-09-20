@@ -3,6 +3,12 @@
  * selected SillyTavern theme without changing or saving theme data.
  */
 
+import {
+    DESIGN_LANGUAGES,
+    readDesignLanguagePreference,
+    writeDesignLanguagePreference,
+} from './leslie-design-language-core.js';
+
 const DARK_LUMINANCE_THRESHOLD = 0.42;
 const THEME_PREFERENCE_KEY = 'leslie.theme.preference';
 const THEME_MODES = Object.freeze(['auto', 'light', 'dark']);
@@ -24,6 +30,31 @@ const THEME_MODE_META = Object.freeze({
         icon: 'fa-moon',
     },
 });
+
+const DESIGN_LANGUAGE_META = Object.freeze({
+    cupertino: {
+        label: 'Cupertino',
+        description: 'Apple 风格的新界面',
+        icon: 'fa-mobile-screen-button',
+    },
+    classic: {
+        label: '经典',
+        description: '重构前的 Telegram 风格',
+        icon: 'fa-paper-plane',
+    },
+});
+
+/**
+ * Access localStorage without breaking restricted or sandboxed webviews.
+ * @returns {Storage | null} Browser storage when available.
+ */
+function getBrowserStorage() {
+    try {
+        return globalThis.localStorage;
+    } catch {
+        return null;
+    }
+}
 
 /**
  * Convert an sRGB channel to a linear-light channel.
@@ -101,6 +132,16 @@ function setThemePreference(preference) {
 }
 
 /**
+ * Apply and persist a presentation-only design language.
+ * @param {'cupertino' | 'classic'} designLanguage Requested language.
+ */
+function setDesignLanguage(designLanguage) {
+    const normalized = writeDesignLanguagePreference(getBrowserStorage(), designLanguage);
+    document.body.dataset.leslieDesignLanguage = normalized;
+    syncThemeControls();
+}
+
+/**
  * Resolve the effective Leslie light/dark scheme.
  * @returns {'light' | 'dark'} Leslie color scheme.
  */
@@ -115,8 +156,17 @@ function applyLeslieColorScheme() {
     }
 
     document.body.dataset.leslieThemePreference ||= getThemePreference();
+    document.body.dataset.leslieDesignLanguage ||= readDesignLanguagePreference(getBrowserStorage());
     document.body.dataset.leslieColorScheme = getLeslieColorScheme();
     syncThemeControls();
+}
+
+function createMenuHeading(label) {
+    const heading = document.createElement('div');
+    heading.className = 'leslie-theme-menu-heading';
+    heading.textContent = label;
+    heading.setAttribute('role', 'presentation');
+    return heading;
 }
 
 /**
@@ -140,6 +190,8 @@ function ensureThemeMenu() {
     menu.setAttribute('role', 'menu');
     menu.setAttribute('aria-label', '界面主题');
 
+    menu.append(createMenuHeading('显示模式'));
+
     for (const mode of THEME_MODES) {
         const meta = THEME_MODE_META[mode];
         const button = document.createElement('button');
@@ -153,6 +205,28 @@ function ensureThemeMenu() {
         `;
         button.addEventListener('click', () => {
             setThemePreference(mode);
+            closeThemeMenu();
+        });
+        menu.append(button);
+    }
+
+    const separator = document.createElement('hr');
+    separator.className = 'leslie-theme-menu-separator';
+    menu.append(separator, createMenuHeading('设计语言'));
+
+    for (const designLanguage of DESIGN_LANGUAGES) {
+        const meta = DESIGN_LANGUAGE_META[designLanguage];
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.leslieDesignLanguage = designLanguage;
+        button.setAttribute('role', 'menuitemradio');
+        button.innerHTML = `
+            <i class="fa-solid ${meta.icon}" aria-hidden="true"></i>
+            <span><strong>${meta.label}</strong><small>${meta.description}</small></span>
+            <i class="fa-solid fa-check leslie-theme-choice-check" aria-hidden="true"></i>
+        `;
+        button.addEventListener('click', () => {
+            setDesignLanguage(designLanguage);
             closeThemeMenu();
         });
         menu.append(button);
@@ -212,11 +286,13 @@ function syncThemeControls() {
 
     const preference = document.body.dataset.leslieThemePreference || getThemePreference();
     const scheme = document.body.dataset.leslieColorScheme || getLeslieColorScheme();
+    const designLanguage = document.body.dataset.leslieDesignLanguage || readDesignLanguagePreference(getBrowserStorage());
     const meta = THEME_MODE_META[preference];
+    const designMeta = DESIGN_LANGUAGE_META[designLanguage];
 
     for (const button of document.querySelectorAll('.leslie-theme-toggle')) {
         button.dataset.leslieThemeMode = preference;
-        button.title = `界面主题：${meta.label}（当前${scheme === 'dark' ? '暗色' : '亮色'}）`;
+        button.title = `界面外观：${designMeta.label} · ${meta.label}（当前${scheme === 'dark' ? '暗色' : '亮色'}）`;
         button.setAttribute('aria-label', button.title);
         const icon = button.querySelector(':scope > i');
         if (icon) {
@@ -226,6 +302,12 @@ function syncThemeControls() {
 
     for (const choice of document.querySelectorAll('#leslie-theme-menu [data-leslie-theme-mode]')) {
         const selected = choice.dataset.leslieThemeMode === preference;
+        choice.classList.toggle('is-active', selected);
+        choice.setAttribute('aria-checked', String(selected));
+    }
+
+    for (const choice of document.querySelectorAll('#leslie-theme-menu [data-leslie-design-language]')) {
+        const selected = choice.dataset.leslieDesignLanguage === designLanguage;
         choice.classList.toggle('is-active', selected);
         choice.setAttribute('aria-checked', String(selected));
     }
