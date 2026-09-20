@@ -1,5 +1,5 @@
-export const MOMENTS_SCHEMA_VERSION = 1;
-export const MOMENT_MODES = Object.freeze(['reality', 'story', 'aside']);
+export const MOMENTS_SCHEMA_VERSION = 2;
+export const MOMENT_MODES = Object.freeze(['reality', 'story', 'aside', 'character']);
 
 const IDENTITY_TYPES = Object.freeze(['persona', 'character', 'group']);
 
@@ -52,6 +52,24 @@ export function normalizeStoryBinding(value) {
     };
 }
 
+function normalizeImportedMemories(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value.map(item => ({
+        memoryId: requireUuid(item?.memoryId, 'sourceContext.importedMemories.memoryId'),
+        eventId: requireUuid(item?.eventId, 'sourceContext.importedMemories.eventId'),
+        summary: cleanText(item?.summary, 'sourceContext.importedMemories.summary', 2000),
+    })).slice(0, 8);
+}
+
+export function normalizeMomentSourceContext(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    return {
+        importedMemories: normalizeImportedMemories(source.importedMemories),
+    };
+}
+
 export function normalizeMomentVisibility(value, { storyBinding = null } = {}) {
     const type = String(value?.type ?? 'all').trim();
     if (!['all', 'selected'].includes(type)) {
@@ -80,6 +98,16 @@ export function createMomentPost(value, { id, now = new Date().toISOString() }) 
         throw new TypeError(`Unsupported moment mode: ${mode}.`);
     }
     const author = normalizeMomentIdentity(value?.author, ['persona', 'character']);
+    const origin = value?.origin === 'ai' || author.type === 'character' ? 'ai' : 'user';
+    if (origin === 'ai' && author.type !== 'character') {
+        throw new TypeError('An AI-authored moment requires a character author.');
+    }
+    if (origin === 'user' && author.type !== 'persona') {
+        throw new TypeError('A user-authored moment requires a Persona author.');
+    }
+    if (mode === 'character' && origin !== 'ai') {
+        throw new TypeError('Only an AI character can publish a character moment.');
+    }
     const storyBinding = mode === 'story' ? normalizeStoryBinding(value?.storyBinding) : null;
     if (mode === 'story' && !storyBinding) {
         throw new TypeError('A story moment requires a bound story line.');
@@ -92,10 +120,12 @@ export function createMomentPost(value, { id, now = new Date().toISOString() }) 
         revision: 1,
         status: 'active',
         mode,
+        origin,
         content: cleanText(value?.content, 'content', 5000),
         author,
         visibility: normalizeMomentVisibility(value?.visibility, { storyBinding }),
         storyBinding,
+        sourceContext: normalizeMomentSourceContext(value?.sourceContext),
         reactions: {
             likes: [],
             comments: [],
@@ -107,12 +137,35 @@ export function createMomentPost(value, { id, now = new Date().toISOString() }) 
     };
 }
 
-export function validateMomentsTimeline(value) {
+export function migrateMomentsTimeline(value) {
     if (!value || typeof value !== 'object' || !Array.isArray(value.posts)) {
         throw new TypeError('The Leslie moments timeline is invalid.');
     }
-    if (Number(value.schemaVersion) !== MOMENTS_SCHEMA_VERSION) {
+    const version = Number(value.schemaVersion);
+    if (version === MOMENTS_SCHEMA_VERSION) {
+        return { value, migrated: false, fromVersion: version };
+    }
+    if (version !== 1) {
         throw new TypeError(`Unsupported Leslie moments schema version: ${value.schemaVersion}.`);
     }
-    return value;
+    const migrated = structuredClone(value);
+    migrated.schemaVersion = MOMENTS_SCHEMA_VERSION;
+    migrated.posts = migrated.posts.map(post => ({
+        ...post,
+        origin: post.origin === 'ai' || post.author?.type === 'character' ? 'ai' : 'user',
+        sourceContext: normalizeMomentSourceContext(post.sourceContext),
+    }));
+    for (const post of migrated.posts) {
+        requireUuid(post.id, 'post.id');
+        cleanText(post.content, 'post.content', 5000);
+        normalizeMomentIdentity(post.author, ['persona', 'character']);
+        if (!Array.isArray(post.reactions?.likes) || !Array.isArray(post.reactions?.comments)) {
+            throw new TypeError('A Leslie moment reaction collection is invalid.');
+        }
+    }
+    return { value: migrated, migrated: true, fromVersion: version };
+}
+
+export function validateMomentsTimeline(value) {
+    return migrateMomentsTimeline(value).value;
 }

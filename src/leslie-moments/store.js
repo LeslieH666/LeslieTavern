@@ -6,8 +6,8 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import {
     MOMENTS_SCHEMA_VERSION,
     createMomentPost,
+    migrateMomentsTimeline,
     normalizeMomentVisibility,
-    validateMomentsTimeline,
 } from './schema.js';
 
 export class LeslieMomentsStoreError extends Error {
@@ -57,6 +57,7 @@ export class LeslieMomentsStore {
         this.directory = path.join(userRoot, 'leslie', 'moments');
         this.timelinePath = path.join(this.directory, 'timeline.json');
         this.historyDirectory = path.join(this.directory, 'history');
+        this.migrationDirectory = path.join(this.historyDirectory, 'migrations');
     }
 
     readTimeline() {
@@ -64,7 +65,15 @@ export class LeslieMomentsStore {
             return createInitialTimeline();
         }
         try {
-            return validateMomentsTimeline(JSON.parse(fs.readFileSync(this.timelinePath, 'utf8')));
+            const parsed = JSON.parse(fs.readFileSync(this.timelinePath, 'utf8'));
+            const migration = migrateMomentsTimeline(parsed);
+            if (migration.migrated) {
+                fs.mkdirSync(this.migrationDirectory, { recursive: true });
+                const stamp = Date.now();
+                fs.copyFileSync(this.timelinePath, path.join(this.migrationDirectory, `timeline-v${migration.fromVersion}-${stamp}.json`));
+                writeJson(this.timelinePath, migration.value);
+            }
+            return migration.value;
         } catch (error) {
             throw new LeslieMomentsStoreError('CORRUPT_DATA', `Could not read the Leslie moments timeline. ${error.message}`);
         }
@@ -121,6 +130,9 @@ export class LeslieMomentsStore {
         if (!post) {
             throw new LeslieMomentsStoreError('NOT_FOUND', 'The requested moment was not found.');
         }
+        if (post.origin === 'ai' || post.author?.type === 'character') {
+            throw new LeslieMomentsStoreError('INVALID_STATE', 'AI-authored moments cannot be edited. Delete the moment instead.');
+        }
         if (post.author.entityId !== authorEntityId) {
             throw new LeslieMomentsStoreError('IDENTITY_MISMATCH', 'Only the Persona that published this moment can edit it.');
         }
@@ -142,7 +154,7 @@ export class LeslieMomentsStore {
         return post;
     }
 
-    setPostStatus(postId, status, authorEntityId) {
+    setPostStatus(postId, status) {
         if (!['active', 'archived'].includes(status)) {
             throw new LeslieMomentsStoreError('INVALID_INPUT', 'Unsupported moment status.');
         }
@@ -151,9 +163,6 @@ export class LeslieMomentsStore {
         const post = next.posts.find(item => item.id === postId);
         if (!post) {
             throw new LeslieMomentsStoreError('NOT_FOUND', 'The requested moment was not found.');
-        }
-        if (post.author.entityId !== authorEntityId) {
-            throw new LeslieMomentsStoreError('IDENTITY_MISMATCH', 'Only the Persona that published this moment can change it.');
         }
         if (post.status === status) {
             return post;

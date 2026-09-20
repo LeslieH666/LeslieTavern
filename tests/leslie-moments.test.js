@@ -10,6 +10,8 @@ import {
     LeslieMomentsActivityStore,
 } from '../src/leslie-moments/activity-store.js';
 import { LeslieMomentsStore } from '../src/leslie-moments/store.js';
+import { LeslieMomentsMemoryStore } from '../src/leslie-moments/memory-store.js';
+import { LeslieMomentsSettingsStore } from '../src/leslie-moments/settings-store.js';
 import {
     describeMomentVisibility,
     filterMomentPosts,
@@ -17,6 +19,7 @@ import {
     getMomentEnthusiasmProfile,
     normalizeLeslieMomentsSettings,
 } from '../public/scripts/extensions/leslie-moments/model.js';
+import { buildMomentsPromptContext } from '../public/scripts/extensions/leslie-moments/memory-context.js';
 
 const PERSONA = {
     entityId: '11111111-1111-4111-8111-111111111111',
@@ -141,6 +144,34 @@ describe('Leslie moments store', () => {
         expect(fs.readdirSync(path.join(temporaryRoot, 'leslie', 'moments', 'history')).length).toBeGreaterThanOrEqual(3);
     });
 
+    test('allows every local user to delete and restore any Persona or AI post without changing its original text', () => {
+        const post = store.createPost(realityDraft());
+        const archived = store.setPostStatus(post.id, 'archived');
+        const restored = store.setPostStatus(post.id, 'active');
+
+        expect(archived.content).toBe(post.content);
+        expect(restored.content).toBe(post.content);
+        expect(restored.author).toEqual(post.author);
+    });
+
+    test('migrates a v1 timeline only after preserving the complete source file', () => {
+        const post = store.createPost(realityDraft());
+        const timeline = store.readTimeline();
+        timeline.schemaVersion = 1;
+        delete timeline.posts[0].origin;
+        delete timeline.posts[0].sourceContext;
+        fs.writeFileSync(store.timelinePath, `${JSON.stringify(timeline, null, 4)}\n`, 'utf8');
+
+        const migrated = store.readTimeline();
+        const backups = fs.readdirSync(store.migrationDirectory);
+
+        expect(migrated.schemaVersion).toBe(2);
+        expect(migrated.posts[0].content).toBe(post.content);
+        expect(migrated.posts[0].createdAt).toBe(post.createdAt);
+        expect(migrated.posts[0].origin).toBe('user');
+        expect(backups.some(name => name.startsWith('timeline-v1-'))).toBe(true);
+    });
+
     test('stops on corrupt data instead of silently replacing it', () => {
         fs.mkdirSync(path.dirname(store.timelinePath), { recursive: true });
         fs.writeFileSync(store.timelinePath, '{broken', 'utf8');
@@ -248,7 +279,7 @@ describe('Leslie moments background activity store', () => {
         expect(activity.getStatus({ now: '2026-09-17T01:03:00.000Z' }).pendingCount).toBe(1);
     });
 
-    test('caps generated comments at two while keeping every successful read receipt', () => {
+    test('keeps every generated comment so a thread has no two-comment lifetime cap', () => {
         const post = moments.createPost(realityDraft());
         const third = { ...CLASSMATE, entityId: '44444444-4444-4444-8444-444444444444', sourceKey: '第三人.png', label: '第三人' };
         activity.planPost(post, [SISTER, CLASSMATE, third], {
@@ -267,7 +298,98 @@ describe('Leslie moments background activity store', () => {
 
         const decorated = activity.decoratePosts([post])[0];
         expect(decorated.readReceipts).toHaveLength(3);
-        expect(decorated.reactions.comments).toHaveLength(2);
+        expect(decorated.reactions.comments).toHaveLength(3);
+    });
+
+    test('stores Persona replies as a tree and prioritizes the directly addressed character', () => {
+        const post = moments.createPost(realityDraft());
+        activity.planPost(post, [SISTER], { now: '2026-09-17T01:00:00.000Z', random: () => 0 });
+        const claim = activity.claimJob(moments.readTimeline().posts, { now: '2026-09-17T01:05:00.000Z' });
+        activity.completeJob(claim.job.id, { action: 'comment', comment: '我会记得。' }, { now: '2026-09-17T01:05:10.000Z' });
+        const aiComment = activity.decoratePosts([post])[0].reactions.comments[0];
+        const userReply = activity.addComment(post, PERSONA, '那之后也继续聊。', {
+            parentCommentId: aiComment.id,
+            now: '2026-09-17T01:06:00.000Z',
+        });
+        const planned = activity.planThread(post, {
+            ...userReply,
+            parentActorEntityId: SISTER.entityId,
+        }, [CLASSMATE, SISTER], { now: '2026-09-17T01:06:00.000Z', random: () => 0 });
+
+        expect(userReply.parentCommentId).toBe(aiComment.id);
+        expect(userReply.rootCommentId).toBe(aiComment.id);
+        expect(planned.jobs[0].actor.entityId).toBe(SISTER.entityId);
+        expect(planned.jobs[0].type).toBe('review_thread');
+        expect(planned.jobs[0].priority).toBe(100);
+    });
+
+    test('allows a reply to a preserved legacy comment and keeps one like per character', () => {
+        const post = moments.createPost(realityDraft());
+        const legacyComment = {
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            jobId: 'legacy-comment',
+            actor: PERSONA,
+            postRevision: post.revision,
+            content: '旧数据里的评论。',
+            createdAt: '2026-09-17T01:00:00.000Z',
+        };
+        post.reactions.comments.push(legacyComment);
+        activity.planThread(post, legacyComment, [SISTER], {
+            now: '2026-09-17T01:01:00.000Z',
+            random: () => 0,
+        });
+        const firstClaim = activity.claimJob([post], { now: '2026-09-17T01:02:00.000Z' });
+        activity.completeJob(firstClaim.job.id, {
+            action: 'reply',
+            comment: '我接着回复这条旧评论。',
+            targetCommentId: legacyComment.id,
+        }, {
+            now: '2026-09-17T01:02:10.000Z',
+            knownComments: [legacyComment],
+        });
+        const userReply = activity.addComment(post, PERSONA, '再聊一句。', {
+            now: '2026-09-17T01:03:00.000Z',
+        });
+        activity.planThread(post, userReply, [SISTER], {
+            now: '2026-09-17T01:03:00.000Z',
+            random: () => 0,
+        });
+        const secondClaim = activity.claimJob([post], { now: '2026-09-17T01:04:00.000Z' });
+        activity.completeJob(secondClaim.job.id, { action: 'like', comment: '' }, {
+            now: '2026-09-17T01:04:10.000Z',
+        });
+        const secondUserReply = activity.addComment(post, PERSONA, '再触发一次。', {
+            now: '2026-09-17T01:05:00.000Z',
+        });
+        activity.planThread(post, secondUserReply, [SISTER], {
+            now: '2026-09-17T01:05:00.000Z',
+            random: () => 0,
+        });
+        const thirdClaim = activity.claimJob([post], { now: '2026-09-17T01:06:00.000Z' });
+        activity.completeJob(thirdClaim.job.id, { action: 'like', comment: '' }, {
+            now: '2026-09-17T01:06:10.000Z',
+        });
+
+        const decorated = activity.decoratePosts([post])[0];
+        expect(decorated.reactions.comments.find(item => item.content === '我接着回复这条旧评论。').parentCommentId).toBe(legacyComment.id);
+        expect(decorated.reactions.likes).toHaveLength(1);
+    });
+
+    test('reconciles unread legacy posts but keeps already-read posts untouched', () => {
+        const unread = moments.createPost(realityDraft({ content: '后台互动功能之前发布。' }));
+        const read = moments.createPost(realityDraft({ content: '已经被读取和回复。' }));
+        activity.planPost(read, [SISTER], { now: '2026-09-17T01:00:00.000Z', random: () => 0 });
+        const claim = activity.claimJob(moments.readTimeline().posts, { now: '2026-09-17T01:05:00.000Z' });
+        activity.completeJob(claim.job.id, { action: 'comment', comment: '已经承接。' }, { now: '2026-09-17T01:05:10.000Z' });
+
+        const reconciled = activity.reconcilePosts(moments.readTimeline().posts, [SISTER], {
+            now: '2026-09-17T02:00:00.000Z',
+            random: () => 0,
+        });
+
+        expect(reconciled.jobs.map(job => job.postId)).toContain(unread.id);
+        expect(reconciled.jobs.map(job => job.postId)).not.toContain(read.id);
+        expect(activity.decoratePosts([read])[0].reactions.comments[0].content).toBe('已经承接。');
     });
 
     test('uses bounded low, medium, and high scheduling profiles', () => {
@@ -306,6 +428,94 @@ describe('Leslie moments background activity store', () => {
 
         expect(() => activity.decoratePosts([])).toThrow('Could not read');
         expect(fs.readFileSync(activity.activityPath, 'utf8')).toBe('{broken');
+    });
+
+    test('migrates existing AI comments into reply roots after backing up activity and queue files', () => {
+        const post = moments.createPost(realityDraft());
+        activity.planPost(post, [SISTER], { now: '2026-09-17T01:00:00.000Z', random: () => 0 });
+        const claim = activity.claimJob(moments.readTimeline().posts, { now: '2026-09-17T01:05:00.000Z' });
+        activity.completeJob(claim.job.id, { action: 'comment', comment: '旧评论原文。' }, { now: '2026-09-17T01:05:10.000Z' });
+        const oldActivity = JSON.parse(fs.readFileSync(activity.activityPath, 'utf8'));
+        const oldQueue = JSON.parse(fs.readFileSync(activity.queuePath, 'utf8'));
+        oldActivity.schemaVersion = 1;
+        delete oldActivity.posts[post.id].comments[0].parentCommentId;
+        delete oldActivity.posts[post.id].comments[0].rootCommentId;
+        oldQueue.schemaVersion = 1;
+        for (const job of oldQueue.jobs) {
+            delete job.type;
+            delete job.priority;
+            delete job.triggerCommentId;
+            delete job.dedupeKey;
+        }
+        fs.writeFileSync(activity.activityPath, `${JSON.stringify(oldActivity, null, 4)}\n`, 'utf8');
+        fs.writeFileSync(activity.queuePath, `${JSON.stringify(oldQueue, null, 4)}\n`, 'utf8');
+
+        const migratedComment = activity.readActivity().posts[post.id].comments[0];
+        const migratedJob = activity.readQueue().jobs[0];
+
+        expect(migratedComment.content).toBe('旧评论原文。');
+        expect(migratedComment.parentCommentId).toBeNull();
+        expect(migratedComment.rootCommentId).toBe(migratedComment.id);
+        expect(migratedJob.type).toBe('read_post');
+        expect(fs.readdirSync(activity.migrationDirectory).some(name => name.startsWith('activity-v1-'))).toBe(true);
+        expect(fs.readdirSync(activity.migrationDirectory).some(name => name.startsWith('activity-queue-v1-'))).toBe(true);
+    });
+});
+
+describe('Leslie moments publishing settings and social memory', () => {
+    let temporaryRoot;
+
+    beforeEach(() => {
+        temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'leslie-moments-memory-'));
+    });
+
+    afterEach(() => {
+        fs.rmSync(temporaryRoot, { recursive: true, force: true });
+    });
+
+    test('keeps AI publishing disabled by default and stores per-character permission', () => {
+        const settingsStore = new LeslieMomentsSettingsStore(temporaryRoot);
+        expect(settingsStore.readSettings().globalAiPostingEnabled).toBe(false);
+
+        const saved = settingsStore.updateSettings({
+            globalAiPostingEnabled: true,
+            characterPolicies: [{
+                actor: SISTER,
+                canPost: true,
+                frequency: 'active',
+                useChatMemory: true,
+            }],
+        });
+
+        expect(saved.characterPolicies[0]).toMatchObject({ canPost: true, frequency: 'active', useChatMemory: true });
+    });
+
+    test('cancels queued AI publishing as soon as its permission is removed', () => {
+        const activityStore = new LeslieMomentsActivityStore(temporaryRoot);
+        activityStore.syncPublisherJobs([{ actor: SISTER, canPost: true, frequency: 'active' }], {
+            now: '2026-09-17T01:00:00.000Z',
+            random: () => 0,
+        });
+
+        expect(activityStore.readQueue().jobs[0].status).toBe('pending');
+        activityStore.cancelPublisherJobs([], { now: '2026-09-17T01:01:00.000Z' });
+        expect(activityStore.readQueue().jobs[0].status).toBe('cancelled');
+    });
+
+    test('selects only the memories actually observed by the requested character and invalidates deleted sources', () => {
+        const momentsStore = new LeslieMomentsStore(temporaryRoot);
+        const memoryStore = new LeslieMomentsMemoryStore(temporaryRoot);
+        const post = momentsStore.createPost(realityDraft({ content: '今天在湖边见到了一只白鹭。' }));
+        memoryStore.recordObservation(SISTER, post, {
+            summary: '哥哥在湖边见到白鹭。',
+            topics: ['湖边', '白鹭'],
+        });
+
+        expect(memoryStore.selectContext({ actorEntityId: SISTER.entityId, personaId: PERSONA.entityId, query: '白鹭' }).events).toHaveLength(1);
+        expect(memoryStore.selectContext({ actorEntityId: CLASSMATE.entityId, personaId: PERSONA.entityId, query: '白鹭' }).events).toHaveLength(0);
+
+        memoryStore.invalidatePost(post.id);
+        expect(memoryStore.selectContext({ actorEntityId: SISTER.entityId, personaId: PERSONA.entityId, query: '白鹭' }).events).toHaveLength(0);
     });
 });
 
@@ -443,6 +653,87 @@ describe('Leslie moments API', () => {
             warning.mockRestore();
         }
     });
+
+    test('accepts a Persona reply to an existing AI comment and preserves its parent link', async () => {
+        const momentsStore = new LeslieMomentsStore(temporaryRoot);
+        const activityStore = new LeslieMomentsActivityStore(temporaryRoot);
+        const post = momentsStore.createPost(realityDraft());
+        activityStore.planPost(post, [SISTER], { now: '2026-09-17T01:00:00.000Z', random: () => 0 });
+        const claim = activityStore.claimJob(momentsStore.readTimeline().posts, { now: '2026-09-17T01:05:00.000Z' });
+        activityStore.completeJob(claim.job.id, { action: 'comment', comment: '可以继续聊。' }, { now: '2026-09-17T01:05:10.000Z' });
+        const parent = activityStore.decoratePosts([post])[0].reactions.comments[0];
+
+        const response = await fetch(`${baseUrl}/${post.id}/comments`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                author: { sourceKey: PERSONA.sourceKey, label: PERSONA.label },
+                content: '那就继续。',
+                parentCommentId: parent.id,
+                activityCandidates: [{ type: 'character', sourceKey: SISTER.sourceKey, label: SISTER.label }],
+                enthusiasm: 'high',
+            }),
+        });
+        const result = await response.json();
+
+        expect(response.status).toBe(201);
+        expect(result.comment.parentCommentId).toBe(parent.id);
+        expect(result.post.reactions.comments).toHaveLength(2);
+        expect(activityStore.readQueue().jobs.some(job => job.type === 'review_thread' && job.triggerCommentId === result.comment.id)).toBe(true);
+    });
+
+    test('publishes only for an explicitly enabled AI character and allows author-independent deletion', async () => {
+        const settingsResponse = await fetch(`${baseUrl}/settings`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                globalAiPostingEnabled: true,
+                characterPolicies: [{
+                    actor: { sourceKey: SISTER.sourceKey, label: SISTER.label },
+                    canPost: true,
+                    frequency: 'active',
+                    useChatMemory: false,
+                }],
+            }),
+        });
+        expect(settingsResponse.status).toBe(200);
+
+        const activityStore = new LeslieMomentsActivityStore(temporaryRoot);
+        const previousQueue = activityStore.readQueue();
+        const dueQueue = structuredClone(previousQueue);
+        dueQueue.jobs[0].dueAt = '2000-01-01T00:00:00.000Z';
+        activityStore.saveQueue(previousQueue, dueQueue);
+        const claim = await (await fetch(`${baseUrl}/activity/jobs/claim`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: '{}',
+        })).json();
+        expect(claim.job.type).toBe('compose_post');
+
+        const publishResponse = await fetch(`${baseUrl}/activity/jobs/${claim.job.id}/publish`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                action: 'publish',
+                content: '今天想安静地看看窗外。',
+                memorySummary: '妹妹分享了想看窗外的心情。',
+                topics: ['窗外'],
+                activityCandidates: [],
+            }),
+        });
+        const published = await publishResponse.json();
+        expect(publishResponse.status).toBe(201);
+        expect(published.post.origin).toBe('ai');
+        expect(published.post.mode).toBe('character');
+
+        const deleteResponse = await fetch(`${baseUrl}/${published.post.id}/archive`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: '{}',
+        });
+        expect(deleteResponse.status).toBe(200);
+        expect((await deleteResponse.json()).post.content).toBe('今天想安静地看看窗外。');
+    });
 });
 
 describe('Leslie moments browser model', () => {
@@ -470,5 +761,16 @@ describe('Leslie moments browser model', () => {
         expect(getMomentEnthusiasmProfile('low')).toMatchObject({ publicInteractionChance: 0.3, actorLimit: 1 });
         expect(getMomentEnthusiasmProfile('medium')).toMatchObject({ publicInteractionChance: 0.7, actorLimit: 3 });
         expect(getMomentEnthusiasmProfile('high')).toMatchObject({ publicInteractionChance: 0.95, actorLimit: 5 });
+    });
+
+    test('builds a bounded future prompt adapter without enabling chat injection', () => {
+        const prompt = buildMomentsPromptContext([{
+            status: 'active',
+            summary: '哥哥曾分享在湖边看到白鹭。',
+            topics: ['湖边', '白鹭'],
+        }], { actorLabel: '妹妹' });
+
+        expect(prompt).toContain('妹妹亲自读过');
+        expect(prompt).toContain('白鹭');
     });
 });

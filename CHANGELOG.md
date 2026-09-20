@@ -7,7 +7,10 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 ### Added
 
 - Persistent Leslie Moments background activity with genuine per-character read receipts, selective AI likes and comments, bounded retry/rate controls, and sidecar storage that leaves the original timeline intact.
-- A persisted three-level Leslie Moments enthusiasm slider that adjusts public-interaction probability, participating character count, and initial response delay while retaining the hourly model-call and comment caps.
+- A persisted three-level Leslie Moments enthusiasm slider that adjusts public-interaction probability, participating character count, and initial response delay while retaining the hourly model-call limit.
+- Threaded Leslie Moments replies that let Personas and AI characters continue conversations across repeated background selections, plus a clickable liker list with character identity and timestamps.
+- Explicit per-character AI publishing permissions for both recently used and library-only characters, with text-only character-authored Moments, frequency controls, optional read-only chat-memory access, and delete-only user moderation.
+- An isolated per-character Moments memory store with Persona/story-scope boundaries, cross-post retrieval, source invalidation, current-chat memory-topic import, and a disabled-by-default future prompt-injection adapter.
 - A LeslieTavern system tray with background Moments status, pause/resume controls, window restoration, and an explicit application exit action.
 - Semantic Leslie reply modes that inject a fail-open presentation instruction before foreground character replies without modifying character cards, memories, sampling temperature, or stored chats.
 - Electron desktop workflow and Windows portable-package tooling.
@@ -27,6 +30,8 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 
 ### Changed
 
+- Moments timeline, activity, and queue stores now migrate legacy data through preserved pre-migration copies. Legacy unread posts are scheduled for genuine background reads, while posts with existing reads or comments retain their activity and gain reply support without being replayed.
+- Every authenticated local user has the same reversible delete/restore permission for Persona-authored and AI-authored Moments; only the originating Persona may edit a user post, and AI text cannot be edited.
 - Closing the Electron window now hides LeslieTavern to the system tray so approved Moments activity can continue until the user explicitly exits the process.
 - Isolated background generations can opt out of current-chat prompt hooks and can be cancelled independently when a foreground reply starts.
 - Upgraded the AI character workshop with an optional structured blueprint, AI completion for blank fields, a directly editable post-generation card, and a local avatar picker that hands images to the existing character editor without an extra AI pass.

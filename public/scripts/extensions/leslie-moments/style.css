@@ -848,6 +848,179 @@ body.leslie-moments-page-open {
     color: var(--tg-danger, #ef6b73);
 }
 
+.leslie-moments-reactions .leslie-moments-like-button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0;
+}
+
+.leslie-moments-reactions .leslie-moments-like-button:hover,
+.leslie-moments-reactions .leslie-moments-like-button:focus-visible {
+    color: #ef476f;
+}
+
+.leslie-moments-comment strong span {
+    color: var(--SmartThemeQuoteColor);
+    font-weight: 500;
+}
+
+.leslie-moments-comment button {
+    border: 0;
+    background: transparent;
+    color: var(--SmartThemeQuoteColor);
+    cursor: pointer;
+    padding: 0.2rem 0;
+}
+
+.leslie-moments-reply-form {
+    border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 65%, transparent);
+    padding: 0.75rem 0 0;
+}
+
+.leslie-moments-reply-form label,
+.leslie-moments-reply-form textarea {
+    display: block;
+    width: 100%;
+}
+
+.leslie-moments-reply-form textarea {
+    margin-top: 0.4rem;
+    resize: vertical;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    background: var(--SmartThemeBlurTintColor);
+    color: var(--SmartThemeBodyColor);
+    padding: 0.65rem;
+}
+
+.leslie-moments-reply-form > div,
+.leslie-moments-memory-import {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.55rem;
+}
+
+.leslie-moments-memory-import > span {
+    color: var(--SmartThemeQuoteColor);
+    font-size: 0.85rem;
+}
+
+.leslie-moments-publisher-control {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, transparent);
+}
+
+.leslie-moments-publisher-control > span,
+.leslie-moments-publisher-control > span > span {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+}
+
+.leslie-moments-publisher-control > span > span {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.leslie-moments-publisher-control small,
+.leslie-moments-publisher-list small,
+.leslie-moments-like-list small {
+    color: var(--SmartThemeQuoteColor);
+}
+
+.leslie-moments-compact-dialog {
+    max-width: 460px;
+}
+
+.leslie-moments-like-list,
+.leslie-moments-publisher-list,
+.leslie-moments-memory-list {
+    overflow: auto;
+    padding: 0.8rem 1rem;
+}
+
+.leslie-moments-like-list > div,
+.leslie-moments-publisher-list article,
+.leslie-moments-memory-list label {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 60%, transparent);
+}
+
+.leslie-moments-like-list > div > span,
+.leslie-moments-publisher-list article > div,
+.leslie-moments-memory-list label > span {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+}
+
+.leslie-moments-like-list .fa-heart {
+    color: #ef476f;
+}
+
+.leslie-moments-publisher-dialog {
+    width: min(900px, 96vw);
+}
+
+.leslie-moments-global-publisher {
+    display: flex;
+    gap: 0.7rem;
+    padding: 1rem;
+}
+
+.leslie-moments-global-publisher > span {
+    display: flex;
+    flex-direction: column;
+}
+
+.leslie-moments-publisher-list article {
+    display: grid;
+    grid-template-columns: auto minmax(140px, 1fr) auto auto auto;
+}
+
+.leslie-moments-publisher-list select {
+    min-width: 90px;
+}
+
+.leslie-moments-memory-list label {
+    cursor: pointer;
+}
+
+@media (max-width: 700px) {
+    .leslie-moments-publisher-control {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .leslie-moments-publisher-list article {
+        align-items: start;
+        grid-template-columns: auto 1fr;
+    }
+
+    .leslie-moments-publisher-list article > label,
+    .leslie-moments-publisher-list article > select {
+        grid-column: 2;
+    }
+}
+
 .leslie-moments-archived-label {
     margin-left: 54px;
     color: var(--tg-text-secondary, #9aabba);

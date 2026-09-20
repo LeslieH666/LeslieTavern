@@ -5,13 +5,20 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
 import { normalizeMomentIdentity } from './schema.js';
 
-export const MOMENTS_ACTIVITY_SCHEMA_VERSION = 1;
-export const MOMENTS_QUEUE_SCHEMA_VERSION = 1;
+export const MOMENTS_ACTIVITY_SCHEMA_VERSION = 2;
+export const MOMENTS_QUEUE_SCHEMA_VERSION = 2;
 
-const ACTIONS = Object.freeze(['read', 'like', 'comment', 'like_and_comment']);
+const ACTIONS = Object.freeze(['read', 'like', 'comment', 'reply', 'like_and_comment']);
+const JOB_TYPES = Object.freeze(['read_post', 'review_thread', 'compose_post']);
 const HEARTBEAT_STATES = Object.freeze(['starting', 'running', 'busy', 'busy_foreground', 'waiting_model', 'paused', 'error']);
 const MAX_MODEL_RUNS_PER_HOUR = 8;
 const LEASE_DURATION_MS = 5 * 60_000;
+
+const PUBLISHING_DELAY_RANGES = Object.freeze({
+    occasional: Object.freeze([24 * 60 * 60_000, 72 * 60 * 60_000]),
+    normal: Object.freeze([8 * 60 * 60_000, 24 * 60 * 60_000]),
+    active: Object.freeze([2 * 60 * 60_000, 8 * 60 * 60_000]),
+});
 
 export const MOMENTS_ACTIVITY_ENTHUSIASM_PROFILES = Object.freeze({
     low: Object.freeze({
@@ -89,6 +96,47 @@ function writeJson(filePath, value) {
     writeFileAtomicSync(filePath, `${JSON.stringify(value, null, 4)}\n`, 'utf8');
 }
 
+function migrateActivity(value) {
+    const version = Number(value?.schemaVersion);
+    if (version === MOMENTS_ACTIVITY_SCHEMA_VERSION) {
+        return { value, migrated: false, fromVersion: version };
+    }
+    if (version !== 1 || !value?.posts || typeof value.posts !== 'object' || Array.isArray(value.posts)) {
+        throw new LeslieMomentsActivityStoreError('CORRUPT_DATA', 'The Leslie moments activity file is invalid.');
+    }
+    const migrated = structuredClone(value);
+    migrated.schemaVersion = MOMENTS_ACTIVITY_SCHEMA_VERSION;
+    for (const postActivity of Object.values(migrated.posts)) {
+        postActivity.comments = (Array.isArray(postActivity.comments) ? postActivity.comments : []).map(comment => ({
+            ...comment,
+            parentCommentId: comment.parentCommentId || null,
+            rootCommentId: comment.rootCommentId || comment.id,
+            source: comment.source || 'ai',
+        }));
+    }
+    return { value: migrated, migrated: true, fromVersion: version };
+}
+
+function migrateQueue(value) {
+    const version = Number(value?.schemaVersion);
+    if (version === MOMENTS_QUEUE_SCHEMA_VERSION) {
+        return { value, migrated: false, fromVersion: version };
+    }
+    if (version !== 1 || !Array.isArray(value?.jobs)) {
+        throw new LeslieMomentsActivityStoreError('CORRUPT_DATA', 'The Leslie moments activity queue is invalid.');
+    }
+    const migrated = structuredClone(value);
+    migrated.schemaVersion = MOMENTS_QUEUE_SCHEMA_VERSION;
+    migrated.jobs = migrated.jobs.map(job => ({
+        ...job,
+        type: 'read_post',
+        priority: 50,
+        triggerCommentId: null,
+        dedupeKey: `read_post:${job.postId}:${job.postRevision}:${job.actor?.entityId}`,
+    }));
+    return { value: migrated, migrated: true, fromVersion: version };
+}
+
 function validateActivity(value) {
     if (!value || typeof value !== 'object' || Number(value.schemaVersion) !== MOMENTS_ACTIVITY_SCHEMA_VERSION || !value.posts || typeof value.posts !== 'object' || Array.isArray(value.posts)) {
         throw new LeslieMomentsActivityStoreError('CORRUPT_DATA', 'The Leslie moments activity file is invalid.');
@@ -114,12 +162,15 @@ function validateActivity(value) {
                     throw new LeslieMomentsActivityStoreError('CORRUPT_DATA', `A Leslie moments ${field} entry is invalid.`);
                 }
                 try {
-                    normalizeMomentIdentity(item.actor, ['character', 'group']);
+                    normalizeMomentIdentity(item.actor, ['persona', 'character', 'group']);
                 } catch (error) {
                     throw new LeslieMomentsActivityStoreError('CORRUPT_DATA', `A Leslie moments ${field} actor is invalid. ${error.message}`);
                 }
                 if (field === 'comments' && (!String(item.content ?? '').trim() || String(item.content).length > 500)) {
                     throw new LeslieMomentsActivityStoreError('CORRUPT_DATA', 'A Leslie moments comment is invalid.');
+                }
+                if (field === 'comments' && (item.parentCommentId !== null && typeof item.parentCommentId !== 'string')) {
+                    throw new LeslieMomentsActivityStoreError('CORRUPT_DATA', 'A Leslie moments comment parent is invalid.');
                 }
             }
         }
@@ -140,7 +191,8 @@ function validateQueue(value) {
     for (const job of value.jobs) {
         if (!job || typeof job !== 'object'
             || !String(job.id ?? '').trim()
-            || !String(job.postId ?? '').trim()
+            || !JOB_TYPES.includes(job.type)
+            || (job.type !== 'compose_post' && !String(job.postId ?? '').trim())
             || !Number.isInteger(Number(job.postRevision))
             || !['pending', 'running', 'completed', 'cancelled'].includes(job.status)
             || !Number.isFinite(new Date(job.dueAt).getTime())) {
@@ -228,18 +280,35 @@ export class LeslieMomentsActivityStore {
         this.queuePath = path.join(this.directory, 'activity-queue.json');
         this.activityHistoryDirectory = path.join(this.directory, 'history', 'activity');
         this.queueHistoryDirectory = path.join(this.directory, 'history', 'activity-queue');
+        this.migrationDirectory = path.join(this.directory, 'history', 'migrations');
     }
 
     readActivity() {
-        return fs.existsSync(this.activityPath)
-            ? validateActivity(readJson(this.activityPath, 'activity'))
-            : createInitialActivity();
+        if (!fs.existsSync(this.activityPath)) {
+            return createInitialActivity();
+        }
+        const migration = migrateActivity(readJson(this.activityPath, 'activity'));
+        const validated = validateActivity(migration.value);
+        if (migration.migrated) {
+            fs.mkdirSync(this.migrationDirectory, { recursive: true });
+            fs.copyFileSync(this.activityPath, path.join(this.migrationDirectory, `activity-v${migration.fromVersion}-${Date.now()}.json`));
+            writeJson(this.activityPath, validated);
+        }
+        return validated;
     }
 
     readQueue() {
-        return fs.existsSync(this.queuePath)
-            ? validateQueue(readJson(this.queuePath, 'activity queue'))
-            : createInitialQueue();
+        if (!fs.existsSync(this.queuePath)) {
+            return createInitialQueue();
+        }
+        const migration = migrateQueue(readJson(this.queuePath, 'activity queue'));
+        const validated = validateQueue(migration.value);
+        if (migration.migrated) {
+            fs.mkdirSync(this.migrationDirectory, { recursive: true });
+            fs.copyFileSync(this.queuePath, path.join(this.migrationDirectory, `activity-queue-v${migration.fromVersion}-${Date.now()}.json`));
+            writeJson(this.queuePath, validated);
+        }
+        return validated;
     }
 
     saveActivity(previous, next) {
@@ -310,9 +379,13 @@ export class LeslieMomentsActivityStore {
             const offset = Math.round(minimum + Math.max(0, Math.min(1, Number(random()) || 0)) * (maximum - minimum));
             next.jobs.push({
                 id: randomUUID(),
+                type: 'read_post',
                 postId: post.id,
                 postRevision: Number(post.revision ?? 1),
                 actor,
+                priority: 50,
+                triggerCommentId: null,
+                dedupeKey: `read_post:${post.id}:${Number(post.revision ?? 1)}:${actor.entityId}`,
                 status: 'pending',
                 dueAt: addMilliseconds(now, offset),
                 attempts: 0,
@@ -336,6 +409,232 @@ export class LeslieMomentsActivityStore {
             jobs: saved.jobs.filter(job => job.postId === post.id && job.postRevision === Number(post.revision ?? 1) && job.status === 'pending'),
             queue: saved,
         };
+    }
+
+    reconcilePosts(posts, candidates, { now = new Date().toISOString(), random = Math.random, enthusiasm = 'medium' } = {}) {
+        const activity = this.readActivity();
+        const previous = this.readQueue();
+        const next = structuredClone(previous);
+        const profile = getMomentsActivityEnthusiasmProfile(enthusiasm);
+        const fallbackActors = [...new Map((Array.isArray(candidates) ? candidates : [])
+            .map(normalizeActor)
+            .map(actor => [actor.entityId, actor])).values()];
+        const planned = [];
+
+        for (const post of Array.isArray(posts) ? posts : []) {
+            if (planned.length >= 500) {
+                break;
+            }
+            if (post.status !== 'active') {
+                continue;
+            }
+            const postRevision = Number(post.revision ?? 1);
+            const postActivity = activity.posts[post.id] ?? { readReceipts: [], comments: [] };
+            const hasRecordedActivity = [...(post.readReceipts ?? []), ...(postActivity.readReceipts ?? [])]
+                .some(item => Number(item.postRevision ?? postRevision) === postRevision)
+                || [...(post.reactions?.comments ?? []), ...(postActivity.comments ?? [])]
+                    .some(item => Number(item.postRevision ?? postRevision) === postRevision);
+            const hasActiveJob = next.jobs.some(job => job.postId === post.id
+                && Number(job.postRevision) === postRevision
+                && (job.status === 'pending' || job.status === 'running'));
+            if (hasRecordedActivity || hasActiveJob) {
+                continue;
+            }
+            const visibleActors = post.visibility?.type === 'selected'
+                ? post.visibility.targets.map(normalizeActor)
+                : fallbackActors;
+            const actors = [...new Map(visibleActors
+                .filter(actor => actor.entityId !== post.author?.entityId)
+                .map(actor => [actor.entityId, actor])).values()].slice(0, profile.actorLimit);
+            actors.slice(0, Math.max(0, 500 - planned.length)).forEach((actor, index) => {
+                const [minimum, maximum] = index === 0 ? profile.firstDelayRange : profile.laterDelayRange;
+                const offset = Math.round(minimum + Math.max(0, Math.min(1, Number(random()) || 0)) * (maximum - minimum));
+                const job = {
+                    id: randomUUID(),
+                    type: 'read_post',
+                    postId: post.id,
+                    postRevision,
+                    actor,
+                    priority: 50,
+                    triggerCommentId: null,
+                    dedupeKey: `read_post:${post.id}:${postRevision}:${actor.entityId}`,
+                    status: 'pending',
+                    dueAt: addMilliseconds(now, offset),
+                    attempts: 0,
+                    leaseUntil: null,
+                    createdAt: now,
+                    updatedAt: now,
+                    completedAt: null,
+                    cancelledAt: null,
+                };
+                next.jobs.push(job);
+                planned.push(job);
+            });
+        }
+        if (!planned.length) {
+            return { jobs: [], queue: previous };
+        }
+        next.jobs = pruneQueueJobs(next.jobs);
+        next.status.state = next.paused ? 'paused' : 'running';
+        return { jobs: planned, queue: this.saveQueue(previous, next) };
+    }
+
+    addComment(post, actorValue, contentValue, { parentCommentId = null, now = new Date().toISOString(), source = 'user' } = {}) {
+        const actor = (() => {
+            try {
+                return normalizeMomentIdentity(actorValue, ['persona', 'character']);
+            } catch (error) {
+                throw new LeslieMomentsActivityStoreError('INVALID_INPUT', error.message);
+            }
+        })();
+        const content = cleanOptionalText(contentValue, 500);
+        if (!content) {
+            throw new LeslieMomentsActivityStoreError('INVALID_INPUT', 'A reply requires text.');
+        }
+        const previous = this.readActivity();
+        const next = structuredClone(previous);
+        const postActivity = getPostActivity(next, post.id);
+        const currentComments = postActivity.comments.filter(item => Number(item.postRevision) === Number(post.revision ?? 1));
+        const legacyComments = (post.reactions?.comments ?? [])
+            .filter(item => Number(item.postRevision ?? post.revision ?? 1) === Number(post.revision ?? 1));
+        const parent = parentCommentId ? [...legacyComments, ...currentComments].find(item => item.id === parentCommentId) : null;
+        if (parentCommentId && !parent) {
+            throw new LeslieMomentsActivityStoreError('NOT_FOUND', 'The comment being replied to was not found.');
+        }
+        if (currentComments.length >= 1000) {
+            throw new LeslieMomentsActivityStoreError('LIMIT_REACHED', 'This moment has reached the reply storage limit.');
+        }
+        const id = randomUUID();
+        const comment = {
+            id,
+            jobId: `manual:${id}`,
+            actor,
+            postRevision: Number(post.revision ?? 1),
+            parentCommentId: parent?.id ?? null,
+            rootCommentId: parent?.rootCommentId || parent?.id || id,
+            content,
+            createdAt: now,
+            source: source === 'ai' ? 'ai' : 'user',
+        };
+        postActivity.comments.push(comment);
+        this.saveActivity(previous, next);
+        return comment;
+    }
+
+    planThread(post, triggerComment, candidates, { now = new Date().toISOString(), random = Math.random, enthusiasm = 'medium' } = {}) {
+        const profile = getMomentsActivityEnthusiasmProfile(enthusiasm);
+        const normalized = [...new Map((Array.isArray(candidates) ? candidates : [])
+            .map(normalizeActor)
+            .filter(actor => actor.entityId !== triggerComment.actor?.entityId)
+            .map(actor => [actor.entityId, actor])).values()];
+        normalized.sort((left, right) => {
+            const targetId = triggerComment.parentActorEntityId;
+            return Number(right.entityId === targetId) - Number(left.entityId === targetId);
+        });
+        const previous = this.readQueue();
+        const next = structuredClone(previous);
+        const jobs = [];
+        const actorLimit = triggerComment.source === 'ai' ? 1 : profile.actorLimit;
+        normalized.slice(0, actorLimit).forEach((actor, index) => {
+            const dedupeKey = `review_thread:${post.id}:${post.revision}:${triggerComment.id}:${actor.entityId}`;
+            if (next.jobs.some(job => job.dedupeKey === dedupeKey && job.status !== 'cancelled')) {
+                return;
+            }
+            const minimum = index === 0 ? 20_000 : 60_000;
+            const maximum = index === 0 ? 90_000 : 5 * 60_000;
+            const offset = Math.round(minimum + Math.max(0, Math.min(1, Number(random()) || 0)) * (maximum - minimum));
+            const job = {
+                id: randomUUID(),
+                type: 'review_thread',
+                postId: post.id,
+                postRevision: Number(post.revision ?? 1),
+                actor,
+                priority: triggerComment.parentActorEntityId === actor.entityId ? 100 : 80,
+                triggerCommentId: triggerComment.id,
+                dedupeKey,
+                status: 'pending',
+                dueAt: addMilliseconds(now, offset),
+                attempts: 0,
+                leaseUntil: null,
+                createdAt: now,
+                updatedAt: now,
+                completedAt: null,
+                cancelledAt: null,
+            };
+            next.jobs.push(job);
+            jobs.push(job);
+        });
+        if (!jobs.length) {
+            return { jobs: [], queue: previous };
+        }
+        next.jobs = pruneQueueJobs(next.jobs);
+        next.status.state = next.paused ? 'paused' : 'running';
+        return { jobs, queue: this.saveQueue(previous, next) };
+    }
+
+    syncPublisherJobs(policies, { now = new Date().toISOString(), random = Math.random } = {}) {
+        const previous = this.readQueue();
+        const next = structuredClone(previous);
+        const jobs = [];
+        for (const policy of Array.isArray(policies) ? policies : []) {
+            if (!policy?.canPost || !PUBLISHING_DELAY_RANGES[policy.frequency]) {
+                continue;
+            }
+            const actor = normalizeActor(policy.actor);
+            const existing = next.jobs.some(job => job.type === 'compose_post'
+                && job.actor?.entityId === actor.entityId
+                && (job.status === 'pending' || job.status === 'running'));
+            if (existing) {
+                continue;
+            }
+            const [minimum, maximum] = PUBLISHING_DELAY_RANGES[policy.frequency];
+            const offset = Math.round(minimum + Math.max(0, Math.min(1, Number(random()) || 0)) * (maximum - minimum));
+            const job = {
+                id: randomUUID(),
+                type: 'compose_post',
+                postId: null,
+                postRevision: 0,
+                actor,
+                priority: 10,
+                triggerCommentId: null,
+                dedupeKey: `compose_post:${actor.entityId}:${now}`,
+                status: 'pending',
+                dueAt: addMilliseconds(now, offset),
+                attempts: 0,
+                leaseUntil: null,
+                createdAt: now,
+                updatedAt: now,
+                completedAt: null,
+                cancelledAt: null,
+            };
+            next.jobs.push(job);
+            jobs.push(job);
+        }
+        if (!jobs.length) {
+            return { jobs: [], queue: previous };
+        }
+        next.jobs = pruneQueueJobs(next.jobs);
+        next.status.state = next.paused ? 'paused' : 'running';
+        return { jobs, queue: this.saveQueue(previous, next) };
+    }
+
+    cancelPublisherJobs(allowedActorIds = [], { now = new Date().toISOString() } = {}) {
+        const allowed = new Set(Array.isArray(allowedActorIds) ? allowedActorIds : []);
+        const previous = this.readQueue();
+        const next = structuredClone(previous);
+        let changed = false;
+        for (const job of next.jobs) {
+            if (job.type === 'compose_post'
+                && (job.status === 'pending' || job.status === 'running')
+                && !allowed.has(job.actor?.entityId)) {
+                job.status = 'cancelled';
+                job.leaseUntil = null;
+                job.cancelledAt = now;
+                job.updatedAt = now;
+                changed = true;
+            }
+        }
+        return changed ? this.saveQueue(previous, next) : previous;
     }
 
     cancelPost(postId, { now = new Date().toISOString() } = {}) {
@@ -376,6 +675,9 @@ export class LeslieMomentsActivityStore {
             if (job.status !== 'pending') {
                 continue;
             }
+            if (job.type === 'compose_post') {
+                continue;
+            }
             const post = postsById.get(job.postId);
             if (!post || post.status !== 'active' || Number(post.revision ?? 1) !== Number(job.postRevision)) {
                 job.status = 'cancelled';
@@ -394,7 +696,8 @@ export class LeslieMomentsActivityStore {
 
         const job = next.jobs
             .filter(item => item.status === 'pending' && new Date(item.dueAt).getTime() <= nowTime)
-            .sort((left, right) => String(left.dueAt).localeCompare(String(right.dueAt)))[0];
+            .sort((left, right) => Number(right.priority ?? 0) - Number(left.priority ?? 0)
+                || String(left.dueAt).localeCompare(String(right.dueAt)))[0];
         if (!job) {
             if (changed) {
                 this.saveQueue(previous, next);
@@ -412,18 +715,18 @@ export class LeslieMomentsActivityStore {
         const savedJob = saved.jobs.find(item => item.id === job.id);
         return {
             job: savedJob,
-            post: postsById.get(savedJob.postId),
+            post: savedJob.type === 'compose_post' ? null : postsById.get(savedJob.postId),
             status: summarizeStatus(saved, now),
         };
     }
 
-    completeJob(jobId, value, { now = new Date().toISOString() } = {}) {
+    completeJob(jobId, value, { now = new Date().toISOString(), knownComments = [] } = {}) {
         let action = cleanOptionalText(value?.action, 40);
         if (!ACTIONS.includes(action)) {
             throw new LeslieMomentsActivityStoreError('INVALID_INPUT', 'Unsupported Leslie moments interaction action.');
         }
         const comment = cleanOptionalText(value?.comment, 500);
-        if ((action === 'comment' || action === 'like_and_comment') && !comment) {
+        if ((action === 'comment' || action === 'reply' || action === 'like_and_comment') && !comment) {
             throw new LeslieMomentsActivityStoreError('INVALID_INPUT', 'A comment action requires comment text.');
         }
 
@@ -436,16 +739,13 @@ export class LeslieMomentsActivityStore {
         if (job.status === 'cancelled') {
             return getPostActivity(this.readActivity(), job.postId);
         }
+        if (job.type === 'compose_post') {
+            throw new LeslieMomentsActivityStoreError('INVALID_STATE', 'A publishing job must use the publishing completion path.');
+        }
 
         const previousActivity = this.readActivity();
         const nextActivity = structuredClone(previousActivity);
         const postActivity = getPostActivity(nextActivity, job.postId);
-        const currentCommentCount = postActivity.comments.filter(item => Number(item.postRevision) === Number(job.postRevision)).length;
-        if (currentCommentCount >= 2 && action === 'comment') {
-            action = 'read';
-        } else if (currentCommentCount >= 2 && action === 'like_and_comment') {
-            action = 'like';
-        }
         const existingReceipt = postActivity.readReceipts.find(item => item.jobId === job.id);
         if (!existingReceipt) {
             const receipt = {
@@ -458,21 +758,40 @@ export class LeslieMomentsActivityStore {
             };
             postActivity.readReceipts.push(receipt);
             if (action === 'like' || action === 'like_and_comment') {
-                postActivity.likes.push({
-                    id: randomUUID(),
-                    jobId: job.id,
-                    actor: job.actor,
-                    postRevision: job.postRevision,
-                    createdAt: now,
-                    source: 'ai',
-                });
+                const existingLike = postActivity.likes.some(item => item.actor?.entityId === job.actor.entityId
+                    && Number(item.postRevision) === Number(job.postRevision));
+                if (!existingLike) {
+                    postActivity.likes.push({
+                        id: randomUUID(),
+                        jobId: job.id,
+                        actor: job.actor,
+                        postRevision: job.postRevision,
+                        createdAt: now,
+                        source: 'ai',
+                    });
+                }
             }
-            if (action === 'comment' || action === 'like_and_comment') {
+            if (action === 'comment' || action === 'reply' || action === 'like_and_comment') {
+                const requestedParentId = cleanOptionalText(value?.targetCommentId, 80) || null;
+                const parent = requestedParentId
+                    ? [...(Array.isArray(knownComments) ? knownComments : []), ...postActivity.comments]
+                        .find(item => item.id === requestedParentId && Number(item.postRevision ?? job.postRevision) === Number(job.postRevision))
+                    : null;
+                const parentCommentId = action === 'reply' ? (parent?.id ?? null) : null;
+                if (action === 'reply' && !parentCommentId) {
+                    throw new LeslieMomentsActivityStoreError('INVALID_INPUT', 'The reply target was not found.');
+                }
+                if (postActivity.comments.filter(item => Number(item.postRevision) === Number(job.postRevision)).length >= 1000) {
+                    throw new LeslieMomentsActivityStoreError('LIMIT_REACHED', 'This moment has reached the reply storage limit.');
+                }
+                const commentId = randomUUID();
                 postActivity.comments.push({
-                    id: randomUUID(),
+                    id: commentId,
                     jobId: job.id,
                     actor: job.actor,
                     postRevision: job.postRevision,
+                    parentCommentId,
+                    rootCommentId: parent?.rootCommentId || parent?.id || commentId,
                     content: comment,
                     createdAt: now,
                     source: 'ai',
@@ -493,6 +812,40 @@ export class LeslieMomentsActivityStore {
             this.saveQueue(previousQueue, nextQueue);
         }
         return getPostActivity(this.readActivity(), job.postId);
+    }
+
+    completeComposeJob(jobId, { publishedPostId = null, skipped = false, now = new Date().toISOString() } = {}) {
+        const previous = this.readQueue();
+        const next = structuredClone(previous);
+        const job = next.jobs.find(item => item.id === jobId);
+        if (!job) {
+            throw new LeslieMomentsActivityStoreError('NOT_FOUND', 'The requested Leslie moments publishing job was not found.');
+        }
+        if (job.type !== 'compose_post') {
+            throw new LeslieMomentsActivityStoreError('INVALID_STATE', 'The requested job is not a publishing job.');
+        }
+        if (job.status === 'completed' || job.status === 'cancelled') {
+            return job;
+        }
+        job.status = 'completed';
+        job.leaseUntil = null;
+        job.completedAt = now;
+        job.updatedAt = now;
+        job.resultAction = skipped ? 'skip' : 'publish';
+        job.publishedPostId = publishedPostId;
+        next.status.state = next.paused ? 'paused' : 'running';
+        next.status.lastSuccessAt = now;
+        next.status.lastError = null;
+        this.saveQueue(previous, next);
+        return job;
+    }
+
+    getJob(jobId) {
+        const job = this.readQueue().jobs.find(item => item.id === jobId);
+        if (!job) {
+            throw new LeslieMomentsActivityStoreError('NOT_FOUND', 'The requested Leslie moments activity job was not found.');
+        }
+        return job;
     }
 
     failJob(jobId, errorMessage, { now = new Date().toISOString(), retryAfterMs = null } = {}) {

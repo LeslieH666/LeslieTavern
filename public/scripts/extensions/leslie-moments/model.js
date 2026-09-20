@@ -14,6 +14,11 @@ export const MOMENT_MODE_DETAILS = Object.freeze({
         icon: 'fa-face-laugh-squint',
         description: '用于玩梗、打破第四面墙或调侃角色，不进入现实了解或剧情记忆。',
     },
+    character: {
+        label: '角色动态',
+        icon: 'fa-user-pen',
+        description: '由 AI 角色依据角色卡与其可用记忆主动发布；用户只能删除，不能代替角色改写。',
+    },
 });
 
 export const LESLIE_MOMENTS_SETTINGS_KEY = 'leslieMoments';

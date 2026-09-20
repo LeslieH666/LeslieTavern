@@ -8,6 +8,9 @@
 - Semantic reply modes that guide balanced, novel, dialogue-driven, or concise presentation through prompt injection instead of fixed per-style token caps; DeepSeek foreground replies can use provider-controlled output length.
 - First versions of Leslie memory and Persona/storyline identity isolation.
 - Moments publishing and timeline storage, plus model-backed read receipts, persisted low/medium/high enthusiasm controls, and selective likes/comments that continue while the Electron app is hidden in the system tray.
+- Threaded Moments replies with repeated AI participation, clickable liker details, reversible delete/restore permission shared by local users, and lossless migration of legacy timelines and activity sidecars.
+- Text-only character-authored Moments with explicit per-character enablement and frequency controls for both recently chatted and library-only characters.
+- Parallel per-character Moments memory with Persona/story isolation, cross-post retrieval, read-only access to approved chat memory, user-selected memory-topic import, and a future chat prompt adapter that remains disabled.
 - Volcengine character voice settings and playback integration.
 - Character workshop prototype.
 - Character-card and chat-record export from the Leslie chat menu, including a combined ZIP that preserves CCV3 PNG and SillyTavern JSONL files.
@@ -37,7 +40,7 @@
 
 ## Later work
 
-- Optional character-authored Moments posts, with separate frequency, review, and story-consistency controls.
+- Optional injection of selected Moments memory into ordinary character chat after prompt-budget, privacy, and regression review.
 - A project/workspace layer for multiple stories or role-play contexts.
 - Secure LAN device discovery and synchronization with authentication and a documented threat model.
 - Signed installer, update strategy, version migration, and release automation.

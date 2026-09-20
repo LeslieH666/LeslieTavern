@@ -93,7 +93,7 @@ test('Leslie moments publishes, edits, archives and restores a selected-audience
 
     await page.locator('[data-moments-action="archived"]').check();
     const archivedPost = page.locator('.leslie-moments-post').filter({ hasText: editedContent }).first();
-    await expect(archivedPost).toContainText('已撤回');
+    await expect(archivedPost).toContainText('已删除');
     await archivedPost.locator('[data-moments-action="restore"]').click();
     await expect(page.locator('.leslie-moments-post').filter({ hasText: editedContent }).first()).not.toHaveClass(/is-archived/);
     await page.screenshot({ path: 'test-results/leslie-moments-desktop.png', fullPage: true });

@@ -19,7 +19,7 @@ Electron shell
 Browser UI
 ├─ Existing SillyTavern interface and event system
 ├─ Leslie desktop chat and settings layers
-├─ Memory and moments extensions, including an isolated model-backed activity worker with persisted enthusiasm controls
+├─ Memory and moments extensions, including threaded replies, per-character publishing policy, isolated social memory, and a model-backed activity worker
 └─ Character workshop and voice settings
 
 Optional companion boundary
