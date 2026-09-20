@@ -43,6 +43,7 @@ let conversationList;
 let searchInput;
 let workspaceBackdrop;
 let restoreButton;
+let chatTransitionSequence = 0;
 
 function getLayoutEnabled() {
     return localStorage.getItem(LAYOUT_PREFERENCE_KEY) !== 'false';
@@ -593,6 +594,7 @@ function closeHeaderMenu() {
     const button = document.querySelector('#leslie-chat-actions [data-action="chat-more"]');
     if (menu) {
         menu.hidden = true;
+        delete menu.dataset.open;
     }
     button?.setAttribute('aria-expanded', 'false');
 }
@@ -604,6 +606,11 @@ function toggleHeaderMenu() {
         return;
     }
     menu.hidden = !menu.hidden;
+    if (menu.hidden) {
+        delete menu.dataset.open;
+    } else {
+        menu.dataset.open = 'true';
+    }
     button?.setAttribute('aria-expanded', String(!menu.hidden));
 }
 
@@ -626,7 +633,9 @@ function setLayoutEnabled(enabled) {
 async function selectConversation(button) {
     const type = button.dataset.entityType;
     const id = button.dataset.entityId;
+    const transitionSequence = ++chatTransitionSequence;
     button.classList.add('is-loading');
+    document.body.classList.add('leslie-chat-transitioning');
     try {
         if (type === 'group') {
             await openGroupById(id);
@@ -646,6 +655,11 @@ async function selectConversation(button) {
     } finally {
         button.classList.remove('is-loading');
         scheduleConversationRender();
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (transitionSequence === chatTransitionSequence) {
+                document.body.classList.remove('leslie-chat-transitioning');
+            }
+        }));
     }
 }
 

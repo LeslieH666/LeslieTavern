@@ -1,6 +1,7 @@
 # Leslie Cupertino UI 重构
 
-> 状态：第一阶段实施中  
+> 状态：第一阶段可用，动效优化已完成
+>
 > 范围：表现层、布局和可访问性；不改变聊天数据、生成流程或 SillyTavern 兼容边界
 
 ## 目标
@@ -18,6 +19,17 @@ Leslie 的新界面采用 Apple Human Interface Guidelines 的层级、排版、
 - 材料和模糊只用于导航、输入栏、菜单等功能层；消息和设置内容保持稳定的不透明表面。
 - 所有关键点击目标不小于 `44 × 44px`，支持键盘焦点、减少动态效果与减少透明度偏好。
 - Leslie 模块失效时普通聊天仍需可用。
+
+## 动效规范
+
+动效遵循 Apple [Motion](https://developer.apple.com/design/human-interface-guidelines/motion) 与 [Reduced Motion](https://developer.apple.com/help/app-store-connect/manage-app-accessibility/reduced-motion-evaluation-criteria) 指南：只用于反馈、状态和层级变化，不把装饰性动画加入高频操作。
+
+- 直接按压反馈使用约 `70–160ms`，消息、菜单和页面层级变化使用约 `160–300ms`。
+- 动效不能阻塞点击、输入、返回或消息生成；没有等待动效结束才能继续的流程。
+- 新消息只在首次插入时动一次；恢复整段聊天历史时不逐条播放。
+- 不使用持续漂浮、循环呼吸、视差、旋转或大幅弹跳。
+- 系统启用“减少动态效果”时，不执行位移、缩放和菜单弹出动画，导航仍通过可见性与状态变化保持可理解。
+- 动效样式全部受 Cupertino 设计语言选择器约束，经典界面不加载这些表现。
 
 ## 第一阶段
 
@@ -45,6 +57,12 @@ backup/pre-cupertino-ui-20260920
 
 ```text
 feat/cupertino-ui-refactor
+```
+
+动效优化前的本地保护分支为：
+
+```text
+backup/pre-cupertino-motion-20260920
 ```
 
 优先使用无损运行时回退：

@@ -5,7 +5,7 @@
 - SillyTavern-compatible chat and character workflows.
 - Electron desktop entry point and a listener-aware local launcher; the current workspace can explicitly enable same-subnet LAN web access without per-device whitelist entries.
 - Modern desktop chat layout and settings adaptations.
-- A runtime-selectable Cupertino design language for the conversation list, chat chrome, message bubbles, and composer, with a persisted classic-theme fallback that leaves the original DOM and chat behavior intact.
+- A runtime-selectable Cupertino design language for the conversation list, chat chrome, message bubbles, and composer, with purposeful reduced-motion-aware transitions and a persisted classic-theme fallback that leaves the original DOM and chat behavior intact.
 - Semantic reply modes that guide balanced, novel, dialogue-driven, or concise presentation through prompt injection instead of fixed per-style token caps; DeepSeek foreground replies can use provider-controlled output length.
 - First versions of Leslie memory and Persona/storyline identity isolation.
 - Moments publishing and timeline storage, plus model-backed read receipts, persisted low/medium/high enthusiasm controls, and selective likes/comments that continue while the Electron app is hidden in the system tray.

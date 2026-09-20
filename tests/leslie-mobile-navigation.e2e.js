@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-/* global document, history, localStorage, window */
+/* global document, history, localStorage, requestAnimationFrame, window */
 
 test.use({ channel: 'msedge' });
 
@@ -33,6 +33,26 @@ function collectConsoleErrors(page) {
 async function expectHealthyPage(page) {
     expect(await page.locator('body').innerText()).not.toHaveLength(0);
     await expect(page.locator('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay')).toHaveCount(0);
+}
+
+async function probeMessageMotion(page, isUser = false) {
+    return page.evaluate(async (userMessage) => {
+        const probe = document.createElement('div');
+        probe.className = 'mes';
+        probe.setAttribute('is_user', String(userMessage));
+        const block = document.createElement('div');
+        block.className = 'mes_block';
+        block.textContent = 'Synthetic motion probe';
+        probe.append(block);
+        document.getElementById('chat').append(probe);
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const result = {
+            marked: probe.classList.contains('leslie-message-enter'),
+            animations: probe.getAnimations({ subtree: true }).length,
+        };
+        probe.remove();
+        return result;
+    }, isUser);
 }
 
 test('mobile starts on contacts and enters a dedicated chat page', async ({ page }) => {
@@ -99,6 +119,16 @@ test('desktop keeps contacts and chat visible together', async ({ page }) => {
     await expect(page.locator('.leslie-mobile-back')).toBeHidden();
     await expect(page.locator('body')).toHaveAttribute('data-leslie-design-language', 'cupertino');
 
+    const cupertinoMotion = await probeMessageMotion(page, true);
+    expect(cupertinoMotion.marked).toBe(true);
+    expect(cupertinoMotion.animations).toBeGreaterThan(0);
+
+    const chatMenuButton = page.locator('#leslie-chat-actions [data-action="chat-more"]');
+    await chatMenuButton.click();
+    await expect(page.locator('#leslie-chat-more-menu')).toHaveAttribute('data-open', 'true');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#leslie-chat-more-menu')).toBeHidden();
+
     const appearanceButton = page.locator('.leslie-sidebar-actions .leslie-theme-toggle');
     await appearanceButton.click();
     await expect(page.locator('#leslie-theme-menu')).toBeVisible();
@@ -111,10 +141,15 @@ test('desktop keeps contacts and chat visible together', async ({ page }) => {
     await page.locator('#leslie-theme-menu [data-leslie-design-language="classic"]').click();
     await expect(page.locator('body')).toHaveAttribute('data-leslie-design-language', 'classic');
     expect(await page.evaluate(() => localStorage.getItem('leslie.design.language'))).toBe('classic');
+    expect(await probeMessageMotion(page)).toEqual({ marked: false, animations: 0 });
 
     await appearanceButton.click();
     await page.locator('#leslie-theme-menu [data-leslie-design-language="cupertino"]').click();
     await expect(page.locator('body')).toHaveAttribute('data-leslie-design-language', 'cupertino');
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    expect(await probeMessageMotion(page)).toEqual({ marked: false, animations: 0 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
 
     await appearanceButton.click();
     await page.locator('#leslie-theme-menu [data-leslie-theme-mode="auto"]').click();

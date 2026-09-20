@@ -6,6 +6,7 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 
 ### Added
 
+- Purposeful Cupertino motion for direct control feedback, menus, chat changes, newly inserted messages, mobile navigation, and large overlays, with a system Reduce Motion path that removes spatial transforms.
 - A Cupertino design language for the conversation list, chat header, message bubbles, and composer, plus a persistent in-app switch back to the previous classic presentation.
 - A presentation-only design-language preference with unit coverage and a documented pre-refactor Git recovery point.
 - Persistent Leslie Moments background activity with genuine per-character read receipts, selective AI likes and comments, bounded retry/rate controls, and sidecar storage that leaves the original timeline intact.
