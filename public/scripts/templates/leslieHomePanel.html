@@ -1,0 +1,114 @@
+<section class="leslieHomePanel" aria-labelledby="leslie-home-title">
+    <header class="leslieHomeIntro">
+        <span class="leslieHomeEyebrow"><i class="fa-solid fa-sparkles" aria-hidden="true"></i> Leslie Home</span>
+        <h1 id="leslie-home-title">{{greeting}}，今天想和谁聊聊？</h1>
+        <p>{{subtitle}}</p>
+        {{#if connectionNotice}}
+        <button type="button" class="leslieHomeConnection" data-home-action="configure-model">
+            <span><i class="fa-solid fa-plug-circle-xmark" aria-hidden="true"></i></span>
+            <span><strong>{{connectionNotice.title}}</strong><small>{{connectionNotice.detail}}</small></span>
+            <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+        </button>
+        {{/if}}
+    </header>
+
+    {{#if emptyCharacters}}
+    <section class="leslieHomeOnboarding" aria-labelledby="leslie-home-onboarding-title">
+        <span class="leslieHomeOnboardingIcon"><i class="fa-solid fa-comments" aria-hidden="true"></i></span>
+        <div>
+            <span class="leslieHomeSectionKicker">从这里开始</span>
+            <h2 id="leslie-home-onboarding-title">创建或导入第一位角色</h2>
+            <p>准备好角色、你的 Persona 和模型连接后，就可以开始第一段对话。</p>
+        </div>
+        <ol>
+            <li><span>1</span><div><strong>添加角色</strong><small>导入已有角色卡，或使用 AI 角色工坊创建。</small></div></li>
+            <li><span>2</span><div><strong>选择 Persona</strong><small>告诉角色现在正在和谁交流。</small></div></li>
+            <li><span>3</span><div><strong>连接模型</strong><small>连接在线 API 或本地模型后开始聊天。</small></div></li>
+        </ol>
+        <div class="leslieHomePrimaryActions">
+            <button type="button" class="is-primary external_import_button"><i class="fa-solid fa-file-import" aria-hidden="true"></i>导入角色</button>
+            <button type="button" data-home-action="open-workshop"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>AI 角色工坊</button>
+        </div>
+    </section>
+    {{else}}
+        {{#if continueChat}}
+        <section class="leslieHomeSection leslieHomeContinue" aria-labelledby="leslie-home-continue-title">
+            <div class="leslieHomeSectionHeading">
+                <div><span class="leslieHomeSectionKicker">接着上次</span><h2 id="leslie-home-continue-title">继续对话</h2></div>
+                <time>{{continueChat.date}}</time>
+            </div>
+            <button type="button" class="leslieHomeContinueCard" data-home-action="open-chat" data-avatar="{{continueChat.avatar}}" data-group="{{continueChat.group}}" data-file="{{continueChat.fileName}}">
+                <span class="leslieHomeContinueAvatar{{#if continueChat.isGroup}} is-group{{/if}}">
+                    {{#if continueChat.avatarUrl}}<img src="{{continueChat.avatarUrl}}" alt="">{{/if}}
+                    <i class="fa-solid {{#if continueChat.isGroup}}fa-user-group{{else}}fa-user{{/if}}" aria-hidden="true"></i>
+                </span>
+                <span class="leslieHomeContinueCopy">
+                    <span class="leslieHomeContinueMeta"><strong>{{continueChat.name}}</strong><small>{{continueChat.lineLabel}}</small></span>
+                    <span class="leslieHomeContinuePreview">{{continueChat.preview}}</span>
+                </span>
+                <span class="leslieHomeContinueButton">继续<i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+            </button>
+        </section>
+        {{/if}}
+
+        <section class="leslieHomeSection leslieHomeCharacters" aria-labelledby="leslie-home-characters-title">
+            <div class="leslieHomeSectionHeading">
+                <div><span class="leslieHomeSectionKicker">快速开始</span><h2 id="leslie-home-characters-title">{{characterSectionTitle}}</h2></div>
+                <button type="button" data-home-action="manage-pins"><i class="fa-solid fa-thumbtack" aria-hidden="true"></i>管理置顶</button>
+            </div>
+            <div class="leslieHomeCharacterGrid">
+                {{#each homeCharacters}}
+                <article class="leslieHomeCharacter{{#if pinned}} is-pinned{{/if}}">
+                    <button type="button" class="leslieHomeCharacterOpen" data-home-action="open-character" data-avatar="{{avatar}}" data-file="{{fileName}}" title="与 {{name}} 聊天">
+                        <span class="leslieHomeCharacterAvatar">
+                            <img src="{{avatarUrl}}" alt="">
+                            <i class="fa-solid fa-user" aria-hidden="true"></i>
+                        </span>
+                        <span><strong>{{name}}</strong><small>{{activityLabel}}</small></span>
+                    </button>
+                    <button type="button" class="leslieHomeCharacterPin{{#if pinned}} is-pinned{{/if}}" data-home-action="toggle-character-pin" data-avatar="{{avatar}}" aria-label="{{pinLabel}}" title="{{pinLabel}}" aria-pressed="{{pinned}}">
+                        <i class="fa-solid fa-thumbtack" aria-hidden="true"></i>
+                    </button>
+                </article>
+                {{/each}}
+            </div>
+        </section>
+
+        <section class="leslieHomeSection leslieHomeMoments" aria-labelledby="leslie-home-moments-title">
+            <div class="leslieHomeSectionHeading">
+                <div><span class="leslieHomeSectionKicker">角色世界</span><h2 id="leslie-home-moments-title">最近动态</h2></div>
+                <button type="button" data-home-action="open-moments">查看朋友圈<i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+            </div>
+            {{#if hasMomentActivities}}
+            <div class="leslieHomeMomentList">
+                {{#each momentActivities}}
+                <button type="button" data-home-action="open-moments">
+                    <span class="leslieHomeMomentAvatar">
+                        {{#if avatar}}<img src="{{avatar}}" alt="">{{/if}}
+                        <i class="fa-solid {{icon}}" aria-hidden="true"></i>
+                    </span>
+                    <span><strong>{{label}}</strong><small>{{date}}</small></span>
+                    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                </button>
+                {{/each}}
+            </div>
+            {{else}}
+            <button type="button" class="leslieHomeMomentEmpty" data-home-action="open-moments">
+                <span><i class="fa-regular fa-images" aria-hidden="true"></i></span>
+                <span><strong>还没有新的角色动态</strong><small>去朋友圈分享近况，或看看角色们的生活。</small></span>
+                <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+            </button>
+            {{/if}}
+        </section>
+
+        <section class="leslieHomeSection leslieHomeQuickActions" aria-labelledby="leslie-home-actions-title">
+            <div class="leslieHomeSectionHeading"><div><span class="leslieHomeSectionKicker">快捷入口</span><h2 id="leslie-home-actions-title">开始新的事情</h2></div></div>
+            <div>
+                <button type="button" data-home-action="focus-characters"><i class="fa-solid fa-comment-medical" aria-hidden="true"></i><span><strong>开始新对话</strong><small>从左侧选择角色</small></span></button>
+                <button type="button" data-home-action="temporary-chat"><i class="fa-solid fa-comment-dots" aria-hidden="true"></i><span><strong>临时聊天</strong><small>不绑定角色快速聊聊</small></span></button>
+                <button type="button" class="external_import_button"><i class="fa-solid fa-file-import" aria-hidden="true"></i><span><strong>导入角色</strong><small>读取角色卡文件</small></span></button>
+                <button type="button" data-home-action="open-workshop"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span><strong>AI 角色工坊</strong><small>创建新的角色</small></span></button>
+            </div>
+        </section>
+    {{/if}}
+</section>

@@ -649,6 +649,9 @@ function readLatestMessagePreview() {
 
 function updateHeader() {
     const active = getActiveEntity();
+    const homeOpen = document.body.classList.contains('leslie-home-open')
+        && !document.body.classList.contains('leslie-chat-layout-disabled')
+        && !active;
     const name = document.getElementById('leslie-chat-name');
     const status = document.getElementById('leslie-chat-status');
     const avatar = document.getElementById('leslie-chat-avatar');
@@ -657,7 +660,7 @@ function updateHeader() {
     const cardButton = document.querySelector('#leslie-chat-actions [data-action="character-card"]');
 
     if (name) {
-        name.textContent = active?.name || '选择一个角色';
+        name.textContent = active?.name || (homeOpen ? '首页' : '选择一个角色');
     }
     if (status) {
         const connectionState = getLeslieConnectionState();
@@ -666,7 +669,7 @@ function updateHeader() {
             : '群聊故事线';
         status.textContent = active
             ? `${worldLineLabel} · ${connectionState.checking ? '正在检测模型' : connectionState.connected ? '模型已连接' : '模型未连接'}`
-            : '从左侧开始一段对话';
+            : homeOpen ? '继续对话、查看角色动态或开始新的故事' : '从左侧开始一段对话';
     }
     if (image instanceof HTMLImageElement) {
         image.hidden = !active?.avatar;
@@ -675,7 +678,7 @@ function updateHeader() {
     }
     if (fallback) {
         fallback.hidden = Boolean(active?.avatar);
-        fallback.className = `fa-solid ${active?.type === 'group' ? 'fa-user-group' : 'fa-user'}`;
+        fallback.className = `fa-solid ${active?.type === 'group' ? 'fa-user-group' : homeOpen ? 'fa-house' : 'fa-user'}`;
     }
     if (cardButton instanceof HTMLButtonElement) {
         cardButton.disabled = !active;
@@ -994,6 +997,7 @@ function bindShellEvents() {
             window.setTimeout(updateConnectionState, 0);
         }
     });
+    document.addEventListener('leslie:home-state-changed', updateHeader);
     const chat = document.getElementById('chat');
     if (chat) {
         new MutationObserver(readLatestMessagePreview).observe(chat, { childList: true, subtree: true, characterData: true });
