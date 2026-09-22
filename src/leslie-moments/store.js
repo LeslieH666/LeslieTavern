@@ -42,6 +42,11 @@ function cleanContent(value) {
     return content;
 }
 
+function identitiesMatch(left, right) {
+    return ['entityId', 'type', 'sourceKey', 'label', 'avatar']
+        .every(field => String(left?.[field] ?? '') === String(right?.[field] ?? ''));
+}
+
 export function canMomentBeViewedBy(post, viewerEntityId) {
     if (!viewerEntityId || post.visibility?.type === 'all') {
         return true;
@@ -106,6 +111,32 @@ export class LeslieMomentsStore {
         return post;
     }
 
+    alignPersonaCommentAuthors() {
+        const previous = this.readTimeline();
+        const next = structuredClone(previous);
+        let changedComments = 0;
+
+        for (const post of next.posts) {
+            if (post.author?.type !== 'persona') {
+                continue;
+            }
+            for (const comment of post.reactions?.comments ?? []) {
+                if (comment.actor?.type === 'persona' && !identitiesMatch(comment.actor, post.author)) {
+                    comment.actor = structuredClone(post.author);
+                    changedComments += 1;
+                }
+            }
+        }
+
+        if (!changedComments) {
+            return { changedComments: 0, timeline: previous };
+        }
+        return {
+            changedComments,
+            timeline: this.saveTimeline(previous, next),
+        };
+    }
+
     createPost(value) {
         const previous = this.readTimeline();
         if (previous.posts.length >= 5000) {
@@ -140,12 +171,10 @@ export class LeslieMomentsStore {
             throw new LeslieMomentsStoreError('INVALID_STATE', 'Restore this moment before editing it.');
         }
         post.content = cleanContent(content);
-        if (post.mode !== 'story') {
-            try {
-                post.visibility = normalizeMomentVisibility(visibility);
-            } catch (error) {
-                throw new LeslieMomentsStoreError('INVALID_INPUT', error.message);
-            }
+        try {
+            post.visibility = normalizeMomentVisibility(visibility);
+        } catch (error) {
+            throw new LeslieMomentsStoreError('INVALID_INPUT', error.message);
         }
         post.revision = Number(post.revision ?? 1) + 1;
         post.editedAt = new Date().toISOString();

@@ -7,7 +7,7 @@ export const MOMENT_MODE_DETAILS = Object.freeze({
     story: {
         label: '剧情内动态',
         icon: 'fa-book-open',
-        description: '它会被视为当前剧情线里真实发生的事情，因此只能发给这条剧情线里的角色。',
+        description: '它会被视为所选角色剧情线里真实发生的事情；谁能看见仍由可见范围单独决定。',
     },
     aside: {
         label: '轻松调侃',
@@ -88,10 +88,57 @@ export function describeMomentVisibility(visibility) {
     return `仅 ${targets.slice(0, 2).map(target => target.label).join('、')} 等 ${targets.length} 个角色可见`;
 }
 
+export function sortSelectedFirst(items, isSelected, getLabel = item => item?.label ?? '') {
+    return (Array.isArray(items) ? items : [])
+        .map((item, index) => ({ item, index, selected: Boolean(isSelected(item)) }))
+        .sort((left, right) => Number(right.selected) - Number(left.selected)
+            || String(getLabel(left.item)).localeCompare(String(getLabel(right.item)), 'zh-CN')
+            || left.index - right.index)
+        .map(entry => entry.item);
+}
+
+export function sortMomentMemoryEvents(items, { mode = 'level', selectedIds = [] } = {}) {
+    const selected = selectedIds instanceof Set ? selectedIds : new Set(selectedIds);
+    const levelOrder = { A: 0, B: 1, C: 2 };
+    const timestamp = item => {
+        const value = new Date(item?.createdAt ?? item?.updatedAt ?? 0).getTime();
+        return Number.isFinite(value) ? value : 0;
+    };
+    return (Array.isArray(items) ? items : [])
+        .map((item, index) => ({ item, index, isSelected: selected.has(item?.id) }))
+        .sort((left, right) => {
+            const selectedDifference = Number(right.isSelected) - Number(left.isSelected);
+            if (selectedDifference) {
+                return selectedDifference;
+            }
+            if (mode === 'recent') {
+                const timeDifference = timestamp(right.item) - timestamp(left.item);
+                if (timeDifference) {
+                    return timeDifference;
+                }
+            } else {
+                const levelDifference = (levelOrder[String(left.item?.level).toUpperCase()] ?? 3)
+                    - (levelOrder[String(right.item?.level).toUpperCase()] ?? 3);
+                if (levelDifference) {
+                    return levelDifference;
+                }
+                const timeDifference = timestamp(right.item) - timestamp(left.item);
+                if (timeDifference) {
+                    return timeDifference;
+                }
+            }
+            return String(left.item?.summary ?? '').localeCompare(String(right.item?.summary ?? ''), 'zh-CN')
+                || left.index - right.index;
+        })
+        .map(entry => entry.item);
+}
+
 export function filterMomentPosts(posts, { mode = 'all', includeArchived = false } = {}) {
     return (Array.isArray(posts) ? posts : [])
         .filter(post => includeArchived || post.status === 'active')
-        .filter(post => mode === 'all' || post.mode === mode)
+        .filter(post => mode === 'all'
+            || post.mode === mode
+            || (mode === 'reality' && post.mode === 'character' && post.worldLine !== 'story'))
         .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
 }
 

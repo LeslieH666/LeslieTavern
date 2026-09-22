@@ -1822,6 +1822,217 @@ body.leslie-modern .leslie-settings-detail {
     }
 }
 
+body.leslie-modern .leslie-demo-mode-card {
+    display: grid;
+    gap: 16px;
+    border-color: color-mix(in srgb, var(--leslie-accent) 20%, var(--leslie-border));
+    background:
+        radial-gradient(circle at 94% 4%, color-mix(in srgb, var(--leslie-accent) 12%, transparent), transparent 35%),
+        var(--leslie-surface-solid);
+}
+
+body.leslie-modern .leslie-demo-mode-card.is-active {
+    border-color: color-mix(in srgb, #ff9f0a 58%, var(--leslie-border));
+    background:
+        radial-gradient(circle at 94% 4%, rgb(255 159 10 / 16%), transparent 38%),
+        var(--leslie-surface-solid);
+}
+
+body.leslie-modern .leslie-demo-mode-heading {
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 13px;
+}
+
+body.leslie-modern .leslie-demo-mode-heading h3,
+body.leslie-modern .leslie-demo-mode-heading p {
+    margin: 0;
+}
+
+body.leslie-modern .leslie-demo-mode-heading p {
+    margin-top: 4px;
+    color: var(--leslie-text-soft);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+body.leslie-modern .leslie-demo-mode-icon {
+    display: grid;
+    width: 46px;
+    height: 46px;
+    place-items: center;
+    color: var(--leslie-accent-strong);
+    background: var(--leslie-accent-soft);
+    border-radius: 15px;
+    font-size: 18px;
+}
+
+body.leslie-modern .leslie-demo-mode-card.is-active .leslie-demo-mode-icon {
+    color: #c66b00;
+    background: rgb(255 159 10 / 15%);
+}
+
+body.leslie-modern .leslie-demo-mode-status {
+    padding: 6px 10px;
+    color: var(--leslie-text-soft);
+    background: var(--leslie-surface-subtle);
+    border: 1px solid var(--leslie-border);
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+body.leslie-modern .leslie-demo-mode-card.is-active .leslie-demo-mode-status {
+    color: #9b5700;
+    background: rgb(255 159 10 / 13%);
+    border-color: rgb(255 159 10 / 32%);
+}
+
+body.leslie-modern .leslie-demo-mode-status.is-error {
+    color: #d43d35;
+    border-color: rgb(212 61 53 / 32%);
+    white-space: normal;
+}
+
+body.leslie-modern .leslie-demo-mode-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+body.leslie-modern .leslie-demo-mode-actions > small {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    color: var(--leslie-text-soft);
+    line-height: 1.5;
+}
+
+body.leslie-modern .leslie-demo-mode-actions > small i {
+    margin-top: 2px;
+    color: var(--leslie-accent);
+}
+
+body.leslie-modern .leslie-demo-mode-actions .leslie-settings-primary-button {
+    flex: 0 0 auto;
+    min-width: 164px;
+}
+
+body.leslie-modern .leslie-demo-mode-banner {
+    position: fixed;
+    z-index: 49000;
+    top: max(12px, env(safe-area-inset-top));
+    right: max(14px, env(safe-area-inset-right));
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    align-items: center;
+    max-width: min(460px, calc(100dvw - 28px));
+    padding: 8px 9px 8px 10px;
+    gap: 9px;
+    color: #513000;
+    background: rgb(255 246 229 / 94%);
+    border: 1px solid rgb(224 139 15 / 38%);
+    border-radius: 15px;
+    box-shadow: 0 12px 34px rgb(107 67 8 / 20%);
+    backdrop-filter: blur(18px) saturate(1.35);
+    -webkit-backdrop-filter: blur(18px) saturate(1.35);
+}
+
+body.leslie-modern .leslie-demo-mode-banner[hidden] {
+    display: none !important;
+}
+
+body.leslie-modern .leslie-demo-mode-banner > i {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    color: #a75c00;
+    background: rgb(255 159 10 / 17%);
+    border-radius: 10px;
+}
+
+body.leslie-modern .leslie-demo-mode-banner > span {
+    display: grid;
+    min-width: 0;
+}
+
+body.leslie-modern .leslie-demo-mode-banner strong {
+    font-size: 13px;
+}
+
+body.leslie-modern .leslie-demo-mode-banner small {
+    overflow: hidden;
+    color: rgb(81 48 0 / 67%);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.leslie-modern .leslie-demo-mode-banner button {
+    display: inline-flex;
+    min-height: 34px;
+    margin: 0;
+    padding: 0 11px;
+    align-items: center;
+    gap: 7px;
+    color: #7b4400;
+    background: rgb(255 159 10 / 13%);
+    border: 1px solid rgb(202 111 0 / 22%);
+    border-radius: 10px;
+    box-shadow: none;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 750;
+    cursor: pointer;
+}
+
+body.leslie-modern .leslie-demo-mode-banner button:hover,
+body.leslie-modern .leslie-demo-mode-banner button:focus-visible {
+    background: rgb(255 159 10 / 23%);
+    outline: 2px solid rgb(202 111 0 / 25%);
+    outline-offset: 2px;
+}
+
+@media (max-width: 700px) {
+    body.leslie-modern .leslie-demo-mode-heading {
+        grid-template-columns: 42px minmax(0, 1fr);
+    }
+
+    body.leslie-modern .leslie-demo-mode-status {
+        grid-column: 1 / -1;
+        justify-self: start;
+    }
+
+    body.leslie-modern .leslie-demo-mode-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    body.leslie-modern .leslie-demo-mode-actions .leslie-settings-primary-button {
+        width: 100%;
+    }
+
+    body.leslie-modern .leslie-demo-mode-banner {
+        top: auto;
+        right: max(9px, env(safe-area-inset-right));
+        bottom: max(9px, env(safe-area-inset-bottom));
+        left: max(9px, env(safe-area-inset-left));
+        max-width: none;
+    }
+
+    body.leslie-modern .leslie-demo-mode-banner small {
+        display: none;
+    }
+
+    body.leslie-modern .leslie-demo-mode-banner button span {
+        display: none;
+    }
+}
+
 /* Simplified online/local API chooser and three-state connection feedback. */
 body.leslie-modern .leslie-settings-status.is-configured {
     color: #9a6405;

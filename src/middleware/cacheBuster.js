@@ -70,7 +70,7 @@ class CacheBuster {
      * @type {import('express').RequestHandler}
      */
     #middleware(request, response, next) {
-        const handle = request.user?.profile?.handle || DEFAULT_USER.handle;
+        const handle = request.user?.storageHandle || request.user?.profile?.handle || DEFAULT_USER.handle;
         const userAgent = request.headers['user-agent'] || '';
         const hash = crypto.createHash('sha256').update(userAgent).digest('hex');
         const key = `${handle}-${hash}`;

@@ -241,14 +241,56 @@ export class LeslieMemoryStore {
         };
     }
 
+    listMemorySources() {
+        if (!fs.existsSync(this.baseDirectory)) {
+            return [];
+        }
+        const sources = [];
+        for (const entry of fs.readdirSync(this.baseDirectory, { withFileTypes: true })) {
+            if (!entry.isDirectory() || !isMemoryId(entry.name)) {
+                continue;
+            }
+            try {
+                const paths = this.getPaths(entry.name);
+                const manifest = readJson(paths.manifest);
+                const coreSnapshot = normalizeCoreSnapshot(readJson(paths.core));
+                const identityBinding = manifest.identityBinding
+                    ? normalizeIdentityBinding(manifest.identityBinding)
+                    : null;
+                sources.push({
+                    memoryId: entry.name,
+                    chatKey: cleanIdentity(manifest.chatKey, 'chatKey'),
+                    characterKey: cleanIdentity(manifest.characterKey, 'characterKey'),
+                    displayName: coreSnapshot.name,
+                    avatar: coreSnapshot.avatar,
+                    identityBinding,
+                    identityStatus: identityBinding?.confirmed ? 'confirmed' : identityBinding ? 'unconfirmed' : 'unbound',
+                    updatedAt: String(manifest.updatedAt ?? '').trim(),
+                });
+            } catch (error) {
+                console.warn(`Skipped an unavailable Leslie memory source (${entry.name}). ${String(error?.message || error).slice(0, 300)}`);
+            }
+        }
+        return sources.sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
+    }
+
     migrateStateIfNeeded(memoryId, manifest, rawState) {
         const rawVersion = Number(rawState?.schemaVersion ?? 0);
         const manifestVersion = Number(manifest?.schemaVersion ?? 0);
+        const normalizedIdentityBinding = manifest?.identityBinding
+            ? normalizeIdentityBinding(manifest.identityBinding)
+            : null;
+        const identityNeedsMigration = Boolean(manifest?.identityBinding
+            && !['story', 'reality'].includes(manifest.identityBinding.worldLine));
         const needsMigration = rawVersion < MEMORY_SCHEMA_VERSION
             || manifestVersion < MEMORY_SCHEMA_VERSION
-            || !rawState?.settings?.memoryModel;
+            || !rawState?.settings?.memoryModel
+            || identityNeedsMigration;
         if (!needsMigration) {
-            return { manifest, state: normalizeMemoryState(rawState) };
+            return {
+                manifest: { ...manifest, identityBinding: normalizedIdentityBinding },
+                state: normalizeMemoryState(rawState),
+            };
         }
 
         const paths = this.getPaths(memoryId);
@@ -262,6 +304,7 @@ export class LeslieMemoryStore {
         const nextManifest = {
             ...manifest,
             schemaVersion: MEMORY_SCHEMA_VERSION,
+            identityBinding: normalizedIdentityBinding,
             updatedAt: new Date().toISOString(),
         };
         writeJson(paths.state, state);
@@ -466,6 +509,54 @@ export class LeslieMemoryStore {
             growth: memory.state.growth,
             memories: selected.map(item => ({ ...item.event, score: item.score })),
             settings: memory.state.settings,
+        };
+    }
+
+    selectCrossLineContext(memoryId, { query = '', maximum } = {}) {
+        const current = this.getMemory(memoryId);
+        const currentBinding = current.manifest.identityBinding;
+        const limit = Math.min(3, Math.max(1, Number(maximum ?? current.state.settings.crossLineMaxMemories) || 2));
+        if (!current.state.enabled || current.state.settings.crossLineMemoryEnabled === false || !currentBinding?.confirmed) {
+            return { enabled: false, memories: [] };
+        }
+
+        const currentLine = currentBinding.worldLine === 'reality' ? 'reality' : 'story';
+        const candidates = [];
+        for (const source of this.listMemorySources()) {
+            const binding = source.identityBinding;
+            const sourceLine = binding?.worldLine === 'reality' ? 'reality' : 'story';
+            if (source.memoryId === memoryId
+                || !binding?.confirmed
+                || binding.personaId !== currentBinding.personaId
+                || binding.counterpartId !== currentBinding.counterpartId
+                || sourceLine === currentLine) {
+                continue;
+            }
+            const memory = this.getMemory(source.memoryId);
+            if (!memory.state.enabled) {
+                continue;
+            }
+            const selected = selectMemoryEvents(memory.events, {
+                query,
+                currentMessageId: 0,
+                settings: memory.state.settings,
+                maximum: limit,
+            });
+            for (const item of selected) {
+                candidates.push({
+                    ...item.event,
+                    score: item.score,
+                    fromWorldLine: sourceLine,
+                    sourceMemoryId: source.memoryId,
+                });
+            }
+        }
+        candidates.sort((left, right) => Number(right.score) - Number(left.score)
+            || String(right.updatedAt).localeCompare(String(left.updatedAt)));
+        return {
+            enabled: true,
+            currentWorldLine: currentLine,
+            memories: candidates.slice(0, limit),
         };
     }
 

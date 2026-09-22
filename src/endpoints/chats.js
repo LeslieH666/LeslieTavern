@@ -469,7 +469,7 @@ export async function trySaveChat(chatData, filePath, skipIntegrityCheck = false
 
 router.post('/save', validateAvatarUrlMiddleware, async function (request, response) {
     try {
-        const handle = request.user.profile.handle;
+        const handle = request.user.storageHandle || request.user.profile.handle;
         const cardName = String(request.body.avatar_url).replace('.png', '');
         const chatData = request.body.chat;
         const chatFileName = `${String(request.body.file_name)}.jsonl`;
@@ -851,7 +851,7 @@ router.post('/group/save', async function (request, response) {
         }
 
         const id = request.body.id;
-        const handle = request.user.profile.handle;
+        const handle = request.user.storageHandle || request.user.profile.handle;
         const chatFilePath = path.join(request.user.directories.groupChats, sanitize(`${id}.jsonl`));
         const chatData = request.body.chat;
 

@@ -14,8 +14,8 @@ LeslieTavern 是基于 [SillyTavern](https://github.com/SillyTavern/SillyTavern)
 ## 主要功能
 
 - 保留 SillyTavern 的角色卡、群聊、World Info、Swipe、模型适配和 JSONL 聊天格式。
-- 提供 Windows Electron 桌面入口、启动中心、诊断、联合启动和便携构建脚本。
-- 提供 Leslie 身份、Persona / 剧情线隔离、记忆，以及带真实已读、连续评论回复、可查看点赞名单、按角色授权主动发帖、独立朋友圈记忆和托盘后台运行的朋友圈时间线。
+- 提供 Windows Electron 桌面入口、单一 `Leslie Heaven` 启动入口、应用内本地服务控制和便携构建脚本。
+- 提供 Leslie 身份、Persona / 剧情线隔离，以及彼此可产生少量记忆共鸣的故事线与现实线聊天。现实线只提取去剧情核心性格，由当前 API 动态生成开场，并严格保存为普通即时消息；朋友圈另有桌面双栏布局、真实已读、连续评论回复、可查看点赞名单、按角色授权主动发帖、独立记忆和托盘后台运行。
 - 提供火山引擎角色语音配置、试听与回复自动朗读。
 - 提供可选的互动引导输入：围绕当前用户 Persona 生成三个可点击回复，并回到原有聊天生成链路。
 - 提供 AI 角色工坊：可使用当前聊天 API（包括 DeepSeek 等）或本地 OpenAI-compatible 模型生成 CCV3 草稿；结果只在内存中预览，用户明确应用后才进入角色编辑器。
@@ -66,22 +66,16 @@ pnpm run dev
 
 ### 已整理的本机工作区
 
-本项目提供以下 Windows 快捷入口：
+本项目只保留一个日常启动入口：
 
-- `启动中心.cmd`：选择只启动 LeslieTavern、联合启动 AIRI、启动/关闭本地 Peach 模型、停止或诊断。
-- `启动 LeslieTavern.cmd`
-- `启动 LeslieTavern 与 AIRI.cmd`
-- `关闭 LeslieTavern.cmd`
-- `关闭 LeslieTavern 与 AIRI.cmd`
-- `启动本地模型.cmd`
-- `关闭本地模型.cmd`
+- `启动 Leslie Heaven.cmd`：启动 LeslieTavern 桌面端。
 - `备份用户数据.cmd`
 - `打开用户数据目录.cmd`
 - `查看运行日志.cmd`
 
-这些脚本使用项目根目录下的本地 `data/`、`Runtime/` 和 `Config/`。这些目录不会进入 Git。
+启动后可在“设置 → 模型连接 → 本地服务”中分别启动或停止 AIRI 与项目适配的 Peach 本地模型。服务按钮仅在 Electron 桌面端开放，不会通过普通浏览器或局域网页面暴露本机进程控制。脚本和服务使用项目根目录下的本地 `data/`、`Runtime/`、`Config/` 与 `Run/`；这些目录不会进入 Git。
 启用局域网监听后，与访问地址属于同一私有子网的设备无需逐个填写 IP；切换家庭 Wi-Fi 或手机热点后会自动使用新子网，公网及未用于当前连接的其他网段仍被拒绝。
-联合启动、自动角色绑定和 AIRI 使用方法见 [LeslieTavern 与 AIRI 启动指南](docs/airi-launcher.md)。AIRI 不需要手动选择聊天 provider、模型或音色。
+AIRI 启动、自动角色绑定和使用方法见 [LeslieTavern 与 AIRI 启动指南](docs/airi-launcher.md)。AIRI 不需要手动选择聊天 provider、模型或音色。
 
 ### 本地模型与角色工坊
 
@@ -95,8 +89,8 @@ models/Peach-2.0-9B-8k-Roleplay/Peach-2.0-9B-8k-Roleplay.Q4_K_M.gguf
 
 使用流程：
 
-1. 双击 `启动本地模型.cmd`，启动项目适配的 KoboldCpp 并加载 GGUF；关闭时使用 `关闭本地模型.cmd`。
-2. 在 LeslieTavern 的“设置 → 模型连接”中点击“**一键识别并自动配置**”。按钮会检查本机已启动的适配服务，自动选择底层运行时、模型和生成参数，然后执行原有连接流程。
+1. 双击 `启动 Leslie Heaven.cmd`，再到“设置 → 模型连接 → 本地服务”启动项目适配的 Peach 模型；同一位置可以安全停止该脚本记录的进程。
+2. 在“设置 → 模型连接”中点击“**一键识别并自动配置**”。按钮会检查本机已启动的适配服务，自动选择底层运行时、模型和生成参数，然后执行原有连接流程。
 3. 打开“AI 角色工坊”，在“角色卡生成接口”中选择当前聊天 API 或本地 Peach。
 4. 检查简报、知识核对、JSON 草稿和质量审校；预览不会自动写入角色目录。
 5. 只有点击“带入角色编辑器”并在原有编辑流程中保存，才会创建正式角色卡。

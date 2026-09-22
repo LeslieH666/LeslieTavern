@@ -442,7 +442,8 @@ export const router = express.Router();
  * Handle a POST request to get the stats object
  */
 router.post('/get', function (request, response) {
-    const stats = STATS.get(request.user.profile.handle) || {};
+    const storageHandle = request.user.storageHandle || request.user.profile.handle;
+    const stats = STATS.get(storageHandle) || {};
     response.send(stats);
 });
 
@@ -451,7 +452,8 @@ router.post('/get', function (request, response) {
  */
 router.post('/recreate', async function (request, response) {
     try {
-        await recreateStats(request.user.profile.handle, request.user.directories.chats, request.user.directories.characters);
+        const storageHandle = request.user.storageHandle || request.user.profile.handle;
+        await recreateStats(storageHandle, request.user.directories.chats, request.user.directories.characters);
         return response.sendStatus(200);
     } catch (error) {
         console.error(error);
@@ -464,6 +466,7 @@ router.post('/recreate', async function (request, response) {
 */
 router.post('/update', function (request, response) {
     if (!request.body) return response.sendStatus(400);
-    setCharStats(request.user.profile.handle, request.body);
+    const storageHandle = request.user.storageHandle || request.user.profile.handle;
+    setCharStats(storageHandle, request.body);
     return response.sendStatus(200);
 });

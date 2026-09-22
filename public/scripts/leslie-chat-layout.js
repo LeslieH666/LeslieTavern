@@ -7,14 +7,19 @@
  */
 
 import {
+    chat_metadata,
     characters,
     default_avatar,
     eventSource,
     event_types,
     getRequestHeaders,
+    openCharacterChat,
+    saveChatDebounced,
+    saveMetadata,
     getThumbnailUrl,
     selectCharacterById,
     this_chid,
+    updateChatMetadata,
 } from '../script.js';
 import {
     groups,
@@ -24,6 +29,15 @@ import {
 import { selectLatestCharacterChat } from './leslie-chat-selection.js';
 import { runCharacterExport, syncCharacterExportMenuState } from './leslie-character-export.js';
 import { getLeslieConnectionState } from './leslie-connection-state.js';
+import { user_avatar } from './personas.js';
+import {
+    beginRealitySession,
+    getWorldLineKind,
+    LESLIE_WORLD_LINE_METADATA_KEY,
+    selectWorldLineChat,
+    shouldGenerateRealitySessionOpening,
+    touchRealitySession,
+} from './leslie-reality-context.js';
 
 const LAYOUT_PREFERENCE_KEY = 'leslie-chat-layout-enabled';
 const MOBILE_BREAKPOINT = 700;
@@ -44,6 +58,8 @@ let searchInput;
 let workspaceBackdrop;
 let restoreButton;
 let chatTransitionSequence = 0;
+let realitySessionChatId = '';
+let realitySessionTask = null;
 
 function getLayoutEnabled() {
     return localStorage.getItem(LAYOUT_PREFERENCE_KEY) !== 'false';
@@ -224,6 +240,14 @@ function ensureChatHeader() {
         createIconButton({ action: 'chat-more', icon: 'fa-ellipsis-vertical', label: '更多会话操作' }),
     );
 
+    const worldLineSwitch = document.createElement('div');
+    worldLineSwitch.className = 'leslie-world-line-switch';
+    worldLineSwitch.setAttribute('role', 'group');
+    worldLineSwitch.setAttribute('aria-label', '聊天世界线');
+    worldLineSwitch.innerHTML = `
+        <button type="button" data-action="line-story" data-world-line="story"><i class="fa-solid fa-book-open"></i><span>故事线</span></button>
+        <button type="button" data-action="line-reality" data-world-line="reality"><i class="fa-solid fa-earth-asia"></i><span>现实线</span></button>`;
+
     const menu = document.createElement('div');
     menu.id = 'leslie-chat-more-menu';
     menu.className = 'leslie-chat-more-menu';
@@ -231,6 +255,8 @@ function ensureChatHeader() {
     menu.innerHTML = `
         <button type="button" data-action="new-chat"><i class="fa-solid fa-comment-medical" aria-hidden="true"></i><span>新建当前角色会话</span></button>
         <button type="button" data-action="manage-chats"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i><span>历史会话</span></button>
+        <button type="button" data-action="line-story"><i class="fa-solid fa-book-open" aria-hidden="true"></i><span>切换到故事线</span></button>
+        <button type="button" data-action="line-reality"><i class="fa-solid fa-earth-asia" aria-hidden="true"></i><span>切换到现实世界线</span></button>
         <button type="button" data-action="world-info"><i class="fa-solid fa-book-atlas" aria-hidden="true"></i><span>世界设定</span></button>
         <hr>
         <button type="button" data-action="export-character" data-character-export-only><i class="fa-solid fa-address-card" aria-hidden="true"></i><span>导出角色卡（PNG）</span></button>
@@ -241,7 +267,7 @@ function ensureChatHeader() {
         <button type="button" data-action="disable-layout"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i><span>暂时使用原版布局</span></button>
     `;
 
-    header.append(backButton, identity, actions, menu);
+    header.append(backButton, identity, worldLineSwitch, actions, menu);
     relocateMemoryLauncher();
 }
 
@@ -376,6 +402,160 @@ async function getLatestCharacterChat(characterId) {
     return selectLatestCharacterChat(history);
 }
 
+async function getCharacterChatHistory(characterId, { metadata = false } = {}) {
+    const character = characters[characterId];
+    if (!character?.avatar) {
+        return [];
+    }
+    const response = await fetch('/api/characters/chats', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({ avatar_url: character.avatar, metadata }),
+    });
+    if (!response.ok) {
+        throw new Error(`Could not read chat history (${response.status}).`);
+    }
+    const history = await response.json();
+    return Array.isArray(history) ? history : [];
+}
+
+async function createRealityChat(active) {
+    if (typeof globalThis.LeslieRealityPrepareOpening !== 'function') {
+        throw new Error('现实世界线模块尚未加载，请刷新页面后重试。');
+    }
+    const characterId = this_chid;
+    const prepared = await globalThis.LeslieRealityPrepareOpening({
+        personaSourceKey: user_avatar,
+    });
+    if (this_chid !== characterId) {
+        throw new Error('生成开场期间当前角色已经改变，请重新进入现实世界线。');
+    }
+    const chatName = `${active.name} - 现实世界线 - ${Date.now()}`;
+    // The seeded first message is already this entry's greeting. Mark the chat
+    // before CHAT_LOADED fires so the session hook cannot append a duplicate.
+    realitySessionChatId = chatName;
+    try {
+        await openCharacterChat(chatName, {
+            initialMetadata: {
+                [LESLIE_WORLD_LINE_METADATA_KEY]: prepared.metadata,
+            },
+            initialAssistantMessage: {
+                text: prepared.text,
+                extra: prepared.extra,
+            },
+        });
+    } catch (error) {
+        realitySessionChatId = '';
+        throw error;
+    }
+}
+
+async function beginCurrentRealitySession() {
+    if (getWorldLineKind(chat_metadata) !== 'reality') {
+        realitySessionChatId = '';
+        return;
+    }
+    const chatId = String(characters[this_chid]?.chat || '');
+    if (realitySessionTask?.chatId === chatId) {
+        return realitySessionTask.promise;
+    }
+    if (!chatId || realitySessionChatId === chatId) {
+        return;
+    }
+    const previousMetadata = chat_metadata?.[LESLIE_WORLD_LINE_METADATA_KEY];
+    realitySessionChatId = chatId;
+    const promise = (async () => {
+        const nextMetadata = beginRealitySession(previousMetadata, {
+            personaSourceKey: user_avatar,
+        });
+        updateChatMetadata({
+            [LESLIE_WORLD_LINE_METADATA_KEY]: nextMetadata,
+        });
+        await saveMetadata();
+        updateHeader();
+        if (shouldGenerateRealitySessionOpening(nextMetadata)
+            && typeof globalThis.LeslieRealityGenerateSessionOpening === 'function') {
+            try {
+                await globalThis.LeslieRealityGenerateSessionOpening();
+            } catch (error) {
+                console.error('[Leslie chat layout] Could not generate reality session opening.', error);
+                globalThis.toastr?.warning('这次主动消息没有生成成功，你仍然可以正常发送消息。');
+            }
+        }
+    })();
+    realitySessionTask = { chatId, promise };
+    try {
+        await promise;
+    } catch (error) {
+        if (realitySessionChatId === chatId) {
+            realitySessionChatId = '';
+        }
+        throw error;
+    } finally {
+        if (realitySessionTask?.promise === promise) {
+            realitySessionTask = null;
+        }
+    }
+}
+
+async function touchCurrentRealitySession({ immediate = false } = {}) {
+    if (getWorldLineKind(chat_metadata) !== 'reality') {
+        return;
+    }
+    updateChatMetadata({
+        [LESLIE_WORLD_LINE_METADATA_KEY]: touchRealitySession(chat_metadata?.[LESLIE_WORLD_LINE_METADATA_KEY]),
+    });
+    if (immediate) {
+        await saveMetadata();
+    } else {
+        saveChatDebounced();
+    }
+}
+
+async function switchWorldLine(kind) {
+    const requested = kind === 'reality' ? 'reality' : 'story';
+    const active = getActiveEntity();
+    if (!active || active.type !== 'character') {
+        globalThis.toastr?.info('现实世界线目前先支持单角色聊天；群聊会继续使用故事线。');
+        return;
+    }
+    if (getWorldLineKind(chat_metadata) === requested) {
+        return;
+    }
+    await touchCurrentRealitySession({ immediate: true });
+    document.body.classList.add('leslie-chat-transitioning');
+    try {
+        const history = await getCharacterChatHistory(Number(active.id), { metadata: true });
+        const target = selectWorldLineChat(history, requested, user_avatar);
+        realitySessionChatId = '';
+        if (target) {
+            await openCharacterChat(String(target.file_id || target.file_name || '').replace(/\.jsonl$/i, ''));
+        } else if (requested === 'reality') {
+            await createRealityChat(active);
+        } else {
+            await openCharacterChat(`${active.name} - 故事线 - ${Date.now()}`);
+            updateChatMetadata({
+                [LESLIE_WORLD_LINE_METADATA_KEY]: {
+                    schemaVersion: 1,
+                    kind: 'story',
+                    createdAt: new Date().toISOString(),
+                },
+            });
+            await saveMetadata();
+        }
+        if (requested === 'reality') {
+            await beginCurrentRealitySession();
+        }
+        updateHeader();
+        scheduleConversationRender();
+    } catch (error) {
+        console.error('[Leslie chat layout] Could not switch world lines.', error);
+        globalThis.toastr?.error('世界线切换失败，原聊天没有被删除。');
+    } finally {
+        requestAnimationFrame(() => document.body.classList.remove('leslie-chat-transitioning'));
+    }
+}
+
 function buildAvatar(entity, className = '') {
     const avatar = document.createElement('span');
     avatar.className = `leslie-conversation-avatar ${className}`.trim();
@@ -481,8 +661,11 @@ function updateHeader() {
     }
     if (status) {
         const connectionState = getLeslieConnectionState();
+        const worldLineLabel = active?.type === 'character'
+            ? getWorldLineKind(chat_metadata) === 'reality' ? '现实世界线' : '故事线'
+            : '群聊故事线';
         status.textContent = active
-            ? `${active.type === 'group' ? '群聊' : '角色对话'} · ${connectionState.checking ? '正在检测模型' : connectionState.connected ? '模型已连接' : '模型未连接'}`
+            ? `${worldLineLabel} · ${connectionState.checking ? '正在检测模型' : connectionState.connected ? '模型已连接' : '模型未连接'}`
             : '从左侧开始一段对话';
     }
     if (image instanceof HTMLImageElement) {
@@ -497,6 +680,13 @@ function updateHeader() {
     if (cardButton instanceof HTMLButtonElement) {
         cardButton.disabled = !active;
     }
+    document.querySelectorAll('.leslie-world-line-switch [data-world-line]').forEach((button) => {
+        const line = button.getAttribute('data-world-line');
+        const selected = Boolean(active?.type === 'character' && getWorldLineKind(chat_metadata) === line);
+        button.classList.toggle('is-active', selected);
+        button.setAttribute('aria-pressed', String(selected));
+        button.toggleAttribute('disabled', active?.type !== 'character');
+    });
     syncCharacterExportMenuState();
     document.querySelector('.leslie-chat-identity')?.setAttribute('aria-disabled', String(!active));
     relocateMemoryLauncher();
@@ -641,8 +831,17 @@ async function selectConversation(button) {
             await openGroupById(id);
         } else {
             const characterId = Number(id);
-            const latestChat = await getLatestCharacterChat(characterId);
-            await selectCharacterById(characterId, { switchMenu: false, chatFile: latestChat?.fileName ?? null });
+            realitySessionChatId = '';
+            const active = getActiveEntity();
+            if (active?.type === 'character' && Number(active.id) === characterId) {
+                // Returning from the mobile list (or selecting the active role
+                // again) continues the in-memory chat without reloading its file.
+                await beginCurrentRealitySession();
+            } else {
+                const latestChat = await getLatestCharacterChat(characterId);
+                await selectCharacterById(characterId, { switchMenu: false, chatFile: latestChat?.fileName ?? null });
+                await beginCurrentRealitySession();
+            }
         }
         if (isMobileLayout()) {
             setMobileView('chat', { historyMode: 'push', focus: true });
@@ -695,6 +894,12 @@ async function handleAction(action) {
             break;
         case 'manage-chats':
             document.getElementById('option_select_chat')?.click();
+            break;
+        case 'line-story':
+            await switchWorldLine('story');
+            break;
+        case 'line-reality':
+            await switchWorldLine('reality');
             break;
         case 'world-info':
             openWorldInfo();
@@ -823,6 +1028,13 @@ function bindShellEvents() {
         event_types.MESSAGE_UPDATED,
         event_types.ONLINE_STATUS_CHANGED,
     ].filter(Boolean).forEach(eventName => eventSource.on(eventName, scheduleConversationRender));
+    eventSource.on(event_types.CHAT_LOADED, () => {
+        updateHeader();
+        void beginCurrentRealitySession().catch(error => console.error('[Leslie chat layout] Could not begin reality session.', error));
+    });
+    [event_types.MESSAGE_SENT, event_types.MESSAGE_RECEIVED]
+        .filter(Boolean)
+        .forEach(eventName => eventSource.on(eventName, () => void touchCurrentRealitySession()));
     [event_types.ONLINE_STATUS_CHANGED, event_types.MAIN_API_CHANGED]
         .filter(Boolean)
         .forEach(eventName => eventSource.on(eventName, updateConnectionState));

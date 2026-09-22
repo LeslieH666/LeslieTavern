@@ -18,8 +18,8 @@ Electron shell
 
 Browser UI
 ├─ Existing SillyTavern interface and event system
-├─ Leslie desktop chat and settings layers
-├─ Memory and moments extensions, including threaded replies, per-character publishing policy, isolated social memory, and a model-backed activity worker
+├─ Leslie desktop chat and settings layers, including story/reality line switching
+├─ Memory and moments extensions, including bounded cross-line recall, a desktop two-pane timeline, threaded replies, per-character publishing policy, isolated social memory, and a model-backed activity worker
 └─ Character workshop and voice settings
 
 Optional companion boundary
@@ -31,11 +31,11 @@ Optional companion boundary
    ├─ Authoritative LeslieTavern turn streaming
    └─ Bound-character Volcengine speech
 
-Local Windows launcher
-├─ LeslieTavern-only mode
-├─ LeslieTavern + AIRI mode
-├─ Ephemeral shared Bridge token
-└─ Build, diagnostics, logs, and safe tracked-process shutdown
+Local Windows workflow
+├─ One Leslie Heaven launcher
+├─ Electron-only settings controls for AIRI and the local model
+├─ Ephemeral inherited Bridge token
+└─ Internal build, diagnostics, logs, and safe tracked-process shutdown scripts
 
 Integrated source workspace
 ├─ One root Git repository and owned origin remote
@@ -47,11 +47,13 @@ Integrated source workspace
 ## Compatibility boundaries
 
 - Existing SillyTavern chat events and storage formats remain authoritative.
+- Story and reality conversations remain ordinary, separate JSONL chats. Reality generation uses only a de-fictionalized core-personality profile, real time, reality history, and bounded memory; it does not receive the card's fixed greeting, scenario, example dialogue, creator prompts, World Info, or story history. A character may receive at most two confirmed memories from the opposite line, labelled as echoes rather than current facts.
 - Leslie modules should be optional and fail open.
 - Character cards, JSONL chats, group chats, World Info, swipes, and model adapters must remain usable.
 - User data is local state and is not part of the source repository.
 - Direct LAN web access may be enabled explicitly with an allowlist that follows the private subnet used for each connection and a trusted-network firewall boundary. Same-subnet devices do not need per-IP entries, while public and unrelated routed networks remain blocked. Device discovery, data synchronization, cloud synchronization, and automatic memory writes still require separate security and approval designs before implementation.
 - The AIRI companion bridge is disabled by default and uses a process-scoped bearer token.
+- Desktop service actions are exposed only through Electron IPC from the main LeslieTavern window, not through the HTTP server or LAN browser clients.
 - AIRI sends only the newest user input. LeslieTavern remains authoritative for prompt assembly, generation, persistence, character selection, and voice selection. The boundary is documented in [airi-bridge.md](airi-bridge.md).
 
 ## Current maturity

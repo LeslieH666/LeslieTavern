@@ -6,7 +6,7 @@
  * the source of truth.
  */
 
-import { eventSource, event_types, saveSettingsDebounced, setGenerationParamsFromPreset, setOnlineStatus, stopStatusLoading } from '../script.js';
+import { eventSource, event_types, getRequestHeaders, saveSettingsDebounced, setGenerationParamsFromPreset, setOnlineStatus, stopStatusLoading } from '../script.js';
 import { extension_settings } from './extensions.js';
 import { getLeslieConnectionState } from './leslie-connection-state.js';
 import { textgen_types, textgenerationwebui_settings } from './textgen-settings.js';
@@ -149,6 +149,20 @@ const COPY = {
         localModelLoadingDisabled: '本地模型加载已关闭，请先打开开关。',
         localModelLoadingEnabledStatus: '本地模型加载已开启。',
         localModelLoadingDisabledStatus: '本地模型加载已关闭；项目不会连接本地模型。',
+        desktopServicesTitle: '本地服务',
+        desktopServicesBody: '从 Leslie Heaven 内启动或停止可选桌面组件，不再需要单独的启动脚本。',
+        desktopServicesUnavailable: '请在 Leslie Heaven 桌面应用中管理这些服务。浏览器与局域网页面只能查看设置。',
+        desktopServiceAiri: 'AIRI 桌面陪伴',
+        desktopServiceAiriBody: '连接当前角色、聊天、记忆与语音。首次启动可能需要构建。',
+        desktopServiceModel: 'Peach 本地模型',
+        desktopServiceModelBody: '启动项目内的 KoboldCpp，并在不用时释放显存。',
+        desktopServiceStart: '启动',
+        desktopServiceStop: '停止',
+        desktopServiceStarting: '处理中',
+        desktopServiceRunning: '运行中',
+        desktopServiceStopped: '未启动',
+        desktopServiceMissing: '组件未配置',
+        desktopServiceFailed: '本地服务操作失败。',
         serviceOpenAI: 'OpenAI',
         serviceOpenAIBody: '直接连接 OpenAI 官方接口。',
         endpoint: '服务地址',
@@ -224,6 +238,18 @@ const COPY = {
         recursiveWorld: '允许资料互相触发',
         recursiveWorldHelp: '一条资料提到另一条关键词时，可以继续引用相关内容。',
         manageWorlds: '打开完整世界资料编辑器',
+        demoTitle: '演示模式',
+        demoBody: '切换到独立的数据空间，用于展示新功能、调试界面和制作截图。正式角色、聊天和密钥不会被复制。',
+        demoNormalStatus: '当前使用正式空间',
+        demoActiveStatus: '当前使用隔离的演示空间',
+        demoLoadingStatus: '正在确认当前空间…',
+        demoEnter: '进入演示模式',
+        demoExit: '退出演示模式',
+        demoSwitching: '正在切换…',
+        demoError: '无法确认或切换演示空间，请稍后重试。',
+        demoStorageNote: '切换会先保存待处理的设置并重新载入页面。同一浏览器会话中的其他标签页也需要刷新。',
+        demoBannerTitle: '演示模式',
+        demoBannerBody: '当前数据与正式空间隔离',
     },
     en: {
         launcher: 'Settings',
@@ -337,6 +363,20 @@ const COPY = {
         localModelLoadingDisabled: 'Local model loading is disabled. Turn on the switch first.',
         localModelLoadingEnabledStatus: 'Local model loading is enabled.',
         localModelLoadingDisabledStatus: 'Local model loading is disabled; the project will not connect to a local model.',
+        desktopServicesTitle: 'Local services',
+        desktopServicesBody: 'Start or stop optional desktop components from Leslie Heaven without separate launch scripts.',
+        desktopServicesUnavailable: 'Manage these services in the Leslie Heaven desktop app. Browser and LAN pages can only view settings.',
+        desktopServiceAiri: 'AIRI companion',
+        desktopServiceAiriBody: 'Connects to the active character, chat, memory, and voice. The first start may build AIRI.',
+        desktopServiceModel: 'Peach local model',
+        desktopServiceModelBody: 'Starts the workspace KoboldCpp runtime and releases VRAM when stopped.',
+        desktopServiceStart: 'Start',
+        desktopServiceStop: 'Stop',
+        desktopServiceStarting: 'Working',
+        desktopServiceRunning: 'Running',
+        desktopServiceStopped: 'Stopped',
+        desktopServiceMissing: 'Not configured',
+        desktopServiceFailed: 'The local service action failed.',
         serviceOpenAI: 'OpenAI',
         serviceOpenAIBody: 'Connect directly to the official OpenAI API.',
         endpoint: 'Server address',
@@ -412,6 +452,18 @@ const COPY = {
         recursiveWorld: 'Allow references to trigger each other',
         recursiveWorldHelp: 'When one entry mentions another keyword, related entries may also be included.',
         manageWorlds: 'Open the full world reference editor',
+        demoTitle: 'Demo mode',
+        demoBody: 'Switch to an isolated data space for feature demos, UI work, and screenshots. Real characters, chats, and keys are not copied.',
+        demoNormalStatus: 'Using the regular space',
+        demoActiveStatus: 'Using the isolated demo space',
+        demoLoadingStatus: 'Checking the current space…',
+        demoEnter: 'Enter demo mode',
+        demoExit: 'Exit demo mode',
+        demoSwitching: 'Switching…',
+        demoError: 'The demo space could not be checked or switched. Try again.',
+        demoStorageNote: 'Pending settings are saved before the page reloads. Other tabs in this browser session also need to be refreshed.',
+        demoBannerTitle: 'Demo mode',
+        demoBannerBody: 'Data is isolated from your regular space',
     },
 };
 
@@ -422,7 +474,13 @@ let closeTimer;
 let activeDetail;
 let detailBindingController;
 let detailObservers = [];
+let desktopServiceStatus = null;
+const desktopServiceBusy = new Set();
 let activeModelServiceId;
+let demoModeState;
+let demoModePending = false;
+let demoModeError = '';
+let demoModeBanner;
 
 /**
  * Determine which of the two built-in Leslie translations to display.
@@ -734,6 +792,105 @@ function renderLocalModelSetup(copy) {
         </section>`;
 }
 
+function getDesktopServiceCopy(service, copy) {
+    return service === 'airi'
+        ? { title: copy.desktopServiceAiri, body: copy.desktopServiceAiriBody, icon: 'fa-solid fa-wand-magic-sparkles' }
+        : { title: copy.desktopServiceModel, body: copy.desktopServiceModelBody, icon: 'fa-solid fa-microchip' };
+}
+
+function getDesktopServiceStateCopy(serviceState, copy) {
+    if (serviceState?.configured === false) {
+        return copy.desktopServiceMissing;
+    }
+    if (serviceState?.state === 'running') {
+        return copy.desktopServiceRunning;
+    }
+    if (serviceState?.state === 'busy') {
+        return copy.desktopServiceStarting;
+    }
+    return copy.desktopServiceStopped;
+}
+
+function renderDesktopServices(copy) {
+    const desktopApiAvailable = typeof globalThis.leslieDesktopServices?.getStatus === 'function';
+    const available = desktopApiAvailable && desktopServiceStatus?.available !== false;
+    const rows = [['airi'], ['localModel']].map(([service]) => {
+        const details = getDesktopServiceCopy(service, copy);
+        const state = desktopServiceStatus?.services?.[service] ?? { state: desktopApiAvailable ? 'busy' : 'stopped', configured: true };
+        const running = state.state === 'running';
+        const busy = state.state === 'busy' || desktopServiceBusy.has(service);
+        const disabled = !available || busy || state.configured === false;
+        return `<article class="leslie-desktop-service-row is-${escapeHtml(state.state)}" data-leslie-desktop-service="${service}">
+            <span class="leslie-desktop-service-icon ${details.icon}" aria-hidden="true"></span>
+            <span class="leslie-desktop-service-copy"><strong>${details.title}</strong><small>${details.body}</small></span>
+            <span class="leslie-desktop-service-status" data-leslie-desktop-service-status>${getDesktopServiceStateCopy(state, copy)}</span>
+            <button type="button" class="leslie-settings-primary-button" data-leslie-desktop-service-action="${running ? 'stop' : 'start'}" data-leslie-desktop-service-name="${service}" ${disabled ? 'disabled' : ''}>${busy ? copy.desktopServiceStarting : running ? copy.desktopServiceStop : copy.desktopServiceStart}</button>
+        </article>`;
+    }).join('');
+    return `<section class="leslie-detail-card leslie-desktop-services-card" aria-labelledby="leslie-desktop-services-title">
+        <div class="leslie-detail-card-heading"><h3 id="leslie-desktop-services-title">${copy.desktopServicesTitle}</h3><p>${copy.desktopServicesBody}</p></div>
+        ${available ? '' : `<div class="leslie-detail-callout"><i class="fa-solid fa-desktop"></i><span>${copy.desktopServicesUnavailable}</span></div>`}
+        <div class="leslie-desktop-service-list">${rows}</div>
+    </section>`;
+}
+
+function updateDesktopServiceControls() {
+    if (activeDetail !== 'model' || !settingsOverlay) {
+        return;
+    }
+    const copy = COPY[getCopyLocale()];
+    for (const service of ['airi', 'localModel']) {
+        const row = settingsOverlay.querySelector(`[data-leslie-desktop-service="${service}"]`);
+        const state = desktopServiceStatus?.services?.[service];
+        const button = row?.querySelector('[data-leslie-desktop-service-action]');
+        const status = row?.querySelector('[data-leslie-desktop-service-status]');
+        if (!row || !(button instanceof HTMLButtonElement) || !status || !state) {
+            continue;
+        }
+        const running = state.state === 'running';
+        const busy = state.state === 'busy' || desktopServiceBusy.has(service);
+        row.className = `leslie-desktop-service-row is-${state.state}`;
+        status.textContent = getDesktopServiceStateCopy(state, copy);
+        button.dataset.leslieDesktopServiceAction = running ? 'stop' : 'start';
+        button.textContent = busy ? copy.desktopServiceStarting : running ? copy.desktopServiceStop : copy.desktopServiceStart;
+        button.disabled = busy || state.configured === false || desktopServiceStatus?.available === false;
+    }
+}
+
+async function refreshDesktopServiceStatus() {
+    if (typeof globalThis.leslieDesktopServices?.getStatus !== 'function') {
+        return;
+    }
+    try {
+        desktopServiceStatus = await globalThis.leslieDesktopServices.getStatus();
+        updateDesktopServiceControls();
+    } catch (error) {
+        console.warn('[Leslie settings] Could not read desktop service status.', error);
+    }
+}
+
+async function runDesktopServiceAction(button) {
+    const service = button.dataset.leslieDesktopServiceName;
+    const action = button.dataset.leslieDesktopServiceAction;
+    if (!service || !action || typeof globalThis.leslieDesktopServices?.runAction !== 'function') {
+        return;
+    }
+    const copy = COPY[getCopyLocale()];
+    desktopServiceBusy.add(service);
+    updateDesktopServiceControls();
+    try {
+        desktopServiceStatus = await globalThis.leslieDesktopServices.runAction(service, action);
+        toastr.success(`${getDesktopServiceCopy(service, copy).title}：${getDesktopServiceStateCopy(desktopServiceStatus?.services?.[service], copy)}`, copy.desktopServicesTitle);
+    } catch (error) {
+        const message = String(error?.message || copy.desktopServiceFailed).replace(/^Error invoking remote method '[^']+':\s*/i, '');
+        toastr.error(message, copy.desktopServicesTitle);
+    } finally {
+        desktopServiceBusy.delete(service);
+        await refreshDesktopServiceStatus();
+        updateDesktopServiceControls();
+    }
+}
+
 /**
  * Render the model connection detail page.
  * @returns {string} Page markup.
@@ -804,6 +961,7 @@ function renderModelDetail() {
             <div class="leslie-detail-card-heading"><h3>${copy.serviceTitle}</h3><p>${copy.serviceBody}</p></div>
             <div class="leslie-service-grid">${cards}</div>
         </section>
+        ${renderDesktopServices(copy)}
         ${activeModelKind === 'local' ? renderLocalModelSetup(copy) : ''}
         <section class="leslie-detail-card">
             <div class="leslie-detail-grid">${fields}</div>
@@ -1209,6 +1367,24 @@ function createSettingsOverlay() {
                             </div>
                         </section>
 
+                        <section class="leslie-settings-section leslie-demo-mode-card" data-leslie-demo-card>
+                            <div class="leslie-demo-mode-heading">
+                                <span class="leslie-demo-mode-icon fa-solid fa-display" aria-hidden="true"></span>
+                                <div>
+                                    <h3>${copy.demoTitle}</h3>
+                                    <p>${copy.demoBody}</p>
+                                </div>
+                                <span class="leslie-demo-mode-status" data-leslie-demo-status>${copy.demoLoadingStatus}</span>
+                            </div>
+                            <div class="leslie-demo-mode-actions">
+                                <small><i class="fa-solid fa-circle-info" aria-hidden="true"></i>${copy.demoStorageNote}</small>
+                                <button type="button" class="leslie-settings-primary-button" data-leslie-demo-toggle disabled>
+                                    <i class="fa-solid fa-arrow-right-arrow-left" aria-hidden="true"></i>
+                                    <span>${copy.demoLoadingStatus}</span>
+                                </button>
+                            </div>
+                        </section>
+
                         <section class="leslie-settings-section leslie-settings-essentials-section">
                             <div class="leslie-settings-section-heading">
                                 <div>
@@ -1269,6 +1445,113 @@ function createSettingsOverlay() {
         </section>`;
 
     return overlay;
+}
+
+/**
+ * Create the persistent marker shown while isolated demo storage is active.
+ * @returns {HTMLElement} Demo mode banner.
+ */
+function createDemoModeBanner() {
+    const copy = COPY[getCopyLocale()];
+    const banner = document.createElement('aside');
+    banner.id = 'leslie-demo-mode-banner';
+    banner.className = 'leslie-demo-mode-banner';
+    banner.hidden = true;
+    banner.setAttribute('aria-label', copy.demoBannerTitle);
+    banner.innerHTML = `
+        <i class="fa-solid fa-display" aria-hidden="true"></i>
+        <span><strong>${copy.demoBannerTitle}</strong><small>${copy.demoBannerBody}</small></span>
+        <button type="button" data-leslie-demo-toggle disabled>
+            <span>${copy.demoExit}</span>
+            <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
+        </button>`;
+    return banner;
+}
+
+/** Render the current demo-mode state into every visible control. */
+function updateDemoModeUi() {
+    const copy = COPY[getCopyLocale()];
+    const ready = typeof demoModeState === 'boolean';
+    const active = demoModeState === true;
+    const statusText = demoModeError
+        || (!ready ? copy.demoLoadingStatus : active ? copy.demoActiveStatus : copy.demoNormalStatus);
+    const buttonText = demoModePending
+        ? copy.demoSwitching
+        : active ? copy.demoExit : copy.demoEnter;
+
+    document.documentElement.classList.toggle('leslie-demo-mode', active);
+    document.body.classList.toggle('leslie-demo-mode', active);
+    settingsOverlay?.querySelector('[data-leslie-demo-card]')?.classList.toggle('is-active', active);
+    settingsOverlay?.querySelectorAll('[data-leslie-demo-status]').forEach((element) => {
+        element.textContent = statusText;
+        element.classList.toggle('is-error', Boolean(demoModeError));
+    });
+    document.querySelectorAll('[data-leslie-demo-toggle]').forEach((button) => {
+        if (button instanceof HTMLButtonElement) {
+            button.disabled = !ready || demoModePending;
+            button.setAttribute('aria-busy', String(demoModePending));
+            const label = button.querySelector('span');
+            if (label) {
+                label.textContent = button.closest('#leslie-demo-mode-banner') && !demoModePending
+                    ? copy.demoExit
+                    : buttonText;
+            }
+        }
+    });
+    if (demoModeBanner) {
+        demoModeBanner.hidden = !active;
+    }
+}
+
+/** Read the session-scoped storage selection from the server. */
+async function refreshDemoModeState() {
+    try {
+        const response = await fetch('/api/leslie/demo-mode/status', {
+            headers: getRequestHeaders({ omitContentType: true }),
+        });
+        if (!response.ok) {
+            throw new Error(`Demo mode status returned ${response.status}.`);
+        }
+        const result = await response.json();
+        demoModeState = result.enabled === true;
+        demoModeError = '';
+    } catch (error) {
+        console.error('[Leslie Demo Mode] Could not read the current storage mode:', error);
+        demoModeState = undefined;
+        demoModeError = COPY[getCopyLocale()].demoError;
+    }
+    updateDemoModeUi();
+}
+
+/** Save pending settings, switch storage namespaces, and reload clean state. */
+async function toggleDemoMode() {
+    if (demoModePending || typeof demoModeState !== 'boolean') {
+        return;
+    }
+
+    demoModePending = true;
+    demoModeError = '';
+    updateDemoModeUi();
+    try {
+        await Promise.resolve(saveSettingsDebounced.flush?.());
+        const response = await fetch('/api/leslie/demo-mode/switch', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ enabled: !demoModeState }),
+        });
+        if (!response.ok) {
+            throw new Error(`Demo mode switch returned ${response.status}.`);
+        }
+        const result = await response.json();
+        demoModeState = result.enabled === true;
+        updateDemoModeUi();
+        window.location.reload();
+    } catch (error) {
+        console.error('[Leslie Demo Mode] Could not switch storage spaces:', error);
+        demoModePending = false;
+        demoModeError = COPY[getCopyLocale()].demoError;
+        updateDemoModeUi();
+    }
 }
 
 /**
@@ -1706,6 +1989,7 @@ function bindDetailPage(detailId) {
         }
         bindDetailCheckbox('auto-connect-checkbox', 'leslie-model-auto-connect', 'input');
         bindThinkingMode();
+        void refreshDesktopServiceStatus();
     } else if (detailId === 'reply') {
         const ids = getReplyControlIds();
         bindDetailRange(ids.temperature, 'leslie-reply-creativity');
@@ -2145,6 +2429,13 @@ function initLeslieSettings() {
 
     settingsOverlay = createSettingsOverlay();
     document.body.append(settingsOverlay);
+    demoModeBanner = createDemoModeBanner();
+    document.body.append(demoModeBanner);
+    demoModeBanner.addEventListener('click', (event) => {
+        if (event.target instanceof Element && event.target.closest('[data-leslie-demo-toggle]')) {
+            toggleDemoMode();
+        }
+    });
     lockAdvancedSettings();
 
     settingsLauncher.addEventListener('click', (event) => {
@@ -2182,6 +2473,12 @@ function initLeslieSettings() {
             showDetail(detailButton.dataset.leslieDetail);
             return;
         }
+        if (target?.closest('[data-leslie-demo-toggle]')) {
+            event.preventDefault();
+            event.stopPropagation();
+            toggleDemoMode();
+            return;
+        }
         if (target?.closest('[data-leslie-detail-back]')) {
             event.preventDefault();
             event.stopPropagation();
@@ -2212,6 +2509,13 @@ function initLeslieSettings() {
             if (localModelButton instanceof HTMLButtonElement) {
                 detectAndApplyLocalPeachModel(localModelButton);
             }
+            return;
+        }
+        const desktopServiceButton = target?.closest('[data-leslie-desktop-service-action]');
+        if (desktopServiceButton instanceof HTMLButtonElement) {
+            event.preventDefault();
+            event.stopPropagation();
+            void runDesktopServiceAction(desktopServiceButton);
             return;
         }
         const serviceButton = target?.closest('[data-leslie-service]');
@@ -2271,6 +2575,7 @@ function initLeslieSettings() {
     mirrorCheckbox('reduced_motion', 'leslie-reduced-motion', 'input');
     mirrorCheckbox('fast_ui_mode', 'leslie-fast-ui', 'change');
     bindConnectionStatus();
+    refreshDemoModeState();
 }
 
 if (document.readyState === 'loading') {

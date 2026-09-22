@@ -7756,7 +7756,39 @@ export async function unshallowCharacter(characterId) {
     await getOneCharacter(avatar);
 }
 
-export async function getChat() {
+function seedInitialAssistantMessage(options = {}) {
+    const initialText = String(options.initialAssistantMessage?.text ?? '').trim();
+    if (!initialText || chat.length) {
+        return false;
+    }
+    chat_metadata = options.initialMetadata && typeof options.initialMetadata === 'object'
+        ? structuredClone(options.initialMetadata)
+        : chat_metadata;
+    const sendDate = getMessageTimeStamp();
+    const extra = options.initialAssistantMessage?.extra && typeof options.initialAssistantMessage.extra === 'object'
+        ? structuredClone(options.initialAssistantMessage.extra)
+        : {};
+    chat.push({
+        name: characters[this_chid].name,
+        is_user: false,
+        is_system: false,
+        send_date: sendDate,
+        mes: initialText,
+        extra,
+        swipe_id: 0,
+        swipes: [initialText],
+        swipe_info: [{
+            send_date: sendDate,
+            gen_started: void 0,
+            gen_finished: void 0,
+            extra: structuredClone(extra),
+        }],
+    });
+    return true;
+}
+
+export async function getChat(options = {}) {
+    let seededFreshChat = false;
     try {
         await unshallowCharacter(this_chid);
 
@@ -7785,12 +7817,15 @@ export async function getChat() {
         } else {
             // An empty/corrupted chat file
             chat.splice(0, chat.length);
-            chat_metadata = {};
+            chat_metadata = options.initialMetadata && typeof options.initialMetadata === 'object'
+                ? structuredClone(options.initialMetadata)
+                : {};
         }
+        seededFreshChat = seedInitialAssistantMessage(options);
         if (!chat_metadata.integrity) {
             chat_metadata.integrity = uuidv4();
         }
-        await getChatResult();
+        await getChatResult({ freshChatSeeded: seededFreshChat });
         eventSource.emit(event_types.CHAT_LOADED, { detail: { id: this_chid, character: characters[this_chid] } });
 
         // Focus on the textarea if not already focused on a visible text input
@@ -7801,14 +7836,15 @@ export async function getChat() {
             $('#send_textarea').trigger('click').trigger('focus');
         });
     } catch (error) {
-        await getChatResult();
+        seededFreshChat ||= seedInitialAssistantMessage(options);
+        await getChatResult({ freshChatSeeded: seededFreshChat });
         console.log(error);
     }
 }
 
-async function getChatResult() {
+async function getChatResult({ freshChatSeeded = false } = {}) {
     name2 = characters[this_chid].name;
-    let freshChat = false;
+    let freshChat = freshChatSeeded;
     if (chat.length === 0) {
         const message = getFirstMessage();
         if (message.mes) {
@@ -7816,6 +7852,9 @@ async function getChatResult() {
             freshChat = true;
         }
         // Make sure the chat appears on the server
+        await saveChatConditional();
+    } else if (freshChatSeeded) {
+        // A caller-supplied opening is already a complete first message.
         await saveChatConditional();
     }
     await loadItemizedPrompts(getCurrentChatId());
@@ -7866,12 +7905,12 @@ function getFirstMessage() {
     return message;
 }
 
-export async function openCharacterChat(file_name) {
+export async function openCharacterChat(file_name, options = {}) {
     await waitUntilCondition(() => !isChatSaving, debounce_timeout.extended, 10);
     await clearChat({ clearData: true });
     characters[this_chid].chat = file_name;
     chat_metadata = {};
-    await getChat();
+    await getChat(options);
     $('#selected_chat_pole').val(file_name);
     await createOrEditCharacter(new CustomEvent('newChat'));
 }

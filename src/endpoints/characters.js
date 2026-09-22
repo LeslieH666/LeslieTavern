@@ -232,7 +232,7 @@ async function writeCharacterData(inputFile, data, outputFile, request, crop = u
             }
         }
         if (useDiskCache && !Buffer.isBuffer(inputFile)) {
-            diskCache.syncQueue.add(request.user.profile.handle);
+            diskCache.syncQueue.add(request.user.storageHandle || request.user.profile.handle);
         }
         /**
          * Read the image, resize, and save it as a PNG into the buffer.

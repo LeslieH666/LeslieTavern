@@ -12,8 +12,8 @@ LeslieTavern is an experimental desktop-oriented fork of [SillyTavern](https://g
 ## Highlights
 
 - Compatible with SillyTavern character cards, group chats, World Info, swipes, model adapters, and JSONL chats.
-- Windows Electron workflow and portable-package tooling.
-- Leslie memory, Persona/storyline isolation, and a moments timeline prototype.
+- Windows Electron workflow with one `Leslie Heaven` entry point, in-app AIRI/local-model controls, and portable-package tooling.
+- Leslie memory and Persona/storyline isolation with story/reality chat lines that share only bounded memory resonance. Reality chats extract a de-fictionalized core personality, generate dynamic openings through the active API, and persist strictly plain instant messages; Moments provides a desktop-first timeline.
 - Volcengine voice configuration, preview, and automatic reply playback.
 - Explicit separation between source code, local user data, runtimes, backups, and distributable builds.
 

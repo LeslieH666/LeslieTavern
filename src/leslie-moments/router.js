@@ -2,6 +2,7 @@ import path from 'node:path';
 import express from 'express';
 
 import { LeslieIdentityStore, LeslieIdentityStoreError } from '../leslie-identity/store.js';
+import { LeslieMemoryStore, LeslieMemoryStoreError } from '../leslie-memory/store.js';
 import { selectChatMemoryContext } from './chat-memory-adapter.js';
 import { LeslieMomentsActivityStore, LeslieMomentsActivityStoreError } from './activity-store.js';
 import { LeslieMomentsMemoryStore } from './memory-store.js';
@@ -25,13 +26,14 @@ function getStores(request) {
         identity: new LeslieIdentityStore(userRoot),
         moments: new LeslieMomentsStore(userRoot),
         activity: new LeslieMomentsActivityStore(userRoot),
+        chatMemory: new LeslieMemoryStore(userRoot),
         memory: new LeslieMomentsMemoryStore(userRoot),
         settings: new LeslieMomentsSettingsStore(userRoot),
     };
 }
 
 function sendError(response, error) {
-    if (error instanceof LeslieMomentsStoreError || error instanceof LeslieMomentsActivityStoreError || error instanceof LeslieIdentityStoreError || error instanceof TypeError) {
+    if (error instanceof LeslieMomentsStoreError || error instanceof LeslieMomentsActivityStoreError || error instanceof LeslieIdentityStoreError || error instanceof LeslieMemoryStoreError || error instanceof TypeError) {
         const status = error.code === 'NOT_FOUND' ? 404 : ['IDENTITY_MISMATCH', 'IDENTITY_CONFLICT', 'INVALID_STATE'].includes(error.code) ? 409 : 400;
         return response.status(status).send({ error: error.code ?? 'INVALID_INPUT', message: error.message });
     }
@@ -60,29 +62,57 @@ function normalizeRawIdentity(value, type = value?.type) {
 
 function resolveNormalDraft(identityStore, body) {
     const rawTargets = body.visibility?.type === 'selected' && Array.isArray(body.visibility.targets) ? body.visibility.targets : [];
+    const rawContentRole = body.contentRole && typeof body.contentRole === 'object' ? body.contentRole : null;
     const resolution = identityStore.resolveEntities([
         normalizeRawIdentity(body.author, 'persona'),
         ...rawTargets.map(item => normalizeRawIdentity(item, item.type || 'character')),
+        ...(rawContentRole ? [normalizeRawIdentity(rawContentRole, rawContentRole.type || 'character')] : []),
     ]);
-    const [author, ...targets] = resolution.entities;
+    const author = resolution.entities[0];
+    const targets = resolution.entities.slice(1, 1 + rawTargets.length);
+    const contentRole = rawContentRole ? resolution.entities[resolution.entities.length - 1] : null;
     return {
         author: toIdentitySnapshot(author, body.author?.avatar),
         visibility: {
             type: body.visibility?.type === 'selected' ? 'selected' : 'all',
             targets: targets.map((entity, index) => toIdentitySnapshot(entity, rawTargets[index]?.avatar)),
         },
+        contentRole: contentRole ? toIdentitySnapshot(contentRole, rawContentRole.avatar) : null,
         storyBinding: null,
     };
 }
 
-function resolveStoryDraft(identityStore, body) {
-    const resolution = identityStore.resolveStoryScope(body.storyContext);
+function resolveStoryDraft(stores, body) {
+    const normalDraft = resolveNormalDraft(stores.identity, body);
+    if (body.memorySourceId) {
+        const memory = stores.chatMemory.getMemory(body.memorySourceId);
+        const binding = memory.manifest.identityBinding;
+        if (!binding?.confirmed) {
+            throw new LeslieMemoryStoreError('IDENTITY_MISMATCH', 'The selected character memory is not bound to a confirmed story line.');
+        }
+        if (normalDraft.author.entityId !== binding.personaId) {
+            throw new LeslieMemoryStoreError('IDENTITY_MISMATCH', 'The selected character memory belongs to a different Persona.');
+        }
+        return {
+            ...normalDraft,
+            storyBinding: {
+                storyScopeId: binding.storyScopeId,
+                personaId: binding.personaId,
+                counterpartId: binding.counterpartId,
+                counterpartType: binding.counterpartType,
+                chatKey: memory.manifest.chatKey,
+                personaName: binding.personaName,
+                counterpartName: binding.counterpartName,
+            },
+        };
+    }
+    const resolution = stores.identity.resolveStoryScope(body.storyContext);
+    if (normalDraft.author.entityId !== resolution.persona.id) {
+        throw new LeslieIdentityStoreError('IDENTITY_MISMATCH', 'The selected story line belongs to a different Persona.');
+    }
     return {
         author: toIdentitySnapshot(resolution.persona, body.author?.avatar),
-        visibility: {
-            type: 'selected',
-            targets: [toIdentitySnapshot(resolution.counterpart, body.storyContext?.counterpart?.avatar)],
-        },
+        visibility: normalDraft.visibility,
         storyBinding: {
             storyScopeId: resolution.storyScope.id,
             personaId: resolution.persona.id,
@@ -119,8 +149,38 @@ function resolveActivityCandidates(identityStore, post, body) {
         .map((entity, index) => toIdentitySnapshot(entity, rawCandidates[index]?.avatar));
 }
 
+function canCharacterComment(settings, actorEntityId) {
+    const policy = settings.characterPolicies.find(item => item.actor.entityId === actorEntityId);
+    return policy?.canInteract !== false;
+}
+
+function resolveCommentCandidates(stores, post, body) {
+    const settings = stores.settings.readSettings();
+    return resolveActivityCandidates(stores.identity, post, body)
+        .filter(candidate => canCharacterComment(settings, candidate.entityId));
+}
+
 function logActivityFailure(error) {
     console.warn(`Leslie moments background activity is unavailable. ${String(error?.message || error).slice(0, 500)}`);
+}
+
+function alignPersonaCommentAuthorsFailOpen(stores) {
+    let posts;
+    try {
+        posts = stores.moments.alignPersonaCommentAuthors().timeline.posts;
+    } catch (error) {
+        console.warn(`Leslie moments Persona comment repair is unavailable. ${String(error?.message || error).slice(0, 500)}`);
+        try {
+            posts = stores.moments.readTimeline().posts;
+        } catch {
+            return;
+        }
+    }
+    try {
+        stores.activity.alignPersonaCommentAuthors(posts);
+    } catch (error) {
+        console.warn(`Leslie moments Persona activity repair is unavailable. ${String(error?.message || error).slice(0, 500)}`);
+    }
 }
 
 function decoratePostsFailOpen(activityStore, posts) {
@@ -227,7 +287,11 @@ router.put('/settings', (request, response) => {
         const allowedPublisherIds = settings.globalAiPostingEnabled
             ? settings.characterPolicies.filter(policy => policy.canPost).map(policy => policy.actor.entityId)
             : [];
+        const disallowedCommenterIds = settings.characterPolicies
+            .filter(policy => policy.canInteract === false)
+            .map(policy => policy.actor.entityId);
         stores.activity.cancelPublisherJobs(allowedPublisherIds);
+        stores.activity.cancelCommentJobs(disallowedCommenterIds);
         if (settings.globalAiPostingEnabled) {
             stores.activity.syncPublisherJobs(settings.characterPolicies);
         }
@@ -242,6 +306,7 @@ router.get('/', (request, response) => {
         const includeArchived = request.query.includeArchived === 'true';
         const viewerEntityId = typeof request.query.viewerEntityId === 'string' ? request.query.viewerEntityId : null;
         const stores = getStores(request);
+        alignPersonaCommentAuthorsFailOpen(stores);
         const timeline = stores.moments.listPosts({ includeArchived, viewerEntityId });
         const decorated = decoratePostsFailOpen(stores.activity, timeline.posts);
         return response.send({
@@ -259,7 +324,7 @@ router.post('/', (request, response) => {
         const stores = getStores(request);
         const mode = request.body?.mode;
         const binding = mode === 'story'
-            ? resolveStoryDraft(stores.identity, request.body)
+            ? resolveStoryDraft(stores, request.body)
             : resolveNormalDraft(stores.identity, request.body);
         const post = stores.moments.createPost({
             mode,
@@ -267,6 +332,7 @@ router.post('/', (request, response) => {
             origin: 'user',
             sourceContext: {
                 importedMemories: request.body?.memoryImports,
+                contentRole: binding.contentRole,
             },
             ...binding,
         });
@@ -281,18 +347,17 @@ router.patch('/:postId', (request, response) => {
     try {
         const stores = getStores(request);
         const existing = stores.moments.getPost(request.params.postId);
-        const author = resolveAuthor(stores.identity, request.body?.author);
-        let visibility = existing.visibility;
-        if (existing.mode !== 'story') {
-            visibility = resolveNormalDraft(stores.identity, {
-                author: request.body?.author,
-                visibility: request.body?.visibility,
-            }).visibility;
+        const draft = resolveNormalDraft(stores.identity, {
+            author: request.body?.author,
+            visibility: request.body?.visibility,
+        });
+        if (existing.storyBinding && draft.author.entityId !== existing.storyBinding.personaId) {
+            throw new LeslieIdentityStoreError('IDENTITY_MISMATCH', 'The selected story line belongs to a different Persona.');
         }
         const post = stores.moments.updatePost(request.params.postId, {
-            authorEntityId: author.entityId,
+            authorEntityId: draft.author.entityId,
             content: request.body?.content,
-            visibility,
+            visibility: draft.visibility,
         });
         invalidateMomentMemoryFailOpen(stores.memory, post.id);
         planActivityFailOpen(stores, post, request.body);
@@ -320,6 +385,24 @@ for (const [route, status] of [['archive', 'archived'], ['restore', 'active']]) 
     });
 }
 
+router.put('/:postId/likes', (request, response) => {
+    try {
+        const stores = getStores(request);
+        const post = stores.moments.getPost(request.params.postId);
+        if (post.status !== 'active') {
+            throw new LeslieMomentsStoreError('INVALID_STATE', 'Restore this moment before liking it.');
+        }
+        const author = resolveAuthor(stores.identity, request.body?.author);
+        const result = stores.activity.setLike(post, author, request.body?.liked);
+        return response.send({
+            ...result,
+            post: stores.activity.decoratePosts([post])[0],
+        });
+    } catch (error) {
+        return sendError(response, error);
+    }
+});
+
 router.post('/:postId/comments', (request, response) => {
     try {
         const stores = getStores(request);
@@ -327,7 +410,9 @@ router.post('/:postId/comments', (request, response) => {
         if (post.status !== 'active') {
             throw new LeslieMomentsStoreError('INVALID_STATE', 'Restore this moment before replying.');
         }
-        const author = resolveAuthor(stores.identity, request.body?.author);
+        const author = post.author?.type === 'persona'
+            ? post.author
+            : resolveAuthor(stores.identity, request.body?.author);
         const decoratedBefore = stores.activity.decoratePosts([post])[0];
         const parent = request.body?.parentCommentId
             ? decoratedBefore.reactions.comments.find(item => item.id === request.body.parentCommentId)
@@ -335,7 +420,7 @@ router.post('/:postId/comments', (request, response) => {
         const comment = stores.activity.addComment(post, author, request.body?.content, {
             parentCommentId: request.body?.parentCommentId,
         });
-        const candidates = resolveActivityCandidates(stores.identity, post, request.body);
+        const candidates = resolveCommentCandidates(stores, post, request.body);
         stores.activity.planThread(post, {
             ...comment,
             parentActorEntityId: parent?.actor?.type === 'character'
@@ -403,6 +488,12 @@ router.post('/activity/jobs/claim', (request, response) => {
         const stores = getStores(request);
         const timeline = stores.moments.readTimeline();
         const claim = stores.activity.claimJob(timeline.posts);
+        if (claim.job && claim.job.type !== 'compose_post') {
+            const settings = stores.settings.readSettings();
+            claim.job.permissions = {
+                canComment: canCharacterComment(settings, claim.job.actor.entityId),
+            };
+        }
         if (claim.post) {
             claim.post = stores.activity.decoratePosts([claim.post])[0];
         }
@@ -418,7 +509,11 @@ router.post('/activity/jobs/:jobId/complete', (request, response) => {
         const job = stores.activity.getJob(request.params.jobId);
         const post = stores.moments.getPost(job.postId);
         const knownComments = stores.activity.decoratePosts([post])[0].reactions.comments;
-        const activity = stores.activity.completeJob(request.params.jobId, request.body, { knownComments });
+        const settings = stores.settings.readSettings();
+        const activity = stores.activity.completeJob(request.params.jobId, request.body, {
+            knownComments,
+            allowComments: canCharacterComment(settings, job.actor.entityId),
+        });
         const createdComment = activity.comments.find(item => item.jobId === job.id) ?? null;
         try {
             stores.memory.recordObservation(job.actor, post, {
@@ -435,7 +530,7 @@ router.post('/activity/jobs/:jobId/complete', (request, response) => {
                 const parent = createdComment.parentCommentId
                     ? activity.comments.find(item => item.id === createdComment.parentCommentId)
                     : null;
-                const candidates = resolveActivityCandidates(stores.identity, post, request.body);
+                const candidates = resolveCommentCandidates(stores, post, request.body);
                 stores.activity.planThread(post, {
                     ...createdComment,
                     parentActorEntityId: parent?.actor?.type === 'character'
@@ -470,12 +565,13 @@ router.post('/activity/jobs/:jobId/publish', (request, response) => {
             return response.send({ post: null, skipped: true });
         }
         const post = stores.moments.createPost({
-            mode: 'character',
+            mode: 'reality',
+            worldLine: 'reality',
             origin: 'ai',
             content: request.body?.content,
             author: job.actor,
             visibility: { type: 'all', targets: [] },
-            sourceContext: { importedMemories: [] },
+            sourceContext: { importedMemories: [], contentRole: job.actor },
         });
         stores.activity.completeComposeJob(job.id, { publishedPostId: post.id });
         try {

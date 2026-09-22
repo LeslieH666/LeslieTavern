@@ -22,3 +22,8 @@ contextBridge.exposeInMainWorld('leslieDesktopMoments', {
     onSetPaused: callback => subscribe('leslie:moments:set-paused', callback),
     reportStatus: status => ipcRenderer.send('leslie:moments:status', status),
 });
+
+contextBridge.exposeInMainWorld('leslieDesktopServices', {
+    getStatus: () => ipcRenderer.invoke('leslie:services:status'),
+    runAction: (service, action) => ipcRenderer.invoke('leslie:services:action', { service, action }),
+});

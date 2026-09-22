@@ -649,6 +649,53 @@ body.leslie-modern .leslie-chat-heading small {
     white-space: nowrap;
 }
 
+.leslie-world-line-switch {
+    display: inline-grid;
+    flex: 0 0 auto;
+    padding: 3px;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: var(--leslie-shell-surface-soft);
+    border: 1px solid var(--leslie-shell-border);
+    border-radius: 11px;
+}
+
+.leslie-world-line-switch button {
+    display: inline-flex;
+    min-width: 82px;
+    min-height: 34px;
+    padding: 0 11px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--leslie-shell-muted);
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    box-shadow: none;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.leslie-world-line-switch button:hover:not(:disabled),
+.leslie-world-line-switch button:focus-visible:not(:disabled) {
+    color: var(--leslie-shell-text);
+    background: var(--leslie-shell-hover);
+    outline: none;
+}
+
+.leslie-world-line-switch button.is-active {
+    color: var(--leslie-shell-accent);
+    background: var(--leslie-shell-surface);
+    box-shadow: 0 1px 5px rgb(0 0 0 / 10%);
+    font-weight: 700;
+}
+
+.leslie-world-line-switch button:disabled {
+    cursor: default;
+    opacity: 0.42;
+}
+
 .leslie-mobile-back {
     display: none;
 }
@@ -1008,6 +1055,10 @@ body.leslie-modern.leslie-chat-layout-disabled #leslie-layout-restore:not([hidde
         flex-basis: calc(60px + env(safe-area-inset-top));
         padding: env(safe-area-inset-top) max(7px, env(safe-area-inset-right)) 0 max(5px, env(safe-area-inset-left));
         gap: 5px;
+    }
+
+    .leslie-world-line-switch {
+        display: none;
     }
 
     .leslie-mobile-back {

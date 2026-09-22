@@ -35,12 +35,13 @@ export function buildStoryScopeRequest(identity, existingStoryScopeId = null) {
     };
 }
 
-export function buildMemoryIdentityBinding(resolution, { confirmed = true } = {}) {
+export function buildMemoryIdentityBinding(resolution, { confirmed = true, worldLine = 'story' } = {}) {
     if (!resolution?.storyScope?.id || !resolution?.persona?.id || !resolution?.counterpart?.id) {
         throw new TypeError('A resolved Leslie story line is required.');
     }
     return {
         domain: 'story',
+        worldLine: worldLine === 'reality' ? 'reality' : 'story',
         storyScopeId: resolution.storyScope.id,
         personaId: resolution.persona.id,
         personaSourceKey: resolution.persona.sourceKey,

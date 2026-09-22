@@ -40,6 +40,14 @@ router.post('/ensure', (request, response) => {
     }
 });
 
+router.get('/catalog', (request, response) => {
+    try {
+        return response.send({ sources: getStore(request).listMemorySources() });
+    } catch (error) {
+        return sendError(response, error);
+    }
+});
+
 router.post('/:memoryId/events/invalidate', (request, response) => {
     try {
         const store = getStore(request);
@@ -125,6 +133,16 @@ router.post('/:memoryId/context', (request, response) => {
         const store = getStore(request);
         store.assertStoryScope(request.params.memoryId, request.body?.storyScopeId);
         return response.send(store.selectContext(request.params.memoryId, request.body));
+    } catch (error) {
+        return sendError(response, error);
+    }
+});
+
+router.post('/:memoryId/cross-line-context', (request, response) => {
+    try {
+        const store = getStore(request);
+        store.assertStoryScope(request.params.memoryId, request.body?.storyScopeId);
+        return response.send(store.selectCrossLineContext(request.params.memoryId, request.body));
     } catch (error) {
         return sendError(response, error);
     }

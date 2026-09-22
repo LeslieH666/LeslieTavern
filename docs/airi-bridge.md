@@ -38,7 +38,7 @@ Changing the selected character or chat in LeslieTavern changes the AIRI binding
 ## Security boundary
 
 - The bridge is disabled unless `LESLIE_BRIDGE_TOKEN` contains 32 to 512 UTF-8 bytes.
-- The combined launcher creates a new random token for each launch.
+- The Leslie Heaven launcher creates a new random token for each desktop session; AIRI inherits it only when started from that desktop window's settings.
 - The token stays in process environments. It is not stored in settings, user data, logs, renderer storage, or source control.
 - AIRI renderer requests pass through its Electron main process. The renderer never receives the token.
 - The LeslieTavern browser host uses Electron IPC and accepts commands only from the visible LeslieTavern window.
