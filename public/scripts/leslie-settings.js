@@ -23,6 +23,12 @@ import {
     migrateLeslieReplyStyleSettings,
     setLeslieReplyStyleRuntimeSettings,
 } from './leslie-reply-style.js';
+import {
+    getLesliePrivacyModeState,
+    setLesliePrivacyBlockMasked,
+    setLesliePrivacyModeEnabled,
+    syncLesliePrivacyModeControls,
+} from './leslie-privacy-mode.js';
 import './leslie-voice-settings.js';
 
 const SECONDARY_DRAWERS = [
@@ -57,6 +63,27 @@ const COPY = {
         reducedMotionHelp: '减少动画，阅读更稳定',
         performance: '性能优先',
         performanceHelp: '关闭背景模糊，低配置设备更流畅',
+        privacyModeTitle: '隐私模式',
+        privacyModeBody: '按会话列表、聊天头部、消息、输入区和连接状态分别设置遮罩。',
+        privacyModeDetailTitle: '屏幕隐私模式',
+        privacyModeDetailBody: '沿用最初的桌面 UI 分区，只模糊你选择的界面区块，不改写或移动任何聊天数据。',
+        privacyModeEnabled: '开启隐私模式',
+        privacyModeEnabledHelp: '可从聊天头部或会话栏的眼睛按钮随时开关。',
+        privacyModePreview: '遮罩预览',
+        privacyModePreviewHelp: '下方预览与实际聊天界面同步。带眼睛斜线的区块会被模糊。',
+        privacyModeBlocks: '选择要遮罩的区块',
+        privacyModeBlocksHelp: '打开表示隐私模式启用时遮罩；关闭表示该区块可以透过。',
+        privacyConversations: '会话列表',
+        privacyConversationsHelp: '角色名称、搜索内容和最近消息摘要。',
+        privacyHeader: '聊天头部',
+        privacyHeaderHelp: '当前角色头像、名称、状态和世界线。',
+        privacyMessages: '消息内容',
+        privacyMessagesHelp: '当前聊天中的文字、图片与消息操作。',
+        privacyComposer: '输入区',
+        privacyComposerHelp: '未发送的草稿、互动引导和输入控件。',
+        privacyConnection: '连接状态',
+        privacyConnectionHelp: '会话栏底部显示的模型和连接信息。',
+        privacyVisualOnly: '这是本机屏幕遮挡功能，不是数据加密。聊天数据、辅助技术和开发工具仍可读取原内容。',
         essentialsTitle: '核心功能',
         essentialsBody: '按要完成的事情寻找设置，不必理解内部术语。',
         modelTitle: '模型连接',
@@ -271,6 +298,27 @@ const COPY = {
         reducedMotionHelp: 'Use fewer animations for steadier reading',
         performance: 'Prioritize performance',
         performanceHelp: 'Disable background blur on slower devices',
+        privacyModeTitle: 'Privacy mode',
+        privacyModeBody: 'Mask the conversation list, chat header, messages, composer, and connection status independently.',
+        privacyModeDetailTitle: 'Screen privacy mode',
+        privacyModeDetailBody: 'Uses the original desktop UI regions and blurs only the blocks you choose without moving or rewriting chat data.',
+        privacyModeEnabled: 'Turn on privacy mode',
+        privacyModeEnabledHelp: 'Toggle it anytime from the eye button in the chat header or conversation sidebar.',
+        privacyModePreview: 'Mask preview',
+        privacyModePreviewHelp: 'This preview follows the live chat UI. Blocks with the crossed-out eye will be blurred.',
+        privacyModeBlocks: 'Choose masked blocks',
+        privacyModeBlocksHelp: 'On means masked while privacy mode is active; off means the block remains visible.',
+        privacyConversations: 'Conversation list',
+        privacyConversationsHelp: 'Character names, search text, and recent-message previews.',
+        privacyHeader: 'Chat header',
+        privacyHeaderHelp: 'Current avatar, character name, status, and story line.',
+        privacyMessages: 'Message content',
+        privacyMessagesHelp: 'Text, images, and message actions in the current chat.',
+        privacyComposer: 'Composer',
+        privacyComposerHelp: 'Unsent drafts, guided replies, and input controls.',
+        privacyConnection: 'Connection status',
+        privacyConnectionHelp: 'Model and connection details at the bottom of the sidebar.',
+        privacyVisualOnly: 'This is a local screen mask, not data encryption. Chat data remains available to assistive technology and developer tools.',
         essentialsTitle: 'Essentials',
         essentialsBody: 'Find settings by what you want to do, not by internal terminology.',
         modelTitle: 'Model connection',
@@ -1217,7 +1265,59 @@ function renderVoiceDetail() {
     return renderDetailShell({ icon: 'fa-solid fa-volume-high', title: copy.voiceDetailTitle, body: copy.voiceDetailBody, content });
 }
 
+function renderPrivacyDetail() {
+    const copy = COPY[getCopyLocale()];
+    const state = getLesliePrivacyModeState();
+    const blocks = [
+        ['conversations', copy.privacyConversations, copy.privacyConversationsHelp],
+        ['header', copy.privacyHeader, copy.privacyHeaderHelp],
+        ['messages', copy.privacyMessages, copy.privacyMessagesHelp],
+        ['composer', copy.privacyComposer, copy.privacyComposerHelp],
+        ['connection', copy.privacyConnection, copy.privacyConnectionHelp],
+    ];
+    const rows = blocks.map(([id, title, help]) => `
+        <label class="leslie-detail-switch-row" for="leslie-privacy-block-${id}">
+            <span><strong>${title}</strong><small>${help}</small></span>
+            <input id="leslie-privacy-block-${id}" type="checkbox" role="switch" data-leslie-privacy-block="${id}" ${state.blocks[id] ? 'checked' : ''}>
+        </label>`).join('');
+    const content = `
+        <section class="leslie-detail-card leslie-privacy-master-card">
+            <label class="leslie-detail-switch-row" for="leslie-privacy-enabled">
+                <span><strong>${copy.privacyModeEnabled}</strong><small>${copy.privacyModeEnabledHelp}</small></span>
+                <input id="leslie-privacy-enabled" type="checkbox" role="switch" data-leslie-privacy-master ${state.enabled ? 'checked' : ''}>
+            </label>
+            <div class="leslie-detail-card-heading">
+                <h3>${copy.privacyModePreview}</h3>
+                <p>${copy.privacyModePreviewHelp}</p>
+            </div>
+            <div class="leslie-privacy-preview" aria-hidden="true">
+                <div class="leslie-privacy-preview-sidebar">
+                    <span class="leslie-privacy-preview-block" data-leslie-privacy-preview="conversations">${copy.privacyConversations}</span>
+                    <span class="leslie-privacy-preview-block" data-leslie-privacy-preview="connection">${copy.privacyConnection}</span>
+                </div>
+                <div class="leslie-privacy-preview-chat">
+                    <span class="leslie-privacy-preview-block" data-leslie-privacy-preview="header">${copy.privacyHeader}</span>
+                    <span class="leslie-privacy-preview-block" data-leslie-privacy-preview="messages">${copy.privacyMessages}</span>
+                    <span class="leslie-privacy-preview-block" data-leslie-privacy-preview="composer">${copy.privacyComposer}</span>
+                </div>
+            </div>
+        </section>
+        <section class="leslie-detail-card">
+            <div class="leslie-detail-card-heading">
+                <h3>${copy.privacyModeBlocks}</h3>
+                <p>${copy.privacyModeBlocksHelp}</p>
+            </div>
+            <div class="leslie-privacy-block-list">${rows}</div>
+        </section>
+        <div class="leslie-detail-callout">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            <span>${copy.privacyVisualOnly}</span>
+        </div>`;
+    return renderDetailShell({ icon: 'fa-solid fa-user-shield', title: copy.privacyModeDetailTitle, body: copy.privacyModeDetailBody, content });
+}
+
 const DETAIL_RENDERERS = {
+    privacy: renderPrivacyDetail,
     model: renderModelDetail,
     reply: renderReplyDetail,
     voice: renderVoiceDetail,
@@ -1263,6 +1363,10 @@ function createSettingsOverlay() {
                     </div>
                     <div class="leslie-settings-navigation-group">
                         <span class="leslie-settings-navigation-label">${copy.coreGroup}</span>
+                        <button type="button" class="leslie-settings-nav-item" data-leslie-detail="privacy" data-leslie-settings-page="privacy">
+                            <i class="fa-solid fa-user-shield" aria-hidden="true"></i>
+                            <span><strong>${copy.privacyModeTitle}</strong><small>${copy.privacyModeBody}</small></span>
+                        </button>
                         <button type="button" class="leslie-settings-nav-item" data-leslie-detail="model" data-leslie-settings-page="model">
                             <i class="fa-solid fa-plug" aria-hidden="true"></i>
                             <span><strong>${copy.modelTitle}</strong><small>${copy.modelBody}</small></span>
@@ -1393,6 +1497,7 @@ function createSettingsOverlay() {
                                 </div>
                             </div>
                             <div class="leslie-settings-list">
+                                ${renderSettingsRow({ detail: 'privacy', icon: 'fa-solid fa-user-shield', title: copy.privacyModeTitle, body: copy.privacyModeBody })}
                                 ${renderSettingsRow({ detail: 'model', icon: 'fa-solid fa-plug', title: copy.modelTitle, body: copy.modelBody, connectionStatus: true })}
                                 ${renderSettingsRow({ detail: 'reply', icon: 'fa-solid fa-wand-magic-sparkles', title: copy.replyTitle, body: copy.replyBody })}
                                 ${renderSettingsRow({ detail: 'voice', icon: 'fa-solid fa-volume-high', title: copy.voiceTitle, body: copy.voiceBody })}
@@ -1976,7 +2081,9 @@ function bindDetailText(source, targetSelector, fallback) {
 function bindDetailPage(detailId) {
     clearDetailBindings();
     detailBindingController = new AbortController();
-    if (detailId === 'model') {
+    if (detailId === 'privacy') {
+        syncLesliePrivacyModeControls(document.getElementById('leslie-settings-detail'));
+    } else if (detailId === 'model') {
         const service = MODEL_SERVICES[getActiveModelService()];
         if (service?.kind === activeModelKind) {
             service.fields.forEach(([sourceId, mirrorId, , , kind]) => {
@@ -2559,7 +2666,11 @@ function initLeslieSettings() {
     });
     settingsOverlay.addEventListener('change', (event) => {
         const target = event.target instanceof HTMLInputElement ? event.target : null;
-        if (target?.matches('[data-leslie-local-model-toggle]')) {
+        if (target?.matches('[data-leslie-privacy-master]')) {
+            setLesliePrivacyModeEnabled(target.checked);
+        } else if (target?.matches('[data-leslie-privacy-block]')) {
+            setLesliePrivacyBlockMasked(target.dataset.lesliePrivacyBlock, target.checked);
+        } else if (target?.matches('[data-leslie-local-model-toggle]')) {
             handleLocalModelLoadingToggle(target);
         }
     });

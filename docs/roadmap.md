@@ -7,6 +7,7 @@
 - Modern desktop chat layout and settings adaptations.
 - A runtime-selectable Cupertino design language for the conversation list, chat chrome, message bubbles, and composer, with purposeful reduced-motion-aware transitions and a persisted classic-theme fallback that leaves the original DOM and chat behavior intact.
 - A one-click demo mode in Leslie settings that switches the current browser session to an isolated per-account storage namespace for synthetic feature showcases and screenshots, without copying regular chats, character cards, memories, or API secrets.
+- A visual privacy mode aligned to the original desktop UI regions, with independent blur masks for the conversation list, chat header, messages, composer, and connection status plus persistent quick toggles. It changes only local presentation and does not encrypt stored chat data.
 - A Leslie companion home for the no-chat state, with continue-chat, manually pinned or activity-ranked characters, content-free Moments updates, first-run guidance, and model/setup shortcuts while the classic SillyTavern welcome screen remains available with the classic layout.
 - Semantic reply modes that guide balanced, novel, dialogue-driven, or concise presentation through prompt injection instead of fixed per-style token caps; DeepSeek foreground replies can use provider-controlled output length.
 - First versions of Leslie memory and Persona/storyline identity isolation.

@@ -1,5 +1,5 @@
 /* eslint-disable playwright/no-conditional-in-test */
-/* global document */
+/* global document, localStorage, sessionStorage */
 import { expect, test } from '@playwright/test';
 
 test.use({
@@ -187,4 +187,41 @@ test('Leslie settings follows the saved Chinese interface language', async ({ pa
     await settingsNavigation.locator('[data-leslie-detail="reply"]').click();
     await expect(page.locator('.leslie-style-presets-card h3')).toHaveText('选择回复范式');
     await expect(page.locator('[data-leslie-reply-style="novel"]')).toContainText('长篇小说');
+});
+
+test('privacy mode masks only the selected original UI blocks and persists the choice', async ({ page }) => {
+    await page.addInitScript(() => {
+        if (!sessionStorage.getItem('leslie-privacy-test-ready')) {
+            localStorage.removeItem('leslie.privacy-mode.v1');
+            sessionStorage.setItem('leslie-privacy-test-ready', 'true');
+        }
+    });
+    await preparePage(page);
+
+    await expect(page.locator('[data-leslie-privacy-quick-toggle="sidebar"]')).toBeVisible();
+    await page.locator('.leslie-sidebar-actions [data-action="settings"]').click();
+    const privacyNavigation = page.locator('.leslie-settings-navigation [data-leslie-detail="privacy"]');
+    await expect(privacyNavigation).toBeVisible();
+    await privacyNavigation.click();
+
+    await expect(page.locator('.leslie-detail-hero h2')).toHaveText('Screen privacy mode');
+    await expect(page.locator('[data-leslie-privacy-block]')).toHaveCount(5);
+    await expect(page.locator('[data-leslie-privacy-master]')).not.toBeChecked();
+    await expect(page.locator('[data-leslie-privacy-block="messages"]')).toBeChecked();
+    await expect(page.locator('[data-leslie-privacy-block="connection"]')).not.toBeChecked();
+
+    await page.locator('[data-leslie-privacy-master]').check();
+    await expect(page.locator('body')).toHaveClass(/leslie-privacy-mode/);
+    await expect(page.locator('body')).toHaveAttribute('data-leslie-privacy-messages', 'masked');
+    await expect(page.locator('body')).toHaveAttribute('data-leslie-privacy-connection', 'visible');
+    await page.locator('[data-leslie-privacy-block="messages"]').uncheck();
+    await expect(page.locator('body')).toHaveAttribute('data-leslie-privacy-messages', 'visible');
+    await expect(page.locator('[data-leslie-privacy-preview="messages"]')).not.toHaveClass(/is-masked/);
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#preloader')).toBeHidden();
+    await expect(page.locator('body')).toHaveClass(/leslie-privacy-mode/);
+    await expect(page.locator('body')).toHaveAttribute('data-leslie-privacy-messages', 'visible');
+    await page.locator('[data-leslie-privacy-quick-toggle="sidebar"]').click();
+    await expect(page.locator('body')).not.toHaveClass(/leslie-privacy-mode/);
 });

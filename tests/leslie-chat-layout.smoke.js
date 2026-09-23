@@ -470,7 +470,7 @@ async function run() {
             && headerMenu.headerZ > headerMenu.chatZ
             && (connectionState.connected || connectionState.configured || connectionState.label === '尚未配置模型')
             && settingsOpened
-            && settings.categoryCount === 7
+            && settings.categoryCount === 8
             && settings.activePage === 'overview'
             && settings.fullWindow
             && settings.replacesMainInterface
