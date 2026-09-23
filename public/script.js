@@ -34,7 +34,7 @@ import {
     parseTabbyLogprobs,
     initTextGenSettings,
 } from './scripts/textgen-settings.js';
-import { cleanLeslieLocalRoleplayOutput, isLesliePeachRoleplayModel, isLocalModelLoadingEnabled, LESLIE_LOCAL_ROLEPLAY_GUIDANCE } from './scripts/leslie-local-model-core.js';
+import { cleanLeslieLocalRoleplayOutput, isLesliePeachRoleplayModel, isLeslieQwenRoleplayModel, isLocalModelLoadingEnabled, LESLIE_LOCAL_ROLEPLAY_GUIDANCE, LESLIE_QWEN_ROLEPLAY_GUIDANCE } from './scripts/leslie-local-model-core.js';
 
 const LOCAL_TEXTGEN_API_TYPES = new Set([
     textgen_types.OOBA,
@@ -3395,8 +3395,12 @@ export function getCharacterCardFieldsLazy({ chid = undefined } = {}) {
             if (!power_user.prefer_character_jailbreak) return '';
 
             const characterJailbreak = baseChatReplace(character.data?.post_history_instructions?.trim());
-            const localRoleplayGuidance = main_api === 'textgenerationwebui' && isLesliePeachRoleplayModel(online_status)
-                ? LESLIE_LOCAL_ROLEPLAY_GUIDANCE
+            const localRoleplayGuidance = main_api === 'textgenerationwebui'
+                ? isLesliePeachRoleplayModel(online_status)
+                    ? LESLIE_LOCAL_ROLEPLAY_GUIDANCE
+                    : isLeslieQwenRoleplayModel(online_status)
+                        ? LESLIE_QWEN_ROLEPLAY_GUIDANCE
+                        : ''
                 : '';
 
             return [characterJailbreak, localRoleplayGuidance].filter(Boolean).join('\n');

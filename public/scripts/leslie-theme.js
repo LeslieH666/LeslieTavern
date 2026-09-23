@@ -11,7 +11,16 @@ import {
 
 const DARK_LUMINANCE_THRESHOLD = 0.42;
 const THEME_PREFERENCE_KEY = 'leslie.theme.preference';
+const COLOR_PALETTE_KEY = 'leslie.color.palette';
 const THEME_MODES = Object.freeze(['auto', 'light', 'dark']);
+const COLOR_PALETTES = Object.freeze(['jade', 'iris', 'clay', 'slate']);
+
+const COLOR_PALETTE_META = Object.freeze({
+    jade: { label: '青瓷', description: '柔和的青绿与暖白', light: '#23766e', dark: '#75c8ba' },
+    iris: { label: '鸢尾', description: '克制的蓝紫与雾白', light: '#5656a5', dark: '#aaa9e9' },
+    clay: { label: '暖砂', description: '陶土橘与奶油白', light: '#a45138', dark: '#e7ac8b' },
+    slate: { label: '石墨', description: '冷灰与低调蓝调', light: '#45647d', dark: '#9bbad1' },
+});
 
 const THEME_MODE_META = Object.freeze({
     auto: {
@@ -107,6 +116,26 @@ function getThemePreference() {
     }
 }
 
+function getColorPalette() {
+    try {
+        const stored = localStorage.getItem(COLOR_PALETTE_KEY);
+        return COLOR_PALETTES.includes(stored) ? stored : 'jade';
+    } catch {
+        return 'jade';
+    }
+}
+
+function setColorPalette(palette) {
+    if (!COLOR_PALETTES.includes(palette)) return;
+    try {
+        localStorage.setItem(COLOR_PALETTE_KEY, palette);
+    } catch {
+        // Keep the selected palette for this session if storage is unavailable.
+    }
+    document.body.dataset.leslieColorPalette = palette;
+    syncThemeControls();
+}
+
 /**
  * Persist a presentation-only preference without touching SillyTavern data.
  * @param {'auto' | 'light' | 'dark'} preference Theme preference.
@@ -157,6 +186,7 @@ function applyLeslieColorScheme() {
 
     document.body.dataset.leslieThemePreference ||= getThemePreference();
     document.body.dataset.leslieDesignLanguage ||= readDesignLanguagePreference(getBrowserStorage());
+    document.body.dataset.leslieColorPalette ||= getColorPalette();
     document.body.dataset.leslieColorScheme = getLeslieColorScheme();
     syncThemeControls();
 }
@@ -205,6 +235,29 @@ function ensureThemeMenu() {
         `;
         button.addEventListener('click', () => {
             setThemePreference(mode);
+            closeThemeMenu();
+        });
+        menu.append(button);
+    }
+
+    const paletteSeparator = document.createElement('hr');
+    paletteSeparator.className = 'leslie-theme-menu-separator';
+    menu.append(paletteSeparator, createMenuHeading('主题色'));
+
+    for (const palette of COLOR_PALETTES) {
+        const meta = COLOR_PALETTE_META[palette];
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.leslieColorPalette = palette;
+        button.setAttribute('role', 'menuitemradio');
+        button.setAttribute('aria-label', `${meta.label}，${meta.description}，提供亮色与暗色版本`);
+        button.innerHTML = `
+            <span class="leslie-palette-preview" aria-hidden="true"><i style="background:${meta.light}"></i><i style="background:${meta.dark}"></i></span>
+            <span><strong>${meta.label}</strong><small>${meta.description}</small></span>
+            <i class="fa-solid fa-check leslie-theme-choice-check" aria-hidden="true"></i>
+        `;
+        button.addEventListener('click', () => {
+            setColorPalette(palette);
             closeThemeMenu();
         });
         menu.append(button);
@@ -287,12 +340,15 @@ function syncThemeControls() {
     const preference = document.body.dataset.leslieThemePreference || getThemePreference();
     const scheme = document.body.dataset.leslieColorScheme || getLeslieColorScheme();
     const designLanguage = document.body.dataset.leslieDesignLanguage || readDesignLanguagePreference(getBrowserStorage());
+    const palette = COLOR_PALETTES.includes(document.body.dataset.leslieColorPalette)
+        ? document.body.dataset.leslieColorPalette : getColorPalette();
     const meta = THEME_MODE_META[preference];
     const designMeta = DESIGN_LANGUAGE_META[designLanguage];
+    const paletteMeta = COLOR_PALETTE_META[palette];
 
     for (const button of document.querySelectorAll('.leslie-theme-toggle')) {
         button.dataset.leslieThemeMode = preference;
-        button.title = `界面外观：${designMeta.label} · ${meta.label}（当前${scheme === 'dark' ? '暗色' : '亮色'}）`;
+        button.title = `界面外观：${paletteMeta.label} · ${designMeta.label} · ${meta.label}（当前${scheme === 'dark' ? '暗色' : '亮色'}）`;
         button.setAttribute('aria-label', button.title);
         const icon = button.querySelector(':scope > i');
         if (icon) {
@@ -311,6 +367,15 @@ function syncThemeControls() {
         choice.classList.toggle('is-active', selected);
         choice.setAttribute('aria-checked', String(selected));
     }
+
+    for (const choice of document.querySelectorAll('#leslie-theme-menu [data-leslie-color-palette]')) {
+        const selected = choice.dataset.leslieColorPalette === palette;
+        choice.classList.toggle('is-active', selected);
+        choice.setAttribute('aria-checked', String(selected));
+    }
+
+    const paletteSelect = document.getElementById('leslie-palette-select');
+    if (paletteSelect instanceof HTMLSelectElement) paletteSelect.value = palette;
 }
 
 /**
@@ -394,6 +459,8 @@ new MutationObserver(scheduleLeslieColorSchemeUpdate).observe(document.documentE
 document.addEventListener('change', (event) => {
     if (event.target instanceof Element && event.target.matches('#themes, toolcool-color-picker')) {
         scheduleLeslieColorSchemeUpdate();
+    } else if (event.target instanceof HTMLSelectElement && event.target.id === 'leslie-palette-select') {
+        setColorPalette(event.target.value);
     }
 }, true);
 

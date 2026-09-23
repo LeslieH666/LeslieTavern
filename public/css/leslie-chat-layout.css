@@ -123,10 +123,6 @@ body.leslie-modern:not(.leslie-chat-layout-disabled) #leslie-settings-launcher {
     text-shadow: none;
 }
 
-body.leslie-modern.leslie-chat-layout-disabled #leslie-conversation-sidebar {
-    display: none;
-}
-
 .leslie-sidebar-header {
     display: flex;
     min-height: 70px;
@@ -197,8 +193,7 @@ body.leslie-modern.leslie-chat-layout-disabled #leslie-conversation-sidebar {
 .leslie-icon-button,
 .leslie-conversation-search button,
 .leslie-conversation-filters button,
-.leslie-chat-more-menu button,
-#leslie-layout-restore {
+.leslie-chat-more-menu button {
     margin: 0;
     color: var(--leslie-shell-muted);
     background: transparent;
@@ -874,6 +869,166 @@ body.leslie-modern:not(.leslie-chat-layout-disabled) #send_textarea::placeholder
     color: var(--leslie-shell-muted);
 }
 
+body.leslie-modern:not(.leslie-chat-layout-disabled) #options_button,
+body.leslie-modern:not(.leslie-chat-layout-disabled) #options {
+    display: none !important;
+}
+
+.leslie-chat-tools > summary {
+    display: grid;
+    min-height: 42px;
+    grid-template-columns: 30px minmax(0, 1fr);
+    align-items: center;
+    padding: 0 10px;
+    color: var(--leslie-shell-text);
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 12px;
+    list-style: none;
+}
+
+.leslie-chat-tools > summary::-webkit-details-marker {
+    display: none;
+}
+
+.leslie-chat-tools > summary:hover,
+.leslie-chat-tools > summary:focus-visible {
+    color: var(--leslie-shell-accent);
+    background: var(--leslie-shell-hover);
+    outline: none;
+}
+
+.leslie-chat-tools[open] {
+    max-height: min(45vh, 360px);
+    overflow-y: auto;
+    border-block: 1px solid var(--leslie-shell-border);
+}
+
+.leslie-chat-history {
+    width: min(560px, calc(100vw - 24px));
+    max-height: min(75vh, 650px);
+    padding: 0;
+    color: var(--leslie-shell-text);
+    background: var(--leslie-shell-surface);
+    border: 1px solid var(--leslie-shell-border);
+    border-radius: 16px;
+    box-shadow: var(--leslie-workspace-shadow);
+}
+
+.leslie-chat-history::backdrop {
+    background: rgba(7, 16, 27, 0.55);
+}
+
+.leslie-chat-history header {
+    display: flex;
+    min-height: 58px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--leslie-shell-border);
+}
+
+.leslie-chat-history header button {
+    width: 36px;
+    height: 36px;
+    color: var(--leslie-shell-text);
+    background: transparent;
+    border: 0;
+    border-radius: 9px;
+    cursor: pointer;
+}
+
+.leslie-chat-history-list {
+    display: grid;
+    max-height: calc(min(75vh, 650px) - 58px);
+    padding: 8px;
+    overflow-y: auto;
+}
+
+.leslie-chat-history-entry {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    align-items: center;
+    border-radius: 10px;
+}
+
+.leslie-chat-history-open {
+    display: grid;
+    gap: 5px;
+    min-height: 58px;
+    padding: 10px 12px;
+    color: var(--leslie-shell-text);
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.leslie-chat-history-delete {
+    width: 40px;
+    height: 40px;
+    color: var(--leslie-shell-muted);
+    background: transparent;
+    border: 0;
+    border-radius: 9px;
+    cursor: pointer;
+}
+
+.leslie-chat-history-entry:has(.leslie-chat-history-delete:hover) .leslie-chat-history-delete,
+.leslie-chat-history-delete:focus-visible {
+    color: #e96969;
+    background: var(--leslie-shell-hover);
+}
+
+.leslie-chat-history-open:hover,
+.leslie-chat-history-open:focus-visible,
+.leslie-chat-history header button:hover {
+    background: var(--leslie-shell-hover);
+    outline: none;
+}
+
+.leslie-chat-history-confirm {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px 12px;
+}
+
+.leslie-chat-history-confirm p {
+    width: 100%;
+    margin: 0;
+    color: var(--leslie-shell-text);
+    font-size: 12px;
+}
+
+.leslie-chat-history-confirm button {
+    min-height: 34px;
+    padding: 0 12px;
+    color: var(--leslie-shell-text);
+    background: var(--leslie-shell-hover);
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.leslie-chat-history-confirm .is-danger {
+    color: white;
+    background: #b93838;
+}
+
+.leslie-chat-history-list strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leslie-chat-history-list small {
+    color: var(--leslie-shell-muted);
+}
+
 /* Center SillyTavern's advanced panels as workspaces instead of side drawers. */
 #leslie-workspace-backdrop {
     position: fixed;
@@ -920,29 +1075,6 @@ body.leslie-modern:not(.leslie-chat-layout-disabled) #top-settings-holder .drawe
 
 body.leslie-modern:not(.leslie-chat-layout-disabled) #top-settings-holder .fillLeft.openDrawer,
 body.leslie-modern:not(.leslie-chat-layout-disabled) #top-settings-holder .fillRight.openDrawer {
-    display: flex;
-}
-
-/* Safe escape hatch back to the original SillyTavern presentation. */
-#leslie-layout-restore {
-    position: fixed;
-    z-index: 49000;
-    right: 18px;
-    bottom: 18px;
-    display: none;
-    min-height: 42px;
-    align-items: center;
-    padding: 0 14px;
-    gap: 8px;
-    color: #fff;
-    background: #287edf;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(18, 59, 105, 0.28);
-    font-size: 12px;
-    font-weight: 700;
-}
-
-body.leslie-modern.leslie-chat-layout-disabled #leslie-layout-restore:not([hidden]) {
     display: flex;
 }
 

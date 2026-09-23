@@ -5,6 +5,7 @@ import {
     extractLocalCompletionText,
     getLocalChatCompletionUrl,
     getLocalResponseTokenBudget,
+    getLocalWorkshopSettings,
     getWorkshopProviderLabel,
     probeLocalWorkshopProvider,
 } from '../public/scripts/leslie-character-workshop/provider.js';
@@ -12,7 +13,7 @@ import {
 describe('Leslie character workshop providers', () => {
     test('keeps the existing chat provider and exposes the local provider', () => {
         expect(getWorkshopProviderLabel(WORKSHOP_PROVIDER.CHAT)).toContain('当前聊天 API');
-        expect(getWorkshopProviderLabel(WORKSHOP_PROVIDER.LOCAL)).toContain('Peach 2.0');
+        expect(getWorkshopProviderLabel(WORKSHOP_PROVIDER.LOCAL)).toContain('当前本地模型');
     });
 
     test('builds an OpenAI-compatible local request with an 8K context budget', () => {
@@ -23,18 +24,19 @@ describe('Leslie character workshop providers', () => {
         }, {
             context: 8192,
             responseTokens: 512,
-            modelName: 'Peach test',
+            modelName: 'Qwen test',
             endpoint: 'http://127.0.0.1:5001',
             generation: { temp: 0.8, top_p: 0.9, top_k: 40, min_p: 0.05, rep_pen: 1.1, rep_pen_range: 4096 },
         });
 
-        expect(request.model).toBe('Peach test');
+        expect(request.model).toBe('Qwen test');
         expect(request.messages).toHaveLength(2);
         expect(request.stream).toBe(false);
         expect(request.stop).toEqual(['</leslie-json>']);
         expect(request.max_tokens).toBeLessThanOrEqual(3072);
         expect(request.temperature).toBe(0.45);
         expect(getLocalChatCompletionUrl({ endpoint: 'http://127.0.0.1:5001/' })).toBe('http://127.0.0.1:5001/v1/chat/completions');
+        expect(buildLocalChatCompletionRequest({ prompt: '测试' }, getLocalWorkshopSettings()).min_p).toBe(0);
     });
 
     test('does not allow a requested response to exceed remaining context', () => {

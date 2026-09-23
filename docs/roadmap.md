@@ -6,12 +6,15 @@
 - Electron desktop entry point and a listener-aware local launcher; the current workspace can explicitly enable same-subnet LAN web access without per-device whitelist entries.
 - Modern desktop chat layout and settings adaptations.
 - A runtime-selectable Cupertino design language for the conversation list, chat chrome, message bubbles, and composer, with purposeful reduced-motion-aware transitions and a persisted classic-theme fallback that leaves the original DOM and chat behavior intact.
+- Four browser-persisted Leslie color palettes with matched light and dark variants, selectable from the appearance menu or settings page without changing SillyTavern theme data.
 - A one-click demo mode in Leslie settings that switches the current browser session to an isolated per-account storage namespace for synthetic feature showcases and screenshots, without copying regular chats, character cards, memories, or API secrets.
 - A visual privacy mode aligned to the original desktop UI regions, with independent blur masks for the conversation list, chat header, messages, composer, and connection status plus persistent quick toggles. It changes only local presentation and does not encrypt stored chat data.
 - A Leslie companion home for the no-chat state, with continue-chat, manually pinned or activity-ranked characters, content-free Moments updates, first-run guidance, and model/setup shortcuts while the classic SillyTavern welcome screen remains available with the classic layout.
 - Semantic reply modes that guide balanced, novel, dialogue-driven, or concise presentation through prompt injection instead of fixed per-style token caps; DeepSeek foreground replies can use provider-controlled output length.
 - First versions of Leslie memory and Persona/storyline identity isolation.
 - Separate story and reality chat lines backed by ordinary SillyTavern JSONL chats. Reality chats use a one-time core-personality extraction instead of the full character card, reopen the latest matching JSONL instead of creating a replacement, generate one non-fixed greeting on each entry through the active API, enforce plain instant-message output, follow device time and elapsed offline time, and keep same-character cross-line recall capped at two memory resonances rather than current-world facts. Older reality metadata is upgraded in place without discarding chat history.
+- The chat header now creates another chat in the selected line without deleting the current one; single-character history labels story and reality chats, offers confirmed deletion, and reality creation can reuse a matching core-personality profile.
+- Moments AI activity selects from the account's configured online connections and follows their saved model choice; missing online configuration waits without local fallback.
 - Moments publishing and timeline storage, plus model-backed per-post/per-character unique read receipts, persisted low/medium/high enthusiasm controls, and selective likes/comments that continue while the Electron app is hidden in the system tray.
 - Threaded Moments replies with repeated AI participation, publishing-Persona ownership for every user reply, Persona likes/unlikes separated from the clickable liker list, per-character comment/reply permission that leaves AI likes unrestricted, reversible delete/restore permission shared by local users, and lossless migration of legacy timelines and activity sidecars.
 - Text-only character-authored Moments with explicit per-character enablement and frequency controls for both recently chatted and library-only characters.
@@ -25,13 +28,15 @@
 - Authoritative AIRI companion turns through the active LeslieTavern character, chat, prompt pipeline, memory, and model.
 - Automatic AIRI binding to the visible LeslieTavern character and its Volcengine voice.
 - Dedicated AIRI mode with automatic provider selection, no onboarding window, and a reduced settings surface.
-- One `Leslie Heaven` desktop launcher, with AIRI and Peach local-model start/stop actions moved into Electron-only model settings and backed by tracked-process shutdown.
+- One `Leslie Heaven` desktop launcher, with AIRI and selected local-model start/stop actions in Electron-only model settings and backed by tracked-process shutdown.
 - Optional interactive-guidance input mode with three AI-generated replies anchored to the current user Persona, automatic collapse for free-form typing, and the existing model, character-card, World Info, Persona, memory, and chat pipeline as its source of truth.
-- One-click local Peach 2.0 GGUF detection and API configuration through the existing KoboldCpp or llama.cpp adapters, plus desktop settings start/stop controls; model weights remain outside Git.
-- Character workshop provider switch between the existing chat API and local Peach generation, with structured-output budgeting and preview-only drafts.
+- One-click local Qwen3.5 9B RP and Peach 2.0 9B RP GGUF detection and API configuration through the existing KoboldCpp or llama.cpp adapters, plus desktop settings start/stop controls; model weights remain outside Git.
+- A shared `models/` catalog for single-file GGUF weights in desktop settings. Users select a discovered model and connect through managed KoboldCpp without editing a port; manual local-provider controls are folded into advanced settings.
+- Character workshop provider switch between the existing chat API and local Qwen3.5 generation, with structured-output budgeting and preview-only drafts.
 - Per-memory model selection for automatic memory extraction and growth synthesis, including the existing chat API, the DeepSeek OpenAI Chat Completions API, local OpenAI-compatible runtimes, and independent OpenAI-compatible endpoints.
 - Project-wide local-model loading gate shared by chat, character workshop, and memory-model adapters; disabling it leaves local model files intact while preventing local calls.
 - Model connection checks retain the selected provider and visible endpoint across settings refreshes, recover the button after failures, and keep autosave/backup maintenance from taking down the service.
+- Online API keys persist per account and provider across connection switches. The Leslie settings page saves pending keys before switching, shows saved-key state without revealing values, and Windows migrates the local secret file to current-user DPAPI protection.
 - Bundled Peach roleplay output now stops at its known bracketed state/scene continuation pattern before contaminated text can be saved into chat history.
 - One-click standard Character Card V2/V3 JSON import in the manual character editor, with an optional avatar upload synchronized to the native create form before saving.
 

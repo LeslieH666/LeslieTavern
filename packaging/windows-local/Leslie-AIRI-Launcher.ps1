@@ -322,12 +322,12 @@ function Start-LeslieOnly {
 }
 
 function Start-LocalModelOnly {
-    Write-Section 'Starting local Peach model'
+    Write-Section 'Starting local Qwen3.5 model'
     & $StartLocalModelScript
 }
 
 function Stop-LocalModelOnly {
-    Write-Section 'Stopping local Peach model'
+    Write-Section 'Stopping local Qwen3.5 model'
     & $StopLocalModelScript
 }
 
@@ -429,8 +429,8 @@ function Show-Menu {
     Write-Host '3. Stop AIRI + LeslieTavern'
     Write-Host '4. Run launcher diagnostics'
     Write-Host '5. Rebuild AIRI, then start both'
-    Write-Host '6. Start local Peach model'
-    Write-Host '7. Stop local Peach model'
+    Write-Host '6. Start local Qwen3.5 model'
+    Write-Host '7. Stop local Qwen3.5 model'
     Write-Host '0. Exit'
     $selection = Read-Host 'Select an option'
 

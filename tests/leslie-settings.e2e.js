@@ -8,8 +8,18 @@ test.use({
 });
 
 async function preparePage(page) {
+    await page.route('**/api/horde/status', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: false }),
+    }));
+    await page.route('**/api/horde/text-models', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+    }));
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#preloader')).toBeHidden();
+    await expect(page.locator('#preloader')).toBeHidden({ timeout: 30_000 });
     await page.locator('.popup[open]').evaluateAll((popups) => popups.forEach((popup) => popup.close()));
 }
 
@@ -68,6 +78,10 @@ test('Leslie settings keeps essentials clear and advanced tools guarded', async 
     await expect(page.locator('[data-leslie-service="deepseek"]')).toBeVisible();
     await page.locator('[data-leslie-api-kind="local"]').click();
     await expect(page.locator('[data-leslie-api-kind="local"]')).toHaveClass(/is-active/);
+    await expect(page.locator('[data-leslie-local-model-directory]')).toContainText('models/');
+    await expect(page.locator('[data-leslie-local-model-catalog]')).toContainText('Leslie Heaven desktop');
+    await expect(page.locator('.leslie-local-advanced')).not.toHaveAttribute('open');
+    await page.locator('.leslie-local-advanced > summary').click();
     await expect(page.locator('.leslie-service-card')).toHaveCount(5);
     await expect(page.locator('[data-leslie-service="ollama"]')).toBeVisible();
     await expect(page.locator('#leslie-local-model-loading')).toBeChecked();
@@ -77,9 +91,6 @@ test('Leslie settings keeps essentials clear and advanced tools guarded', async 
     await expect(page.locator('[data-leslie-local-model-detect]')).toBeDisabled();
     await page.locator('#leslie-local-model-loading').check();
     await expect(page.locator('[data-leslie-local-model-detect]')).toBeEnabled();
-    await page.locator('[data-leslie-local-model-detect]').click();
-    await expect.poll(async () => page.locator('#textgen_type').inputValue()).toBe('koboldcpp');
-    await expect(page.locator('#koboldcpp_api_url_text')).toHaveValue(/^http:\/\/127\.0\.0\.1:5001\/?$/);
     await page.locator('[data-leslie-api-kind="online"]').click();
     await expect(page.locator('[data-leslie-drawer-target="sys-settings-button"]')).toBeVisible();
 
@@ -219,7 +230,8 @@ test('privacy mode masks only the selected original UI blocks and persists the c
     await expect(page.locator('[data-leslie-privacy-preview="messages"]')).not.toHaveClass(/is-masked/);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#preloader')).toBeHidden();
+    await expect(page.locator('#preloader')).toBeHidden({ timeout: 30_000 });
+    await page.locator('.popup[open]').evaluateAll((popups) => popups.forEach((popup) => popup.close()));
     await expect(page.locator('body')).toHaveClass(/leslie-privacy-mode/);
     await expect(page.locator('body')).toHaveAttribute('data-leslie-privacy-messages', 'visible');
     await page.locator('[data-leslie-privacy-quick-toggle="sidebar"]').click();

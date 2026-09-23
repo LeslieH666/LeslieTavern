@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { listLocalModels, resolveLocalModel } from './local-model-catalog.js';
 
 const SERVICE_NAMES = new Set(['airi', 'localModel']);
 const ACTION_NAMES = new Set(['start', 'stop']);
@@ -23,6 +24,15 @@ function readAiriPid(filePath) {
     }
 }
 
+function readTrackedModel(filePath) {
+    try {
+        const state = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        return Number.isInteger(state?.pid) && typeof state?.modelId === 'string' ? state : null;
+    } catch {
+        return null;
+    }
+}
+
 export function isTrackedProcessRunning(pid, kill = process.kill) {
     if (!Number.isInteger(pid) || pid <= 0) {
         return false;
@@ -37,26 +47,32 @@ export function isTrackedProcessRunning(pid, kill = process.kill) {
 
 export function getLocalServiceStatus(projectRoot, { kill = process.kill, busyServices = new Set() } = {}) {
     const root = path.resolve(projectRoot);
+    const catalog = listLocalModels(root);
     const airiPid = readAiriPid(path.join(root, 'Run', 'AIRI.state.json'));
     const modelPid = readPidFile(path.join(root, 'Run', 'KoboldCpp.pid'));
+    const trackedModel = readTrackedModel(path.join(root, 'Run', 'KoboldCpp.model.json'));
     const statusFor = (name, pid, configured) => ({
         state: busyServices.has(name) ? 'busy' : isTrackedProcessRunning(pid, kill) ? 'running' : 'stopped',
         pid: isTrackedProcessRunning(pid, kill) ? pid : null,
         configured,
     });
+    const runtimeInstalled = fs.existsSync(path.join(root, 'tools', 'koboldcpp', 'koboldcpp.exe'));
+    const localModel = statusFor('localModel', modelPid, runtimeInstalled && catalog.models.length > 0);
+    localModel.runtimeInstalled = runtimeInstalled;
+    localModel.modelId = localModel.state === 'running' && trackedModel?.pid === modelPid
+        && catalog.models.some(model => model.id === trackedModel.modelId) ? trackedModel.modelId : null;
     return {
         available: process.platform === 'win32' && Boolean(process.versions.electron),
+        localModels: catalog,
         services: {
             airi: statusFor('airi', airiPid,
                 fs.existsSync(path.join(root, 'airi', 'apps', 'stage-tamagotchi', 'package.json'))),
-            localModel: statusFor('localModel', modelPid,
-                fs.existsSync(path.join(root, 'tools', 'koboldcpp', 'koboldcpp.exe'))
-                && fs.existsSync(path.join(root, 'models', 'Peach-2.0-9B-8k-Roleplay', 'Peach-2.0-9B-8k-Roleplay.Q4_K_M.gguf'))),
+            localModel,
         },
     };
 }
 
-function getCommand(projectRoot, service, action) {
+function getCommand(projectRoot, service, action, modelId) {
     if (!SERVICE_NAMES.has(service) || !ACTION_NAMES.has(action)) {
         throw new TypeError('Unsupported Leslie desktop service action.');
     }
@@ -69,13 +85,15 @@ function getCommand(projectRoot, service, action) {
     }
     return {
         script: path.join(scriptsRoot, action === 'start' ? 'Start-LocalModel.ps1' : 'Stop-LocalModel.ps1'),
-        arguments: [],
+        arguments: action === 'start' && modelId
+            ? ['-ModelPath', resolveLocalModel(projectRoot, modelId).path, '-ModelId', modelId]
+            : [],
     };
 }
 
-export function runLocalServiceAction(projectRoot, service, action, { spawnProcess = spawn } = {}) {
+export function runLocalServiceAction(projectRoot, service, action, { spawnProcess = spawn, modelId } = {}) {
     const root = path.resolve(projectRoot);
-    const command = getCommand(root, service, action);
+    const command = getCommand(root, service, action, modelId);
     if (!fs.existsSync(command.script)) {
         throw new Error(`Desktop service script is missing: ${path.basename(command.script)}`);
     }
@@ -98,12 +116,35 @@ export function runLocalServiceAction(projectRoot, service, action, { spawnProce
         child.stdout?.on('data', append);
         child.stderr?.on('data', append);
         child.once('error', reject);
-        child.once('close', (code) => {
-            if (code === 0) {
-                resolve({ ok: true, output: output.trim() });
-            } else {
-                reject(new Error(output.trim() || `Desktop service command failed with exit code ${code}.`));
-            }
+        // KoboldCpp may inherit the PowerShell pipe handles. In that case the
+        // shell has exited successfully while Node's "close" event waits for
+        // the long-lived model process. The action follows the shell's exit.
+        child.once('exit', (code) => {
+            // Give PowerShell's final message a brief chance to reach us, then
+            // release pipes held open by its long-lived KoboldCpp child.
+            setTimeout(() => {
+                child.stdout?.destroy?.();
+                child.stderr?.destroy?.();
+                if (code === 0) {
+                    resolve({ ok: true, output: output.trim() });
+                } else {
+                    reject(new Error(output.trim() || `Desktop service command failed with exit code ${code}.`));
+                }
+            }, 50);
         });
     });
+}
+
+/** Switch only the project-tracked process after validating the selected file. */
+export async function startManagedLocalModel(projectRoot, modelId, { getStatus = getLocalServiceStatus, runAction = runLocalServiceAction } = {}) {
+    const root = path.resolve(projectRoot);
+    resolveLocalModel(root, modelId);
+    const status = getStatus(root).services.localModel;
+    if (status.state === 'running') {
+        if (status.modelId === modelId) {
+            return;
+        }
+        await runAction(root, 'localModel', 'stop');
+    }
+    await runAction(root, 'localModel', 'start', { modelId });
 }

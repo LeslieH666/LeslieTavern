@@ -25,5 +25,6 @@ contextBridge.exposeInMainWorld('leslieDesktopMoments', {
 
 contextBridge.exposeInMainWorld('leslieDesktopServices', {
     getStatus: () => ipcRenderer.invoke('leslie:services:status'),
-    runAction: (service, action) => ipcRenderer.invoke('leslie:services:action', { service, action }),
+    runAction: (service, action, modelId) => ipcRenderer.invoke('leslie:services:action', { service, action, modelId }),
+    openModelsFolder: () => ipcRenderer.invoke('leslie:services:open-models'),
 });

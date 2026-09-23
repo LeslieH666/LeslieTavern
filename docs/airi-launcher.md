@@ -21,7 +21,7 @@ D:\Projects\Leslietavern\
 
 ## 日常启动
 
-双击 `启动 Leslie Heaven.cmd` 启动 LeslieTavern。打开“设置 → 模型连接 → 本地服务”，即可分别启动或停止 AIRI 与项目适配的 Peach 本地模型。AIRI 启动完成后会出现自己的主窗口，并跳过首次配置向导。
+双击 `启动 Leslie Heaven.cmd` 启动 LeslieTavern。打开“设置 → 模型连接 → 本地服务”，即可分别启动或停止 AIRI 与项目适配的 Qwen3.5 本地模型。AIRI 启动完成后会出现自己的主窗口，并跳过首次配置向导。
 
 本地服务按钮只在 Electron 桌面端可用。普通浏览器和局域网页面可以继续使用聊天功能，但不能启动或停止本机进程。
 

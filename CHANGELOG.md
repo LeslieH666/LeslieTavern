@@ -6,6 +6,10 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 
 ### Added
 
+- Four Leslie color palettes (Jade, Iris, Clay, and Slate), each with coordinated light and dark surfaces, accessible chat-bubble contrast, a shared appearance-menu picker, and a settings-page selector saved in the current browser.
+- A dedicated new-chat action for the current character and world line, including multiple reality chats with generated instant-message openings and a line-labelled history picker with confirmed chat deletion.
+- An online-only Moments model picker sourced from configured DeepSeek, OpenAI, OpenRouter, Claude, or Google AI Studio connections, using the account's saved model and credentials without duplicate API fields.
+- A unified chat header with the former composer chat tools grouped under its menu; the unused original-layout toggle and duplicate old chat controls are removed from the visible interface.
 - Purposeful Cupertino motion for direct control feedback, menus, chat changes, newly inserted messages, mobile navigation, and large overlays, with a system Reduce Motion path that removes spatial transforms.
 - A Cupertino design language for the conversation list, chat header, message bubbles, and composer, plus a persistent in-app switch back to the previous classic presentation.
 - A presentation-only design-language preference with unit coverage and a documented pre-refactor Git recovery point.

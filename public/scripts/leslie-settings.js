@@ -10,12 +10,15 @@ import { eventSource, event_types, getRequestHeaders, saveSettingsDebounced, set
 import { extension_settings } from './extensions.js';
 import { getLeslieConnectionState } from './leslie-connection-state.js';
 import { textgen_types, textgenerationwebui_settings } from './textgen-settings.js';
+import { selectContextPreset, selectInstructPreset } from './instruct-mode.js';
+import { SECRET_KEYS, secret_state, writeSecret } from './secrets.js';
 import {
-    LESLIE_LOCAL_MODEL,
     detectLeslieLocalModel,
     getLeslieLocalRuntime,
     getLeslieLocalSettings,
+    isLeslieQwenRoleplayModel,
     isLocalModelLoadingEnabled,
+    probeLeslieLocalRuntime,
     setLocalModelLoadingEnabled,
 } from './leslie-local-model-core.js';
 import {
@@ -54,9 +57,11 @@ const COPY = {
         introBody: '这里只整理入口，不会删除或改写 SillyTavern 的原功能。常用选项可以直接调整，复杂功能仍保留在高级设置中。',
         safeNote: '聊天记录、角色卡和提示词顺序不会因这个界面而改变。',
         quickTitle: '外观与使用习惯',
-        quickBody: '这些选项会沿用原来的保存方式。',
+        quickBody: '基础主题沿用原设置；Leslie 主题色保存在当前浏览器。',
         theme: '界面主题',
-        themeHelp: '选择整体颜色方案',
+        themeHelp: '选择 SillyTavern 基础主题',
+        palette: 'Leslie 主题色',
+        paletteHelp: '亮色和暗色会自动使用成套配色',
         language: '界面语言',
         languageHelp: '更改后页面会重新载入',
         reducedMotion: '减少动态效果',
@@ -119,7 +124,7 @@ const COPY = {
         lockedBody: '这些功能仍然完整保留。只有需要精细调整时再展开，可减少误操作。',
         unlock: '展开高级设置',
         relock: '收起高级设置',
-        footer: '所有修改仍由 SillyTavern 原来的设置系统保存，可随时在对应面板中恢复。',
+        footer: 'Leslie 外观偏好可随时调整；其他设置仍可在对应面板中恢复。',
         back: '返回设置首页',
         simpleDetail: '常用设置',
         navigation: '设置分类',
@@ -129,7 +134,7 @@ const COPY = {
         roleGroup: '角色资料',
         advancedGroup: '高级与兼容',
         contentEyebrow: '设置内容',
-        originalSave: '由 SillyTavern 原设置系统保存',
+        originalSave: '设置保存在本机',
         fullSettings: '打开完整设置',
         fullSettingsHelp: '需要其他供应商或精细参数时再进入。',
         modelDetailTitle: '模型连接',
@@ -163,14 +168,31 @@ const COPY = {
         serviceTextGenBody: '连接 oobabooga WebUI 接口。',
         serviceLocalGeneric: '通用本地接口',
         serviceLocalGenericBody: '连接兼容接口的其他本地推理程序。',
-        localModelTitle: 'Peach 2.0 本地模型',
-        localModelBody: '已下载 Q4_K_M 量化，适合 8GB 显存。点击按钮后会自动识别正在运行的适配服务并填充设置。',
-        localModelPath: '模型文件',
+        localModelTitle: '连接本地模型',
+        localModelBody: '把 GGUF 模型文件放到统一目录，选择识别到的模型，点击连接。项目会自动启动适配的本地服务并配置聊天接口。',
+        localModelPath: '统一模型目录',
+        localModelOpenFolder: '打开模型目录',
+        localModelFolderFailed: '无法打开模型目录，请按上方路径手动打开。',
+        localModelRefresh: '重新扫描',
+        localModelScanning: '正在扫描模型目录…',
+        localModelDesktopOnly: '自动扫描和启动只在 Leslie Heaven 桌面端可用。浏览器中可展开高级设置手动连接。',
+        localModelEmpty: '尚未找到可一键连接的 GGUF 模型。将单文件 GGUF 放入上述目录或其子目录，然后重新扫描。',
+        localModelRuntimeMissing: '已找到模型，但未安装项目适配的 KoboldCpp 运行程序。可展开高级设置手动连接已有服务。',
+        localModelMethod: '自动连接方式：KoboldCpp',
+        localModelMethodHelp: '下方列出这个连接方式能加载的 GGUF 模型；无需填写地址或端口。实际能否运行取决于模型架构和电脑资源。',
+        localModelSelect: '选择模型',
+        localModelConnect: '连接所选模型',
+        localModelConnecting: '正在启动模型并连接，请稍候…',
+        localModelConnected: '本地模型已配置并发起连接：',
+        localModelReadyFailure: '模型服务未能在预期时间内就绪，请查看运行日志或展开高级设置。',
+        localModelStop: '停止本地模型',
+        localModelAdvanced: '展开高级连接设置',
+        localModelAdvancedHelp: 'Ollama、llama.cpp、其他运行时、手动地址和端口',
         localModelDetect: '一键识别并自动配置',
-        localModelDetectHelp: '检查 127.0.0.1:5001 和 127.0.0.1:8080，只识别当前适配的 Peach 模型。',
+        localModelDetectHelp: '检查 127.0.0.1:5001 和 127.0.0.1:8080，识别 Qwen3.5 RP 或 Peach。',
         localModelDetectChecking: '正在识别本地模型，请稍候…',
         localModelDetectSuccess: '已识别并配置：',
-        localModelDetectFailure: '未找到正在运行的适配 Peach 模型。请先启动本地模型，再重试。',
+        localModelDetectFailure: '未找到正在运行的适配模型。请先启动 Qwen3.5 RP 或 Peach，再重试。',
         localModelLoading: '启用本地模型加载',
         localModelLoadingHelp: '关闭后，LeslieTavern 不会自动连接或调用本地模型；不会删除模型文件。',
         localModelLoadingDisabled: '本地模型加载已关闭，请先打开开关。',
@@ -181,8 +203,8 @@ const COPY = {
         desktopServicesUnavailable: '请在 Leslie Heaven 桌面应用中管理这些服务。浏览器与局域网页面只能查看设置。',
         desktopServiceAiri: 'AIRI 桌面陪伴',
         desktopServiceAiriBody: '连接当前角色、聊天、记忆与语音。首次启动可能需要构建。',
-        desktopServiceModel: 'Peach 本地模型',
-        desktopServiceModelBody: '启动项目内的 KoboldCpp，并在不用时释放显存。',
+        desktopServiceModel: '已管理的本地模型',
+        desktopServiceModelBody: '启动或停止项目内的 KoboldCpp；上方可直接选择要加载的模型。',
         desktopServiceStart: '启动',
         desktopServiceStop: '停止',
         desktopServiceStarting: '处理中',
@@ -195,7 +217,9 @@ const COPY = {
         endpoint: '服务地址',
         endpointHelp: '填写接口的基础地址；OpenAI 兼容地址通常以 /v1 结尾。',
         apiKey: 'API 密钥',
-        apiKeyHelp: '已保存密钥时可以留空；新输入的密钥仍由原系统保存。',
+        apiKeyHelp: '输入后点击连接或切换接口即可保存；密钥不会在输入框中回显。',
+        apiKeySavedHelp: '此接口已有保存的密钥，留空即可直接连接；输入新密钥会替换当前使用的密钥。',
+        apiKeySaveFailed: '密钥未能保存，请保留当前页面并重试。',
         model: '模型',
         modelHelp: '连接成功后可从列表选择，也可以按服务要求填写模型名称。',
         availableModel: '可用模型列表',
@@ -204,7 +228,7 @@ const COPY = {
         autoConnectHelp: '下次打开应用时尝试连接上次使用的服务。',
         thinkingMode: '思考模式（默认关闭）',
         thinkingModeHelp: '关闭后会明确要求兼容模型直接回答，不请求也不显示思考过程；日常角色对话建议关闭。',
-        privacy: '密钥只会传给你选择的模型服务，不会由 Leslie 另行保存。',
+        privacy: '密钥按账号保存在本机数据目录；Windows 下使用系统用户级加密。',
         allProviders: '其他供应商与详细连接设置',
         otherProviderActive: '当前使用的是其他连接方式。你可以选择上方常用服务，或打开完整连接设置继续配置。',
         settingUnavailable: '当前接口没有提供这项常用设置，可在完整设置中调整。',
@@ -289,9 +313,11 @@ const COPY = {
         introBody: 'This page reorganizes access without removing or rewriting SillyTavern features. Common options stay close at hand, while complex tools remain available under Advanced.',
         safeNote: 'This interface does not change chats, character cards, or prompt order.',
         quickTitle: 'Appearance & comfort',
-        quickBody: 'These controls use SillyTavern’s existing save behavior.',
+        quickBody: 'The base theme uses SillyTavern settings; Leslie palettes are saved in this browser.',
         theme: 'Theme',
-        themeHelp: 'Choose the overall color scheme',
+        themeHelp: 'Choose the base SillyTavern theme',
+        palette: 'Leslie palette',
+        paletteHelp: 'Each palette includes light and dark colors',
         language: 'Language',
         languageHelp: 'The page reloads after a change',
         reducedMotion: 'Reduce motion',
@@ -354,7 +380,7 @@ const COPY = {
         lockedBody: 'Every feature is still available. Reveal these controls only when you need precise customization.',
         unlock: 'Show advanced settings',
         relock: 'Hide advanced settings',
-        footer: 'SillyTavern’s original settings system still saves every change, and each option can be restored in its original panel.',
+        footer: 'Leslie appearance preferences can be changed at any time; other settings remain available in their original panels.',
         back: 'Back to settings',
         simpleDetail: 'Common settings',
         navigation: 'Settings categories',
@@ -364,7 +390,7 @@ const COPY = {
         roleGroup: 'Character data',
         advancedGroup: 'Advanced & compatibility',
         contentEyebrow: 'Settings detail',
-        originalSave: 'Saved by SillyTavern settings',
+        originalSave: 'Settings are saved locally',
         fullSettings: 'Open all settings',
         fullSettingsHelp: 'Use this only for other providers or precise parameters.',
         modelDetailTitle: 'Model connection',
@@ -398,14 +424,31 @@ const COPY = {
         serviceTextGenBody: 'Connect to an oobabooga WebUI API.',
         serviceLocalGeneric: 'Generic local API',
         serviceLocalGenericBody: 'Connect to another compatible local inference server.',
-        localModelTitle: 'Peach 2.0 local model',
-        localModelBody: 'The Q4_K_M download is ready for an 8GB GPU. Detect a running compatible service to apply the connection and RP defaults.',
-        localModelPath: 'Model file',
+        localModelTitle: 'Connect a local model',
+        localModelBody: 'Place a GGUF model in the shared folder, select it, and connect. The app starts the matching local service and configures chat automatically.',
+        localModelPath: 'Shared model folder',
+        localModelOpenFolder: 'Open model folder',
+        localModelFolderFailed: 'Could not open the model folder. Use the path shown above.',
+        localModelRefresh: 'Scan again',
+        localModelScanning: 'Scanning the model folder…',
+        localModelDesktopOnly: 'Automatic scanning and startup are available in Leslie Heaven desktop. Expand advanced settings to connect manually in a browser.',
+        localModelEmpty: 'No one-click GGUF model found. Place a single-file GGUF in this folder or a subfolder, then scan again.',
+        localModelRuntimeMissing: 'Models were found, but the managed KoboldCpp runtime is not installed. Use advanced settings for an existing service.',
+        localModelMethod: 'Automatic connection: KoboldCpp',
+        localModelMethodHelp: 'These GGUF models can be loaded through this method. No address or port is needed. Runtime support and available memory still determine whether loading succeeds.',
+        localModelSelect: 'Select a model',
+        localModelConnect: 'Connect selected model',
+        localModelConnecting: 'Starting the model and connecting…',
+        localModelConnected: 'Local model configured and connection started:',
+        localModelReadyFailure: 'The model service did not become ready in time. Check the runtime logs or advanced settings.',
+        localModelStop: 'Stop local model',
+        localModelAdvanced: 'Show advanced connection settings',
+        localModelAdvancedHelp: 'Ollama, llama.cpp, other runtimes, manual addresses and ports',
         localModelDetect: 'Detect and configure automatically',
-        localModelDetectHelp: 'Check 127.0.0.1:5001 and 127.0.0.1:8080 for the adapted Peach model.',
+        localModelDetectHelp: 'Check 127.0.0.1:5001 and 127.0.0.1:8080 for Qwen3.5 RP or Peach.',
         localModelDetectChecking: 'Detecting the local model…',
         localModelDetectSuccess: 'Detected and configured:',
-        localModelDetectFailure: 'No running compatible Peach model was found. Start the local model, then try again.',
+        localModelDetectFailure: 'No compatible local model was found. Start Qwen3.5 RP or Peach, then try again.',
         localModelLoading: 'Enable local model loading',
         localModelLoadingHelp: 'When disabled, LeslieTavern will not connect to or call the local model. Model files are not deleted.',
         localModelLoadingDisabled: 'Local model loading is disabled. Turn on the switch first.',
@@ -416,8 +459,8 @@ const COPY = {
         desktopServicesUnavailable: 'Manage these services in the Leslie Heaven desktop app. Browser and LAN pages can only view settings.',
         desktopServiceAiri: 'AIRI companion',
         desktopServiceAiriBody: 'Connects to the active character, chat, memory, and voice. The first start may build AIRI.',
-        desktopServiceModel: 'Peach local model',
-        desktopServiceModelBody: 'Starts the workspace KoboldCpp runtime and releases VRAM when stopped.',
+        desktopServiceModel: 'Managed local model',
+        desktopServiceModelBody: 'Starts or stops the project KoboldCpp runtime; select the model above.',
         desktopServiceStart: 'Start',
         desktopServiceStop: 'Stop',
         desktopServiceStarting: 'Working',
@@ -430,7 +473,9 @@ const COPY = {
         endpoint: 'Server address',
         endpointHelp: 'Enter the base URL. OpenAI-compatible addresses usually end in /v1.',
         apiKey: 'API key',
-        apiKeyHelp: 'Leave this blank when a key is already saved. New keys still use the original secure flow.',
+        apiKeyHelp: 'Connect or switch APIs to save this key. Saved keys are not shown in the input.',
+        apiKeySavedHelp: 'A key is saved for this API. Leave this blank to reconnect, or enter a replacement key.',
+        apiKeySaveFailed: 'The key could not be saved. Stay on this page and try again.',
         model: 'Model',
         modelHelp: 'Choose after connecting, or enter the model name required by your service.',
         availableModel: 'Available models',
@@ -439,7 +484,7 @@ const COPY = {
         autoConnectHelp: 'Try the last-used service when the app opens again.',
         thinkingMode: 'Thinking mode (off by default)',
         thinkingModeHelp: 'Keep this off for direct replies. Compatible models will be told not to reason, and hidden thoughts will not be requested or shown.',
-        privacy: 'Keys are sent only to the model service you choose. Leslie does not create another copy.',
+        privacy: 'Keys stay in the local per-account data directory. On Windows they use user-level system encryption.',
         allProviders: 'Other providers and detailed connection settings',
         otherProviderActive: 'Another connection type is active. Choose a common service above, or continue in the full connection settings.',
         settingUnavailable: 'This common control is not available for the current API. You can adjust it in all settings.',
@@ -525,6 +570,8 @@ let detailObservers = [];
 let desktopServiceStatus = null;
 const desktopServiceBusy = new Set();
 let activeModelServiceId;
+let selectedLocalModelId;
+let localAdvancedOpen = false;
 let demoModeState;
 let demoModePending = false;
 let demoModeError = '';
@@ -593,42 +640,42 @@ function renderSettingsRow({ target, detail, icon, title, body, connectionStatus
 
 const MODEL_SERVICES = {
     deepseek: {
-        kind: 'online', mainApi: 'openai', secondaryId: 'chat_completion_source', secondaryValue: 'deepseek', connectId: 'api_button_openai', icon: 'fa-solid fa-brain',
+        kind: 'online', secretKey: SECRET_KEYS.DEEPSEEK, mainApi: 'openai', secondaryId: 'chat_completion_source', secondaryValue: 'deepseek', connectId: 'api_button_openai', icon: 'fa-solid fa-brain',
         fields: [
             ['api_key_deepseek', 'leslie-model-key', 'apiKey', 'apiKeyHelp', 'password'],
             ['model_deepseek_select', 'leslie-model-select', 'model', 'modelHelp', 'select'],
         ],
     },
     openai: {
-        kind: 'online', mainApi: 'openai', secondaryId: 'chat_completion_source', secondaryValue: 'openai', connectId: 'api_button_openai', icon: 'fa-solid fa-cloud',
+        kind: 'online', secretKey: SECRET_KEYS.OPENAI, mainApi: 'openai', secondaryId: 'chat_completion_source', secondaryValue: 'openai', connectId: 'api_button_openai', icon: 'fa-solid fa-cloud',
         fields: [
             ['api_key_openai', 'leslie-model-key', 'apiKey', 'apiKeyHelp', 'password'],
             ['model_openai_select', 'leslie-model-select', 'model', 'modelHelp', 'select'],
         ],
     },
     openrouter: {
-        kind: 'online', mainApi: 'openai', secondaryId: 'chat_completion_source', secondaryValue: 'openrouter', connectId: 'api_button_openai', icon: 'fa-solid fa-route',
+        kind: 'online', secretKey: SECRET_KEYS.OPENROUTER, mainApi: 'openai', secondaryId: 'chat_completion_source', secondaryValue: 'openrouter', connectId: 'api_button_openai', icon: 'fa-solid fa-route',
         fields: [
             ['api_key_openrouter', 'leslie-model-key', 'apiKey', 'apiKeyHelp', 'password'],
             ['model_openrouter_select', 'leslie-model-select', 'model', 'modelHelp', 'select'],
         ],
     },
     claude: {
-        kind: 'online', mainApi: 'openai', secondaryId: 'chat_completion_source', secondaryValue: 'claude', connectId: 'api_button_openai', icon: 'fa-solid fa-a',
+        kind: 'online', secretKey: SECRET_KEYS.CLAUDE, mainApi: 'openai', secondaryId: 'chat_completion_source', secondaryValue: 'claude', connectId: 'api_button_openai', icon: 'fa-solid fa-a',
         fields: [
             ['api_key_claude', 'leslie-model-key', 'apiKey', 'apiKeyHelp', 'password'],
             ['model_claude_select', 'leslie-model-select', 'model', 'modelHelp', 'select'],
         ],
     },
     makersuite: {
-        kind: 'online', mainApi: 'openai', secondaryId: 'chat_completion_source', secondaryValue: 'makersuite', connectId: 'api_button_openai', icon: 'fa-brands fa-google',
+        kind: 'online', secretKey: SECRET_KEYS.MAKERSUITE, mainApi: 'openai', secondaryId: 'chat_completion_source', secondaryValue: 'makersuite', connectId: 'api_button_openai', icon: 'fa-brands fa-google',
         fields: [
             ['api_key_makersuite', 'leslie-model-key', 'apiKey', 'apiKeyHelp', 'password'],
             ['model_google_select', 'leslie-model-select', 'model', 'modelHelp', 'select'],
         ],
     },
     custom: {
-        kind: 'online', mainApi: 'openai', secondaryId: 'chat_completion_source', secondaryValue: 'custom', connectId: 'api_button_openai', icon: 'fa-solid fa-link',
+        kind: 'online', secretKey: SECRET_KEYS.CUSTOM, mainApi: 'openai', secondaryId: 'chat_completion_source', secondaryValue: 'custom', connectId: 'api_button_openai', icon: 'fa-solid fa-link',
         fields: [
             ['custom_api_url_text', 'leslie-model-endpoint', 'endpoint', 'endpointHelp', 'text'],
             ['api_key_custom', 'leslie-model-key', 'apiKey', 'apiKeyHelp', 'password'],
@@ -803,12 +850,41 @@ function getActiveModelService() {
 }
 
 /**
- * Render the local Peach setup without taking ownership of the original API
+ * Render the local model setup without taking ownership of the original API
  * controls. The action below detects a running runtime and delegates to the
  * existing Text Completion handlers after selecting it.
  * @param {Record<string, string>} copy Active UI copy.
  * @returns {string} Local model setup markup.
  */
+function renderLocalModelCatalog(copy) {
+    if (typeof globalThis.leslieDesktopServices?.getStatus !== 'function' || desktopServiceStatus?.available === false) {
+        return `<div class="leslie-detail-callout"><i class="fa-solid fa-desktop" aria-hidden="true"></i><span>${copy.localModelDesktopOnly}</span></div>`;
+    }
+    if (!desktopServiceStatus?.localModels) {
+        return `<small class="leslie-local-model-description">${copy.localModelScanning}</small>`;
+    }
+    const models = desktopServiceStatus.localModels.models;
+    if (!models.length) {
+        return `<div class="leslie-detail-callout"><i class="fa-solid fa-folder-open" aria-hidden="true"></i><span>${copy.localModelEmpty}</span></div>`;
+    }
+    if (!models.some(model => model.id === selectedLocalModelId)) {
+        selectedLocalModelId = desktopServiceStatus.services?.localModel?.modelId || models[0].id;
+    }
+    const state = desktopServiceStatus.services?.localModel;
+    const busy = desktopServiceBusy.has('localModel') || state?.state === 'busy';
+    const options = models.map(model => `<option value="${escapeHtml(model.id)}" ${model.id === selectedLocalModelId ? 'selected' : ''}>${escapeHtml(model.id)} · ${(model.sizeBytes / 1024 ** 3).toFixed(1)} GB</option>`).join('');
+    return `<div class="leslie-local-runtime-card">
+        <div class="leslie-local-runtime-heading"><span class="fa-solid fa-dragon" aria-hidden="true"></span><div><strong>${copy.localModelMethod}</strong><small>${copy.localModelMethodHelp}</small></div></div>
+        <label class="leslie-local-model-picker"><strong>${copy.localModelSelect}</strong><select data-leslie-local-model-select ${busy ? 'disabled' : ''}>${options}</select></label>
+        ${state?.state === 'running' ? `<small class="leslie-local-model-status" data-state="success">${copy.desktopServiceRunning}：${escapeHtml(state.modelId || 'KoboldCpp')}</small>` : ''}
+        <div class="leslie-local-model-actions">
+            <button type="button" class="leslie-settings-primary-button" data-leslie-local-model-connect ${!isLocalModelLoadingEnabled() || !state?.runtimeInstalled || busy ? 'disabled' : ''}><i class="fa-solid fa-plug" aria-hidden="true"></i><span>${busy ? copy.localModelConnecting : copy.localModelConnect}</span></button>
+            ${state?.state === 'running' ? `<button type="button" class="leslie-settings-secondary-button" data-leslie-local-model-stop ${busy ? 'disabled' : ''}>${copy.localModelStop}</button>` : ''}
+        </div>
+        ${state?.runtimeInstalled ? '' : `<small class="leslie-local-model-status" data-state="error">${copy.localModelRuntimeMissing}</small>`}
+    </div>`;
+}
+
 function renderLocalModelSetup(copy) {
     const localModelLoadingEnabled = isLocalModelLoadingEnabled();
     return `
@@ -818,26 +894,37 @@ function renderLocalModelSetup(copy) {
                     <strong id="leslie-local-model-title">${copy.localModelTitle}</strong>
                     <small>${copy.localModelBody}</small>
                 </div>
-                <span class="leslie-local-model-badge">${LESLIE_LOCAL_MODEL.modelName}</span>
             </div>
             <div class="leslie-local-model-grid">
                 <span>${copy.localModelPath}</span>
-                <code>${escapeHtml(LESLIE_LOCAL_MODEL.modelPath)}</code>
+                <code data-leslie-local-model-directory>${escapeHtml(desktopServiceStatus?.localModels?.directory || 'models/')}</code>
+            </div>
+            <div class="leslie-local-model-actions">
+                <button type="button" class="leslie-settings-secondary-button" data-leslie-local-model-folder ${typeof globalThis.leslieDesktopServices?.openModelsFolder === 'function' ? '' : 'disabled'}><i class="fa-solid fa-folder-open" aria-hidden="true"></i><span>${copy.localModelOpenFolder}</span></button>
+                <button type="button" class="leslie-settings-secondary-button" data-leslie-local-model-refresh ${typeof globalThis.leslieDesktopServices?.getStatus === 'function' ? '' : 'disabled'}><i class="fa-solid fa-rotate" aria-hidden="true"></i><span>${copy.localModelRefresh}</span></button>
             </div>
             <label class="leslie-detail-switch-row leslie-local-model-loading-toggle" for="leslie-local-model-loading">
                 <span><strong>${copy.localModelLoading}</strong><small>${copy.localModelLoadingHelp}</small></span>
                 <input id="leslie-local-model-loading" type="checkbox" role="switch" data-leslie-local-model-toggle ${localModelLoadingEnabled ? 'checked' : ''}>
             </label>
             <small class="leslie-local-model-loading-status" data-leslie-local-model-loading-status>${localModelLoadingEnabled ? copy.localModelLoadingEnabledStatus : copy.localModelLoadingDisabledStatus}</small>
-            <div class="leslie-local-model-actions">
-                <button type="button" class="leslie-settings-primary-button" data-leslie-local-model-detect ${localModelLoadingEnabled ? '' : 'disabled title="' + copy.localModelLoadingDisabled + '"'}>
-                    <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
-                    <span>${copy.localModelDetect}</span>
-                    <small>${copy.localModelDetectHelp}</small>
-                </button>
-            </div>
+            <div data-leslie-local-model-catalog>${renderLocalModelCatalog(copy)}</div>
             <small class="leslie-local-model-detect-status" data-leslie-local-model-detect-status aria-live="polite"></small>
         </section>`;
+}
+
+function updateLocalModelControls() {
+    if (activeDetail !== 'model' || !settingsOverlay) {
+        return;
+    }
+    const directory = settingsOverlay.querySelector('[data-leslie-local-model-directory]');
+    if (directory) {
+        directory.textContent = desktopServiceStatus?.localModels?.directory || 'models/';
+    }
+    const catalog = settingsOverlay.querySelector('[data-leslie-local-model-catalog]');
+    if (catalog) {
+        catalog.innerHTML = renderLocalModelCatalog(COPY[getCopyLocale()]);
+    }
 }
 
 function getDesktopServiceCopy(service, copy) {
@@ -912,6 +999,7 @@ async function refreshDesktopServiceStatus() {
     try {
         desktopServiceStatus = await globalThis.leslieDesktopServices.getStatus();
         updateDesktopServiceControls();
+        updateLocalModelControls();
     } catch (error) {
         console.warn('[Leslie settings] Could not read desktop service status.', error);
     }
@@ -927,7 +1015,10 @@ async function runDesktopServiceAction(button) {
     desktopServiceBusy.add(service);
     updateDesktopServiceControls();
     try {
-        desktopServiceStatus = await globalThis.leslieDesktopServices.runAction(service, action);
+        desktopServiceStatus = await globalThis.leslieDesktopServices.runAction(service, action, service === 'localModel' && action === 'start' ? selectedLocalModelId : undefined);
+        if (service === 'localModel' && action === 'stop') {
+            disconnectLocalModelInApp();
+        }
         toastr.success(`${getDesktopServiceCopy(service, copy).title}：${getDesktopServiceStateCopy(desktopServiceStatus?.services?.[service], copy)}`, copy.desktopServicesTitle);
     } catch (error) {
         const message = String(error?.message || copy.desktopServiceFailed).replace(/^Error invoking remote method '[^']+':\s*/i, '');
@@ -936,6 +1027,73 @@ async function runDesktopServiceAction(button) {
         desktopServiceBusy.delete(service);
         await refreshDesktopServiceStatus();
         updateDesktopServiceControls();
+        updateLocalModelControls();
+    }
+}
+
+async function connectManagedLocalModel() {
+    const copy = COPY[getCopyLocale()];
+    if (!isLocalModelLoadingEnabled()) {
+        toastr.warning(copy.localModelLoadingDisabled, copy.localModelTitle);
+        return;
+    }
+    const selected = desktopServiceStatus?.localModels?.models?.find(model => model.id === selectedLocalModelId);
+    if (!selected || !desktopServiceStatus?.services?.localModel?.runtimeInstalled || typeof globalThis.leslieDesktopServices?.runAction !== 'function') {
+        toastr.error(copy.localModelEmpty, copy.localModelTitle);
+        return;
+    }
+    desktopServiceBusy.add('localModel');
+    updateLocalModelControls();
+    const progress = settingsOverlay?.querySelector('[data-leslie-local-model-detect-status]');
+    if (progress) {
+        progress.textContent = copy.localModelConnecting;
+        progress.dataset.state = 'loading';
+    }
+    try {
+        desktopServiceStatus = await globalThis.leslieDesktopServices.runAction('localModel', 'start', selected.id);
+        let probe = null;
+        for (let attempt = 0; attempt < 20 && !probe; attempt++) {
+            probe = await probeLeslieLocalRuntime('koboldcpp', { timeoutMs: 1500 });
+            if (!probe) {
+                await new Promise(resolve => window.setTimeout(resolve, 500));
+            }
+        }
+        if (!probe) {
+            throw new Error(copy.localModelReadyFailure);
+        }
+        const model = probe.models.find(name => name.includes(selected.name)) || probe.models[0];
+        await applyLocalModel({ runtime: probe.runtime, endpoint: probe.endpoint, model });
+        toastr.success(`${copy.localModelConnected} ${selected.name}`, copy.localModelTitle);
+    } catch (error) {
+        const message = String(error?.message || copy.localModelReadyFailure).replace(/^Error invoking remote method '[^']+':\s*/i, '');
+        const visibleProgress = settingsOverlay?.querySelector('[data-leslie-local-model-detect-status]');
+        if (visibleProgress) {
+            visibleProgress.textContent = message;
+            visibleProgress.dataset.state = 'error';
+        }
+        toastr.error(message, copy.localModelTitle);
+    } finally {
+        desktopServiceBusy.delete('localModel');
+        await refreshDesktopServiceStatus();
+        updateLocalModelControls();
+    }
+}
+
+async function stopManagedLocalModel() {
+    if (typeof globalThis.leslieDesktopServices?.runAction !== 'function') {
+        return;
+    }
+    desktopServiceBusy.add('localModel');
+    updateLocalModelControls();
+    try {
+        desktopServiceStatus = await globalThis.leslieDesktopServices.runAction('localModel', 'stop');
+        disconnectLocalModelInApp();
+    } catch (error) {
+        toastr.error(String(error?.message || COPY[getCopyLocale()].desktopServiceFailed), COPY[getCopyLocale()].localModelTitle);
+    } finally {
+        desktopServiceBusy.delete('localModel');
+        await refreshDesktopServiceStatus();
+        updateLocalModelControls();
     }
 }
 
@@ -996,22 +1154,11 @@ function renderModelDetail() {
             <input id="leslie-model-thinking-mode" type="checkbox" role="switch">
         </label>` : '';
 
-    const content = `
-        <section class="leslie-model-status is-${connectionState.state}" data-leslie-model-status>
-            <span class="leslie-connection-dot" aria-hidden="true"></span>
-            <strong>${statusText}</strong>
-        </section>
-        <section class="leslie-detail-card leslie-api-kind-section">
-            <div class="leslie-detail-card-heading"><h3>${copy.apiKindTitle}</h3><p>${copy.apiKindBody}</p></div>
-            <div class="leslie-api-kind-grid">${kindOptions}</div>
-        </section>
-        <section class="leslie-detail-card">
+    const serviceSection = `<section class="leslie-detail-card">
             <div class="leslie-detail-card-heading"><h3>${copy.serviceTitle}</h3><p>${copy.serviceBody}</p></div>
             <div class="leslie-service-grid">${cards}</div>
-        </section>
-        ${renderDesktopServices(copy)}
-        ${activeModelKind === 'local' ? renderLocalModelSetup(copy) : ''}
-        <section class="leslie-detail-card">
+        </section>`;
+    const fieldsSection = `<section class="leslie-detail-card">
             <div class="leslie-detail-grid">${fields}</div>
             ${selectedService?.kind === activeModelKind ? `
                 <label class="leslie-detail-switch-row" for="leslie-model-auto-connect">
@@ -1025,11 +1172,32 @@ function renderModelDetail() {
                         <i class="fa-solid fa-plug" aria-hidden="true"></i><span>${copy.connect}</span>
                     </button>
                 </div>` : ''}
-        </section>
-        <button type="button" class="leslie-detail-full-button" data-leslie-drawer-target="sys-settings-button">
+        </section>`;
+    const fullSettingsButton = `<button type="button" class="leslie-detail-full-button" data-leslie-drawer-target="sys-settings-button">
             <span><strong>${copy.allProviders}</strong><small>${copy.fullSettingsHelp}</small></span>
             <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>
         </button>`;
+    const localContent = `${renderLocalModelSetup(copy)}
+        <details class="leslie-local-advanced" ${localAdvancedOpen ? 'open' : ''}>
+            <summary><span><strong>${copy.localModelAdvanced}</strong><small>${copy.localModelAdvancedHelp}</small></span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+            <div class="leslie-local-advanced-content">
+                <div class="leslie-local-model-actions"><button type="button" class="leslie-settings-secondary-button" data-leslie-local-model-detect ${isLocalModelLoadingEnabled() ? '' : 'disabled'}>${copy.localModelDetect}</button></div>
+                ${serviceSection}
+                ${fieldsSection}
+                ${renderDesktopServices(copy)}
+                ${fullSettingsButton}
+            </div>
+        </details>`;
+    const content = `
+        <section class="leslie-model-status is-${connectionState.state}" data-leslie-model-status>
+            <span class="leslie-connection-dot" aria-hidden="true"></span>
+            <strong>${statusText}</strong>
+        </section>
+        <section class="leslie-detail-card leslie-api-kind-section">
+            <div class="leslie-detail-card-heading"><h3>${copy.apiKindTitle}</h3><p>${copy.apiKindBody}</p></div>
+            <div class="leslie-api-kind-grid">${kindOptions}</div>
+        </section>
+        ${activeModelKind === 'local' ? localContent : `${serviceSection}${renderDesktopServices(copy)}${fieldsSection}${fullSettingsButton}`}`;
     return renderDetailShell({ icon: 'fa-solid fa-plug', title: copy.modelDetailTitle, body: copy.modelDetailBody, content });
 }
 
@@ -1446,6 +1614,18 @@ function createSettingsOverlay() {
                                         <small>${copy.themeHelp}</small>
                                     </span>
                                     <select id="leslie-theme-select" aria-label="${copy.theme}"></select>
+                                </label>
+                                <label class="leslie-quick-control" for="leslie-palette-select">
+                                    <span>
+                                        <strong>${copy.palette}</strong>
+                                        <small>${copy.paletteHelp}</small>
+                                    </span>
+                                    <select id="leslie-palette-select" aria-label="${copy.palette}">
+                                        <option value="jade">青瓷 · Jade</option>
+                                        <option value="iris">鸢尾 · Iris</option>
+                                        <option value="clay">暖砂 · Clay</option>
+                                        <option value="slate">石墨 · Slate</option>
+                                    </select>
                                 </label>
                                 <label class="leslie-quick-control" for="leslie-language-select">
                                     <span>
@@ -1875,11 +2055,18 @@ function bindDetailInput(sourceId, mirrorId, sourceEvent, { secret = false } = {
     const syncFromSource = () => {
         if (!secret) {
             mirror.value = source.value;
+        } else {
+            const hint = mirror.closest('.leslie-detail-field')?.querySelector('.leslie-detail-field-copy small');
+            if (hint) {
+                const saved = Array.isArray(secret_state[sourceId]) && secret_state[sourceId].length > 0;
+                const copy = COPY[getCopyLocale()];
+                hint.textContent = saved ? copy.apiKeySavedHelp : copy.apiKeyHelp;
+            }
         }
         mirror.disabled = source.disabled;
         ['min', 'max', 'step', 'placeholder'].forEach((attribute) => {
             const value = source.getAttribute(attribute);
-            if (value !== null && !secret) {
+            if (value !== null && (!secret || attribute === 'placeholder')) {
                 mirror.setAttribute(attribute, value);
             }
         });
@@ -1888,6 +2075,9 @@ function bindDetailInput(sourceId, mirrorId, sourceEvent, { secret = false } = {
         source.value = mirror.value;
         source.dispatchEvent(new Event(sourceEvent, { bubbles: true }));
     }, { signal: detailBindingController.signal });
+    if (secret) {
+        mirror.addEventListener('change', () => { void saveActiveOnlineSecret(); }, { signal: detailBindingController.signal });
+    }
     source.addEventListener('input', syncFromSource, { signal: detailBindingController.signal });
     source.addEventListener('change', syncFromSource, { signal: detailBindingController.signal });
     observeDetailSource(source, syncFromSource, ['disabled', 'min', 'max', 'step', 'placeholder']);
@@ -2206,42 +2396,97 @@ function showSettingsHome(pageId = 'overview') {
 }
 
 /**
+ * Save a newly entered online key before leaving its provider. Stored keys
+ * remain server-side; the mirror only reports their presence.
+ * @returns {Promise<boolean>} Whether it is safe to leave this provider.
+ */
+let activeSecretSavePromise;
+
+async function saveActiveOnlineSecret() {
+    const service = MODEL_SERVICES[getActiveModelService()];
+    if (service?.kind !== 'online' || !service.secretKey) {
+        return true;
+    }
+    const mirror = document.getElementById('leslie-model-key');
+    if (!(mirror instanceof HTMLInputElement)) {
+        return true;
+    }
+    while (true) {
+        if (activeSecretSavePromise) {
+            if (!(await activeSecretSavePromise)) {
+                return false;
+            }
+            continue;
+        }
+        const value = mirror.value.trim();
+        if (!value) {
+            return true;
+        }
+        const save = (async () => {
+            const savedId = await writeSecret(service.secretKey, value);
+            if (!savedId) {
+                const copy = COPY[getCopyLocale()];
+                toastr.error(copy.apiKeySaveFailed, copy.modelTitle);
+                return false;
+            }
+            if (mirror.value.trim() === value) {
+                mirror.value = '';
+            }
+            return true;
+        })();
+        activeSecretSavePromise = save.finally(() => { activeSecretSavePromise = undefined; });
+        if (!(await activeSecretSavePromise)) {
+            return false;
+        }
+    }
+}
+
+/**
  * Switch SillyTavern to a common model service chosen by the user.
  * @param {string} serviceId Leslie service id.
  * @param {(() => void) | undefined} afterSelect Optional callback after the
  * provider's original controls have been selected.
+ * @returns {Promise<boolean>} Whether the selection completed.
  */
-function selectModelService(serviceId, afterSelect) {
+async function selectModelService(serviceId, afterSelect) {
     const service = MODEL_SERVICES[serviceId];
     const mainApi = document.getElementById('main_api');
     if (!service || !(mainApi instanceof HTMLSelectElement)) {
-        return;
+        return false;
+    }
+    if (!(await saveActiveOnlineSecret())) {
+        return false;
     }
     activeModelServiceId = serviceId;
     activeModelKind = service.kind;
     mainApi.value = service.mainApi;
     mainApi.dispatchEvent(new Event('change', { bubbles: true }));
-    window.setTimeout(() => {
-        const secondary = document.getElementById(service.secondaryId);
-        if (secondary instanceof HTMLSelectElement) {
-            secondary.value = service.secondaryValue;
-            secondary.dispatchEvent(new Event('change', { bubbles: true }));
+    return new Promise((resolve, reject) => window.setTimeout(() => {
+        try {
+            const secondary = document.getElementById(service.secondaryId);
+            if (secondary instanceof HTMLSelectElement) {
+                secondary.value = service.secondaryValue;
+                secondary.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            afterSelect?.();
+            showDetail('model');
+            resolve(true);
+        } catch (error) {
+            reject(error);
         }
-        afterSelect?.();
-        showDetail('model');
-    }, 60);
+    }, 60));
 }
 
 /**
- * Apply detected Peach defaults through SillyTavern's existing local API
+ * Apply detected model defaults through SillyTavern's existing local API
  * controls, then run the normal connection check.
  * @param {{runtime: string, endpoint: string, model: string}} detected Detected runtime metadata.
  * @returns {Promise<void>} Resolves after the original connection action was triggered.
  */
-function applyLocalPeachModel(detected) {
+function applyLocalModel(detected) {
     const runtime = detected.runtime;
     const runtimeConfig = getLeslieLocalRuntime(runtime);
-    const settings = getLeslieLocalSettings(runtime);
+    const settings = getLeslieLocalSettings(runtime, detected.model);
     const serviceId = runtimeConfig.apiType === textgen_types.LLAMACPP ? 'llamacpp' : 'koboldcpp';
     const endpointValue = String(detected.endpoint || settings.endpoint).trim();
     const mainApi = document.getElementById('main_api');
@@ -2253,8 +2498,8 @@ function applyLocalPeachModel(detected) {
     // Prevent the original provider change handler from issuing a duplicate
     // request before the detector has filled all generation parameters.
     textgenerationwebui_settings.server_urls[runtimeConfig.apiType] = '';
-    return new Promise((resolve) => {
-        selectModelService(serviceId, () => {
+    return new Promise((resolve, reject) => {
+        void selectModelService(serviceId, () => {
             const endpointId = runtimeConfig.apiType === textgen_types.LLAMACPP
                 ? 'llamacpp_api_url_text'
                 : 'koboldcpp_api_url_text';
@@ -2289,20 +2534,28 @@ function applyLocalPeachModel(detected) {
                 max_length: settings.context,
                 genamt: settings.responseTokens,
             });
+            if (isLeslieQwenRoleplayModel(detected.model)) {
+                selectInstructPreset('ChatML', { quiet: true });
+                selectContextPreset('ChatML', { quiet: true });
+            }
             saveSettingsDebounced();
             document.getElementById('api_button_textgenerationwebui')?.click();
             resolve();
-        });
+        }).then(selected => {
+            if (!selected) {
+                reject(new Error(COPY[getCopyLocale()].apiKeySaveFailed));
+            }
+        }, reject);
     });
 }
 
 /**
- * Detect and configure the bundled Peach model without exposing it as another
+ * Detect and configure the local roleplay model without exposing it as another
  * API provider. KoboldCpp and llama.cpp remain available as underlying local
  * runtimes in the full connection settings.
  * @param {HTMLButtonElement} button Detection button.
  */
-async function detectAndApplyLocalPeachModel(button) {
+async function detectAndApplyLocalModel(button) {
     if (!isLocalModelLoadingEnabled()) {
         const copy = COPY[getCopyLocale()];
         toastr.warning(copy.localModelLoadingDisabled, copy.localModelTitle);
@@ -2323,7 +2576,7 @@ async function detectAndApplyLocalPeachModel(button) {
         if (!detected) {
             throw new Error(copy.localModelDetectFailure);
         }
-        await applyLocalPeachModel(detected);
+        await applyLocalModel(detected);
         const runtimeLabel = getLeslieLocalRuntime(detected.runtime).label;
         toastr.success(`${copy.localModelDetectSuccess} ${runtimeLabel} · ${detected.model}`, copy.localModelTitle);
     } catch (error) {
@@ -2342,7 +2595,7 @@ async function detectAndApplyLocalPeachModel(button) {
 /**
  * Trigger the original connect action for the selected service.
  */
-function connectSelectedModelService() {
+async function connectSelectedModelService() {
     const serviceId = getActiveModelService();
     const service = MODEL_SERVICES[serviceId];
     if (service?.kind === 'local' && !isLocalModelLoadingEnabled()) {
@@ -2355,6 +2608,9 @@ function connectSelectedModelService() {
         toastr.error('请先选择一个有效的模型连接方式。', '模型连接');
         stopStatusLoading();
         updateConnectionStatus();
+        return;
+    }
+    if (!(await saveActiveOnlineSecret())) {
         return;
     }
 
@@ -2414,6 +2670,7 @@ function handleLocalModelLoadingToggle(toggle) {
     if (status) {
         status.textContent = enabled ? copy.localModelLoadingEnabledStatus : copy.localModelLoadingDisabledStatus;
     }
+    updateLocalModelControls();
 }
 
 /**
@@ -2550,7 +2807,7 @@ function initLeslieSettings() {
         event.stopPropagation();
         openSettings();
     });
-    settingsOverlay.addEventListener('click', (event) => {
+    settingsOverlay.addEventListener('click', async (event) => {
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest('[data-leslie-settings-home]')) {
             event.preventDefault();
@@ -2605,8 +2862,39 @@ function initLeslieSettings() {
         if (apiKindButton instanceof HTMLElement) {
             event.preventDefault();
             event.stopPropagation();
+            if (!(await saveActiveOnlineSecret())) {
+                return;
+            }
             activeModelKind = apiKindButton.dataset.leslieApiKind;
             showDetail('model');
+            return;
+        }
+        if (target?.closest('[data-leslie-local-model-folder]')) {
+            event.preventDefault();
+            event.stopPropagation();
+            try {
+                await globalThis.leslieDesktopServices.openModelsFolder();
+            } catch {
+                toastr.error(COPY[getCopyLocale()].localModelFolderFailed, COPY[getCopyLocale()].localModelTitle);
+            }
+            return;
+        }
+        if (target?.closest('[data-leslie-local-model-refresh]')) {
+            event.preventDefault();
+            event.stopPropagation();
+            await refreshDesktopServiceStatus();
+            return;
+        }
+        if (target?.closest('[data-leslie-local-model-connect]')) {
+            event.preventDefault();
+            event.stopPropagation();
+            void connectManagedLocalModel();
+            return;
+        }
+        if (target?.closest('[data-leslie-local-model-stop]')) {
+            event.preventDefault();
+            event.stopPropagation();
+            void stopManagedLocalModel();
             return;
         }
         const localModelButton = target?.closest('[data-leslie-local-model-detect]');
@@ -2614,7 +2902,7 @@ function initLeslieSettings() {
             event.preventDefault();
             event.stopPropagation();
             if (localModelButton instanceof HTMLButtonElement) {
-                detectAndApplyLocalPeachModel(localModelButton);
+                detectAndApplyLocalModel(localModelButton);
             }
             return;
         }
@@ -2629,13 +2917,15 @@ function initLeslieSettings() {
         if (serviceButton instanceof HTMLElement) {
             event.preventDefault();
             event.stopPropagation();
-            selectModelService(serviceButton.dataset.leslieService);
+            void selectModelService(serviceButton.dataset.leslieService).catch(() => {
+                toastr.error(COPY[getCopyLocale()].apiKeySaveFailed, COPY[getCopyLocale()].modelTitle);
+            });
             return;
         }
         if (target?.closest('[data-leslie-model-connect]')) {
             event.preventDefault();
             event.stopPropagation();
-            connectSelectedModelService();
+            void connectSelectedModelService();
             return;
         }
         if (target?.closest('[data-leslie-open-character-list]')) {
@@ -2665,7 +2955,11 @@ function initLeslieSettings() {
         }
     });
     settingsOverlay.addEventListener('change', (event) => {
-        const target = event.target instanceof HTMLInputElement ? event.target : null;
+        const target = event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement ? event.target : null;
+        if (target?.matches('[data-leslie-local-model-select]')) {
+            selectedLocalModelId = target.value;
+            return;
+        }
         if (target?.matches('[data-leslie-privacy-master]')) {
             setLesliePrivacyModeEnabled(target.checked);
         } else if (target?.matches('[data-leslie-privacy-block]')) {
@@ -2674,6 +2968,11 @@ function initLeslieSettings() {
             handleLocalModelLoadingToggle(target);
         }
     });
+    settingsOverlay.addEventListener('toggle', (event) => {
+        if (event.target instanceof HTMLDetailsElement && event.target.matches('.leslie-local-advanced')) {
+            localAdvancedOpen = event.target.open;
+        }
+    }, true);
     document.getElementById('leslie-advanced-unlock')?.addEventListener('click', unlockAdvancedSettings);
     document.getElementById('leslie-advanced-relock')?.addEventListener('click', () => {
         lockAdvancedSettings();

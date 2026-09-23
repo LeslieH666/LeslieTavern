@@ -136,6 +136,111 @@ body.leslie-modern .leslie-local-model-status[data-state="error"] {
     color: #b44a4a;
 }
 
+body.leslie-modern .leslie-local-runtime-card {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    background: var(--leslie-surface-solid, #fff);
+    border: 1px solid var(--leslie-border, rgba(84, 119, 157, 0.24));
+    border-radius: 12px;
+}
+
+body.leslie-modern .leslie-local-runtime-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+body.leslie-modern .leslie-local-runtime-heading > span {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--leslie-accent-strong, #2f7df4);
+    background: var(--leslie-accent-soft, #eaf3ff);
+    border-radius: 9px;
+}
+
+body.leslie-modern .leslie-local-runtime-heading > div,
+body.leslie-modern .leslie-local-model-picker {
+    display: grid;
+    gap: 5px;
+}
+
+body.leslie-modern .leslie-local-runtime-heading strong,
+body.leslie-modern .leslie-local-model-picker strong {
+    font-size: 13px;
+}
+
+body.leslie-modern .leslie-local-runtime-heading small {
+    color: var(--leslie-text-soft, #5e7188);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+body.leslie-modern .leslie-local-model-picker select {
+    width: 100%;
+    min-height: 40px;
+    padding: 0 10px;
+    color: var(--leslie-text, #23364d);
+    background: var(--leslie-surface-solid, #fff);
+    border: 1px solid var(--leslie-border, rgba(84, 119, 157, 0.24));
+    border-radius: 9px;
+}
+
+body.leslie-modern .leslie-local-advanced {
+    margin: 14px 0;
+    border: 1px solid var(--leslie-border, rgba(84, 119, 157, 0.24));
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+body.leslie-modern .leslie-local-advanced > summary {
+    display: flex;
+    min-height: 62px;
+    padding: 12px 15px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    list-style: none;
+}
+
+body.leslie-modern .leslie-local-advanced > summary::-webkit-details-marker {
+    display: none;
+}
+
+body.leslie-modern .leslie-local-advanced > summary:focus-visible,
+body.leslie-modern .leslie-local-model-picker select:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--leslie-accent) 30%, transparent);
+    outline-offset: -3px;
+}
+
+body.leslie-modern .leslie-local-advanced > summary > span {
+    display: grid;
+    gap: 3px;
+}
+
+body.leslie-modern .leslie-local-advanced > summary strong {
+    font-size: 13px;
+}
+
+body.leslie-modern .leslie-local-advanced > summary small {
+    color: var(--leslie-text-soft, #5e7188);
+    font-size: 11px;
+}
+
+body.leslie-modern .leslie-local-advanced[open] > summary > i {
+    transform: rotate(180deg);
+}
+
+body.leslie-modern .leslie-local-advanced-content {
+    display: grid;
+    gap: 10px;
+    padding: 0 12px 12px;
+}
+
 @media (max-width: 620px) {
     body.leslie-modern .leslie-local-model-grid {
         grid-template-columns: 1fr;

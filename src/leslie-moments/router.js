@@ -7,6 +7,7 @@ import { selectChatMemoryContext } from './chat-memory-adapter.js';
 import { LeslieMomentsActivityStore, LeslieMomentsActivityStoreError } from './activity-store.js';
 import { LeslieMomentsMemoryStore } from './memory-store.js';
 import { LeslieMomentsSettingsStore } from './settings-store.js';
+import { generateMomentsOnline, getConfiguredMomentsOnlineModels, MomentsOnlineModelError } from './online-model.js';
 import { LeslieMomentsStore, LeslieMomentsStoreError } from './store.js';
 
 export const router = express.Router();
@@ -33,6 +34,10 @@ function getStores(request) {
 }
 
 function sendError(response, error) {
+    if (error instanceof MomentsOnlineModelError) {
+        return response.status(error.code === 'INVALID_INPUT' ? 400 : error.code === 'MODEL_NOT_CONFIGURED' ? 409 : 502)
+            .send({ error: error.code, message: error.message });
+    }
     if (error instanceof LeslieMomentsStoreError || error instanceof LeslieMomentsActivityStoreError || error instanceof LeslieIdentityStoreError || error instanceof LeslieMemoryStoreError || error instanceof TypeError) {
         const status = error.code === 'NOT_FOUND' ? 404 : ['IDENTITY_MISMATCH', 'IDENTITY_CONFLICT', 'INVALID_STATE'].includes(error.code) ? 409 : 400;
         return response.status(status).send({ error: error.code ?? 'INVALID_INPUT', message: error.message });
@@ -255,12 +260,14 @@ function resolveSettingsDraft(identityStore, body) {
     if (!rawPolicies.length) {
         return {
             globalAiPostingEnabled: body?.globalAiPostingEnabled === true,
+            onlineModel: body?.onlineModel,
             characterPolicies: [],
         };
     }
     const resolution = identityStore.resolveEntities(rawPolicies.map(policy => normalizeRawIdentity(policy.actor, 'character')));
     return {
         globalAiPostingEnabled: body?.globalAiPostingEnabled === true,
+        onlineModel: body?.onlineModel,
         characterPolicies: resolution.entities.map((entity, index) => ({
             actor: toIdentitySnapshot(entity, rawPolicies[index]?.actor?.avatar),
             canPost: rawPolicies[index]?.canPost === true,
@@ -276,6 +283,57 @@ router.get('/settings', (request, response) => {
         return response.send({ settings: getStores(request).settings.readSettings() });
     } catch (error) {
         return sendError(response, error);
+    }
+});
+
+router.get('/models', async (request, response) => {
+    try {
+        const models = await getConfiguredMomentsOnlineModels({ directories: request.user.directories });
+        return response.send({ models });
+    } catch (error) {
+        return sendError(response, error);
+    }
+});
+
+router.put('/model-selection', async (request, response) => {
+    try {
+        const provider = String(request.body?.provider ?? '').trim();
+        const models = await getConfiguredMomentsOnlineModels({ directories: request.user.directories });
+        const selected = models.find(item => item.provider === provider);
+        if (!selected) {
+            throw new MomentsOnlineModelError('MODEL_NOT_CONFIGURED', '请选择已在模型连接中配置的联网模型。');
+        }
+        const settingsStore = getStores(request).settings;
+        const previous = settingsStore.readSettings();
+        const settings = settingsStore.updateSettings({ ...previous, onlineModel: { provider, model: selected.model } });
+        return response.send({ settings, models });
+    } catch (error) {
+        return sendError(response, error);
+    }
+});
+
+router.post('/generate', async (request, response) => {
+    try {
+        const stores = getStores(request);
+        const selectedProvider = stores.settings.readSettings().onlineModel.provider;
+        const models = await getConfiguredMomentsOnlineModels({ directories: request.user.directories });
+        const onlineModel = models.find(item => item.provider === selectedProvider);
+        if (!onlineModel) {
+            throw new MomentsOnlineModelError('MODEL_NOT_CONFIGURED', '请先在模型连接中配置联网 API，再在朋友圈选择它。');
+        }
+        const controller = new AbortController();
+        response.on('close', () => {
+            if (!response.writableEnded) controller.abort();
+        });
+        const content = await generateMomentsOnline({
+            directories: request.user.directories,
+            onlineModel,
+            input: request.body,
+            signal: controller.signal,
+        });
+        if (!response.writableEnded) return response.send({ content });
+    } catch (error) {
+        if (!response.writableEnded) return sendError(response, error);
     }
 });
 
