@@ -136,8 +136,200 @@ body.leslie-modern .leslie-local-model-status[data-state="error"] {
     color: #b44a4a;
 }
 
+body.leslie-modern .leslie-local-runtime-card {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    background: var(--leslie-surface-solid, #fff);
+    border: 1px solid var(--leslie-border, rgba(84, 119, 157, 0.24));
+    border-radius: 12px;
+}
+
+body.leslie-modern .leslie-local-runtime-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+body.leslie-modern .leslie-local-runtime-heading > span {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--leslie-accent-strong, #2f7df4);
+    background: var(--leslie-accent-soft, #eaf3ff);
+    border-radius: 9px;
+}
+
+body.leslie-modern .leslie-local-runtime-heading > div,
+body.leslie-modern .leslie-local-model-picker {
+    display: grid;
+    gap: 5px;
+}
+
+body.leslie-modern .leslie-local-runtime-heading strong,
+body.leslie-modern .leslie-local-model-picker strong {
+    font-size: 13px;
+}
+
+body.leslie-modern .leslie-local-runtime-heading small {
+    color: var(--leslie-text-soft, #5e7188);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+body.leslie-modern .leslie-local-model-picker select {
+    width: 100%;
+    min-height: 40px;
+    padding: 0 10px;
+    color: var(--leslie-text, #23364d);
+    background: var(--leslie-surface-solid, #fff);
+    border: 1px solid var(--leslie-border, rgba(84, 119, 157, 0.24));
+    border-radius: 9px;
+}
+
+body.leslie-modern .leslie-local-advanced {
+    margin: 14px 0;
+    border: 1px solid var(--leslie-border, rgba(84, 119, 157, 0.24));
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+body.leslie-modern .leslie-local-advanced > summary {
+    display: flex;
+    min-height: 62px;
+    padding: 12px 15px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    list-style: none;
+}
+
+body.leslie-modern .leslie-local-advanced > summary::-webkit-details-marker {
+    display: none;
+}
+
+body.leslie-modern .leslie-local-advanced > summary:focus-visible,
+body.leslie-modern .leslie-local-model-picker select:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--leslie-accent) 30%, transparent);
+    outline-offset: -3px;
+}
+
+body.leslie-modern .leslie-local-advanced > summary > span {
+    display: grid;
+    gap: 3px;
+}
+
+body.leslie-modern .leslie-local-advanced > summary strong {
+    font-size: 13px;
+}
+
+body.leslie-modern .leslie-local-advanced > summary small {
+    color: var(--leslie-text-soft, #5e7188);
+    font-size: 11px;
+}
+
+body.leslie-modern .leslie-local-advanced[open] > summary > i {
+    transform: rotate(180deg);
+}
+
+body.leslie-modern .leslie-local-advanced-content {
+    display: grid;
+    gap: 10px;
+    padding: 0 12px 12px;
+}
+
 @media (max-width: 620px) {
     body.leslie-modern .leslie-local-model-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+body.leslie-modern .leslie-desktop-services-card {
+    gap: 14px;
+}
+
+body.leslie-modern .leslie-desktop-service-list {
+    display: grid;
+    gap: 8px;
+}
+
+body.leslie-modern .leslie-desktop-service-row {
+    display: grid;
+    min-height: 70px;
+    padding: 11px 12px;
+    grid-template-columns: 38px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 10px;
+    background: color-mix(in srgb, var(--leslie-surface-solid, #fff) 65%, transparent);
+    border: 1px solid var(--leslie-border, rgba(84, 119, 157, 0.24));
+    border-radius: 12px;
+}
+
+body.leslie-modern .leslie-desktop-service-icon {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    color: var(--leslie-accent-strong, #2f7df4);
+    background: var(--leslie-accent-soft, #eaf3ff);
+    border-radius: 10px;
+}
+
+body.leslie-modern .leslie-desktop-service-copy {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+}
+
+body.leslie-modern .leslie-desktop-service-copy strong {
+    font-size: 13px;
+}
+
+body.leslie-modern .leslie-desktop-service-copy small {
+    color: var(--leslie-text-soft, #5e7188);
+    font-size: 10px;
+    line-height: 1.45;
+}
+
+body.leslie-modern .leslie-desktop-service-status {
+    display: inline-flex;
+    min-height: 26px;
+    padding: 0 9px;
+    align-items: center;
+    color: var(--leslie-text-soft, #5e7188);
+    background: color-mix(in srgb, var(--leslie-text-soft, #5e7188) 10%, transparent);
+    border-radius: 999px;
+    font-size: 10px;
+    white-space: nowrap;
+}
+
+body.leslie-modern .leslie-desktop-service-row.is-running .leslie-desktop-service-status {
+    color: #27824d;
+    background: rgb(39 130 77 / 11%);
+}
+
+body.leslie-modern .leslie-desktop-service-row.is-busy .leslie-desktop-service-status {
+    color: var(--leslie-accent-strong, #2f7df4);
+    background: color-mix(in srgb, var(--leslie-accent-soft, #eaf3ff) 75%, transparent);
+}
+
+body.leslie-modern .leslie-desktop-service-row .leslie-settings-primary-button {
+    min-width: 70px;
+    min-height: 36px;
+    padding: 0 12px;
+}
+
+@media (max-width: 700px) {
+    body.leslie-modern .leslie-desktop-service-row {
+        grid-template-columns: 38px minmax(0, 1fr);
+    }
+
+    body.leslie-modern .leslie-desktop-service-status,
+    body.leslie-modern .leslie-desktop-service-row .leslie-settings-primary-button {
+        grid-column: 2;
+        justify-self: start;
     }
 }

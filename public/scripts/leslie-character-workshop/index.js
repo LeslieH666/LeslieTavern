@@ -84,6 +84,7 @@ const state = {
     importSource: '',
     importNotices: [],
     provider: WORKSHOP_PROVIDER.CHAT,
+    localProviderModel: '',
     abortController: null,
     blueprint: normalizeCharacterBlueprint({}),
     manuallyEdited: false,
@@ -166,13 +167,13 @@ function createWorkshopMarkup() {
                         </label>
                         <div class="leslie-character-workshop-api-note">
                             <i class="fa-solid fa-link" aria-hidden="true"></i>
-                            <span><strong>可切换角色卡生成接口</strong><small>默认复用当前聊天 API；选择本地 Peach 只作用于本次角色卡草稿生成，不改变聊天设置。生成结果只在内存中预览，不会自动保存。</small></span>
+                            <span><strong>可切换角色卡生成接口</strong><small>默认复用当前聊天 API；选择当前本地模型只作用于本次角色卡草稿生成，不改变聊天设置。生成结果只在内存中预览，不会自动保存。</small></span>
                         </div>
                         <label class="leslie-character-workshop-provider">
                             <span>角色卡生成接口</span>
                             <select data-workshop-provider>
                                 <option value="chat">当前聊天 API（DeepSeek 等）</option>
-                                <option value="local">本地 Peach 2.0 · KoboldCpp</option>
+                                <option value="local">当前本地模型 · KoboldCpp</option>
                             </select>
                             <small data-workshop-provider-status>默认使用当前聊天 API；本地接口仅用于角色卡工坊。</small>
                         </label>
@@ -321,6 +322,7 @@ function getSelectedProvider() {
 function syncProviderUi() {
     state.provider = getSelectedProvider();
     state.localProviderConnected = false;
+    state.localProviderModel = '';
     if (state.provider === WORKSHOP_PROVIDER.LOCAL) {
         updateProviderStatus('本地接口：127.0.0.1:5001 · 生成前会自动检查', null);
     } else {
@@ -850,7 +852,7 @@ async function generateLocalRaw(request) {
     if (!isLocalModelLoadingEnabled()) {
         throw new Error('本地模型加载已关闭，请先在“设置 → 模型连接”中打开。');
     }
-    const settings = getLocalWorkshopSettings();
+    const settings = getLocalWorkshopSettings(state.localProviderModel || undefined);
     const response = await fetch(getLocalChatCompletionUrl(settings), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -946,9 +948,10 @@ async function runWorkshop() {
 
     try {
         if (state.provider === WORKSHOP_PROVIDER.LOCAL) {
-            showStatus('正在检查本地模型', '确认 KoboldCpp 已加载 Peach 2.0，再开始角色卡 JSON 流程。', 'brief');
+            showStatus('正在检查本地模型', '确认 KoboldCpp 已加载所选模型，再开始角色卡 JSON 流程。', 'brief');
             const localConnection = await probeLocalWorkshopProvider({ signal: state.abortController.signal });
             state.localProviderConnected = localConnection.connected;
+            state.localProviderModel = localConnection.model;
             updateProviderStatus(`已连接：${localConnection.model}`, true);
         }
         showStatus('正在整理创作简报', 'AI 会先区分硬要求和可补全部分，避免一上来就堆设定。', 'brief');
@@ -1051,6 +1054,7 @@ async function rerunReview() {
             showStatus('正在检查本地模型', '确认 KoboldCpp 仍在运行，再开始第二次审校。', 'review');
             const localConnection = await probeLocalWorkshopProvider({ signal: state.abortController.signal });
             state.localProviderConnected = localConnection.connected;
+            state.localProviderModel = localConnection.model;
             updateProviderStatus(`已连接：${localConnection.model}`, true);
         }
         showStatus('正在进行第二次审校', '这次会把上一版最终稿当作待审稿，只修复问题，不扩写无关设定。', 'review');

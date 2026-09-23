@@ -4,6 +4,7 @@ import path from 'node:path';
 import express from 'express';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { color, getConfigValue, uuidv4 } from '../util.js';
+import { PROTECTED_SECRETS_FORMAT, getDefaultSecretProtector, parseSecretDocument, serializeSecretDocument } from '../secret-protection.js';
 
 export const SECRETS_FILE = 'secrets.json';
 export const SECRET_KEYS = {
@@ -107,17 +108,21 @@ const EXPORTABLE_KEYS = [
 
 export const allowKeysExposure = !!getConfigValue('allowKeysExposure', false, 'boolean');
 
+const secretFileCache = new Map();
+
 /**
  * SecretManager class to handle all secret operations
  */
 export class SecretManager {
     /**
      * @param {import('../users.js').UserDirectoryList} directories
+     * @param {{protector?: {protect: (bytes: Buffer) => Buffer, unprotect: (bytes: Buffer) => Buffer} | null}} [options]
      */
-    constructor(directories) {
+    constructor(directories, { protector = getDefaultSecretProtector() } = {}) {
         this.directories = directories;
         this.filePath = path.join(directories.root, SECRETS_FILE);
         this.defaultSecrets = {};
+        this.protector = protector;
     }
 
     /**
@@ -126,7 +131,7 @@ export class SecretManager {
      */
     _ensureSecretsFile() {
         if (!fs.existsSync(this.filePath)) {
-            writeFileAtomicSync(this.filePath, JSON.stringify(this.defaultSecrets), 'utf-8');
+            this._writeSecretsFile(this.defaultSecrets);
         }
     }
 
@@ -138,7 +143,23 @@ export class SecretManager {
     _readSecretsFile() {
         this._ensureSecretsFile();
         const fileContents = fs.readFileSync(this.filePath, 'utf-8');
-        return /** @type {SecretKeys} */ (JSON.parse(fileContents));
+        const cached = secretFileCache.get(this.filePath);
+        if (cached?.raw === fileContents) {
+            return structuredClone(cached.secrets);
+        }
+        const { secrets, protected: isProtected } = parseSecretDocument(fileContents, this.protector);
+        if (this.protector && !isProtected) {
+            // The atomic replacement migrates existing plaintext files. If
+            // protection is temporarily unavailable, preserve the old file.
+            try {
+                this._writeSecretsFile(secrets);
+            } catch {
+                console.warn('Local API secrets could not be upgraded to Windows user-level protection.');
+            }
+        } else {
+            secretFileCache.set(this.filePath, { raw: fileContents, secrets: structuredClone(secrets) });
+        }
+        return /** @type {SecretKeys} */ (secrets);
     }
 
     /**
@@ -147,7 +168,9 @@ export class SecretManager {
      * @param {SecretKeys} secrets
      */
     _writeSecretsFile(secrets) {
-        writeFileAtomicSync(this.filePath, JSON.stringify(secrets, null, 4), 'utf-8');
+        const contents = serializeSecretDocument(secrets, this.protector);
+        writeFileAtomicSync(this.filePath, contents, 'utf-8');
+        secretFileCache.set(this.filePath, { raw: contents, secrets: structuredClone(secrets) });
     }
 
     /**
@@ -383,13 +406,15 @@ export class SecretManager {
             return;
         }
 
-        const fileContents = fs.readFileSync(this.filePath, 'utf8');
-        const secrets = /** @type {FlatSecretKeys} */ (JSON.parse(fileContents));
+        const secrets = /** @type {FlatSecretKeys} */ (this._readSecretsFile());
         const values = Object.values(secrets);
 
         // Check if already migrated
         if (secrets[SECRET_KEYS._MIGRATED] || values.length === 0 || values.some(v => Array.isArray(v))) {
             return;
+        }
+        if (this.protector && JSON.parse(fs.readFileSync(this.filePath, 'utf8')).format !== PROTECTED_SECRETS_FORMAT) {
+            throw new Error('Legacy API secrets were left unchanged because Windows protection is unavailable.');
         }
 
         /** @type {SecretKeys} */

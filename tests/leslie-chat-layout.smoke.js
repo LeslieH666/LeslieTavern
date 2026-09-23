@@ -281,7 +281,7 @@ async function run() {
         await client.evaluate('document.querySelector(\'[data-leslie-settings-close]\')?.click()');
         await waitFor(client, 'document.querySelector(\'#leslie-settings-overlay\').hidden');
 
-        await client.evaluate('document.querySelector(\'#leslie-chat-actions [data-action="character-card"]\')?.click()');
+        await client.evaluate('document.querySelector(\'.leslie-chat-identity\')?.click()');
         await waitFor(client, 'document.querySelector(\'#right-nav-panel\')?.classList.contains(\'openDrawer\')');
         const workspace = await client.evaluate(`(() => {
             const sidebar = document.querySelector('#leslie-conversation-sidebar').getBoundingClientRect();
@@ -323,11 +323,7 @@ async function run() {
         await captureScreenshot(client, DESKTOP_SCREENSHOT);
 
         await client.evaluate('document.querySelector(\'#leslie-chat-actions [data-action="chat-more"]\')?.click()');
-        await client.evaluate('document.querySelector(\'#leslie-chat-more-menu [data-action="disable-layout"]\')?.click()');
-        const fallbackHidden = await client.evaluate('getComputedStyle(document.querySelector(\'#leslie-conversation-sidebar\')).display === \'none\'');
-        const restoreVisible = await client.evaluate('getComputedStyle(document.querySelector(\'#leslie-layout-restore\')).display !== \'none\'');
-        await client.evaluate('document.querySelector(\'#leslie-layout-restore\')?.click()');
-        const restored = await client.evaluate('getComputedStyle(document.querySelector(\'#leslie-conversation-sidebar\')).display !== \'none\'');
+        const unifiedHeader = await client.evaluate('Boolean(document.querySelector(\'#leslie-chat-actions [data-action="new-chat"]\')) && !document.querySelector(\'#leslie-chat-more-menu [data-action="disable-layout"]\') && !document.querySelector(\'#leslie-layout-restore\')');
 
         await client.command('Emulation.setDeviceMetricsOverride', {
             width: 390,
@@ -441,7 +437,7 @@ async function run() {
             settings,
             memory,
             workspace,
-            fallback: { hidden: fallbackHidden, restoreVisible, restored },
+            unifiedHeader,
             mobile,
             consoleErrors,
             screenshots: {
@@ -470,7 +466,7 @@ async function run() {
             && headerMenu.headerZ > headerMenu.chatZ
             && (connectionState.connected || connectionState.configured || connectionState.label === '尚未配置模型')
             && settingsOpened
-            && settings.categoryCount === 7
+            && settings.categoryCount === 8
             && settings.activePage === 'overview'
             && settings.fullWindow
             && settings.replacesMainInterface
@@ -492,9 +488,7 @@ async function run() {
             && memory.masterDetail
             && workspace.visible
             && workspace.centered
-            && fallbackHidden
-            && restoreVisible
-            && restored
+            && unifiedHeader
             && mobile.chatOpened
             && mobile.listRestored
             && mobile.settings.fullWidth

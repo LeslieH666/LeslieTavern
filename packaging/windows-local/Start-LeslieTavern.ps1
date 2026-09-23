@@ -28,6 +28,21 @@ $configuredIpv4 = if ($listenAddressMatch.Success) { $listenAddressMatch.Groups[
 $expectedIpv4 = if ($listenEnabled) { $configuredIpv4 } else { '127.0.0.1' }
 $expectedListener = '{0}:{1}' -f $expectedIpv4, $expectedPort
 
+# The desktop app owns one process-scoped companion token. AIRI may be started
+# later from Settings without writing that token into source or user settings.
+if (-not $env:LESLIE_BRIDGE_TOKEN) {
+    $tokenBytes = New-Object byte[] 32
+    $tokenGenerator = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $tokenGenerator.GetBytes($tokenBytes)
+    } finally {
+        $tokenGenerator.Dispose()
+    }
+    $env:LESLIE_BRIDGE_TOKEN = [BitConverter]::ToString($tokenBytes).Replace('-', '').ToLowerInvariant()
+}
+$env:LESLIE_BRIDGE_BASE_URL = "http://127.0.0.1:$expectedPort/api/leslie/bridge/v1/"
+$env:LESLIE_COMPANION_MODE = '1'
+
 function Get-LanAccessDetails {
     param([int]$Port)
 

@@ -12,7 +12,7 @@ D:\Projects\Leslietavern\
 ├─ data\                  本地用户数据
 ├─ Runtime\               本地 Electron 运行时
 ├─ Config\                本地运行配置
-└─ 启动中心.cmd           统一入口
+└─ 启动 Leslie Heaven.cmd 统一桌面入口
 ```
 
 整个目录只使用根目录的 `.git`。`airi/` 不包含嵌套 Git 元数据，也不保留单独的上游 remote。根仓库的 `origin` 是本项目自己的发布和推送目标。
@@ -21,36 +21,18 @@ D:\Projects\Leslietavern\
 
 ## 日常启动
 
-最简单的用法是双击 `启动 LeslieTavern 与 AIRI.cmd`。正常情况下只会出现两个主窗口：LeslieTavern 和 AIRI。启动过程使用的命令窗口会在完成后自动关闭，AIRI 不再弹出首次配置向导。
+双击 `启动 Leslie Heaven.cmd` 启动 LeslieTavern。打开“设置 → 模型连接 → 本地服务”，即可分别启动或停止 AIRI 与项目适配的 Qwen3.5 本地模型。AIRI 启动完成后会出现自己的主窗口，并跳过首次配置向导。
 
-双击 `启动中心.cmd`，然后选择：
+本地服务按钮只在 Electron 桌面端可用。普通浏览器和局域网页面可以继续使用聊天功能，但不能启动或停止本机进程。
 
-1. 只启动 LeslieTavern。
-2. 同时启动 LeslieTavern 和 AIRI。
-3. 停止 AIRI 和 LeslieTavern。
-4. 检查路径、端口、构建产物和运行时。
-5. 重新构建 AIRI，再同时启动两个应用。
-6. 启动项目适配的 Peach 本地模型。
-7. 关闭项目适配的 Peach 本地模型。
+## AIRI 启动过程
 
-也可以使用直接入口：
+从设置启动 AIRI 时，桌面端会依次执行：
 
-- `启动 LeslieTavern.cmd`：只启动 LeslieTavern。
-- `启动 LeslieTavern 与 AIRI.cmd`：直接联合启动。
-- `关闭 LeslieTavern 与 AIRI.cmd`：停止联合启动的两个应用。
-- `启动本地模型.cmd`：启动项目适配的 Peach GGUF。
-- `关闭本地模型.cmd`：只关闭该脚本记录的 KoboldCpp 进程树。
-
-## 联合启动过程
-
-联合启动器会依次执行：
-
-1. 检查根目录内的 `airi/` 子系统。
-2. 生成一次性的 32 字节随机桥接令牌。
-3. 使用现有 `Runtime/`、`Config/` 和 `data/` 启动 LeslieTavern。
-4. 等待 Leslie Bridge v1 健康检查通过。
-5. 检查 AIRI 桌面构建；构建缺失或源码较新时自动运行生产构建。
-6. 使用同一个进程令牌和本机 Bridge URL 启动 AIRI。
+1. 确认 LeslieTavern 已由 `Leslie Heaven` 启动并且 Bridge 已就绪。
+2. 复用 LeslieTavern 启动时生成、只存在于进程环境中的 32 字节随机桥接令牌。
+3. 检查根目录内的 `airi/` 子系统与 AIRI 桌面构建；构建缺失或源码较新时自动运行生产构建。
+4. 使用同一个进程令牌和本机 Bridge URL 启动 AIRI。
 
 令牌不会写入配置、源码、日志或用户数据。关闭应用后令牌失效。
 
@@ -116,13 +98,12 @@ AIRI 始终通过 `127.0.0.1` 连接 Bridge。LeslieTavern 的普通桌面服务
 
 ## 故障排查
 
-先从启动中心选择第 4 项。常见问题：
+先检查“设置 → 模型连接 → 本地服务”显示的状态，再查看日志。常见问题：
 
 - 找不到 AIRI：确认项目根目录包含完整的 `airi/package.json`。
-- AIRI 没有构建或界面仍是旧版：停止两个应用后重新联合启动；启动器会检测源码时间并自动重建。也可以选择第 5 项强制重建。
+- AIRI 没有构建或界面仍是旧版：在设置里停止并重新启动 AIRI；启动器会检测源码时间并自动重建。
 - 找不到 Node.js：安装 Node.js 20+ 或设置 `LESLIE_NODE_EXE`。
-- Leslie 已经运行：先选择第 3 项停止，再联合启动。
-- AIRI 无法连接：确认两个应用来自同一次联合启动。
+- AIRI 无法连接：确认 LeslieTavern 是由 `启动 Leslie Heaven.cmd` 启动，并从该桌面窗口的设置中启动 AIRI。
 - AIRI 显示“等待角色”：在 LeslieTavern 中打开一个聊天并选择角色，保持 LeslieTavern 主窗口已加载完成。
 - AIRI 有文字但没有语音：在 LeslieTavern 中检查当前角色的火山音色映射、App ID 和 Access Key。
 - 启动后立即退出：检查 `logs/desktop/` 和 `logs/airi/`。

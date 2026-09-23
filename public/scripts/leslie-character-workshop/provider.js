@@ -1,4 +1,4 @@
-import { getLeslieLocalSettings } from '../leslie-local-model-core.js';
+import { LESLIE_LOCAL_MODEL, getLeslieLocalSettings } from '../leslie-local-model-core.js';
 
 export const WORKSHOP_PROVIDER = Object.freeze({
     CHAT: 'chat',
@@ -13,16 +13,16 @@ const RESPONSE_HARD_CAP = 3072;
 
 export function getWorkshopProviderLabel(provider) {
     return provider === WORKSHOP_PROVIDER.LOCAL
-        ? '本地 Peach 2.0 · KoboldCpp'
+        ? '当前本地模型 · KoboldCpp'
         : '当前聊天 API（DeepSeek 等）';
 }
 
-export function getLocalWorkshopSettings() {
-    const settings = getLeslieLocalSettings('koboldcpp');
+export function getLocalWorkshopSettings(modelName = LESLIE_LOCAL_MODEL.modelName) {
+    const settings = getLeslieLocalSettings('koboldcpp', modelName);
     return {
         ...settings,
         endpoint: settings.endpoint || LOCAL_MODEL_ENDPOINT,
-        modelName: 'Peach 2.0 9B Q4_K_M',
+        modelName,
     };
 }
 
@@ -62,7 +62,7 @@ export function buildLocalChatCompletionRequest(request, settings = getLocalWork
         temperature: Math.min(Number(generation.temp) || 0.9, 0.45),
         top_p: Number(generation.top_p) || 0.9,
         top_k: Number(generation.top_k) || 40,
-        min_p: Number(generation.min_p) || 0.05,
+        min_p: generation.min_p == null ? 0.05 : Number(generation.min_p),
         repeat_penalty: Number(generation.rep_pen) || 1.1,
         repeat_last_n: Number(generation.rep_pen_range) || 4096,
         stream: false,

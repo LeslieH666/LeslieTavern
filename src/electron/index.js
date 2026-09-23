@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain, Menu, powerMonitor, Tray } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, powerMonitor, shell, Tray } from 'electron';
 import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yargs from 'yargs';
 import { serverEvents, EVENT_NAMES } from '../server-events.js';
 import { companionSession } from '../leslie-bridge/companion-session.js';
+import { getLocalServiceStatus, runLocalServiceAction, startManagedLocalModel } from './local-services.js';
 
 const cliArguments = yargs(process.argv)
     .usage('Usage: <your-start-script> [options]')
@@ -46,6 +47,11 @@ let momentsBackgroundState = {
     paused: false,
     pendingCount: 0,
 };
+const localServiceTasks = new Map();
+
+function getProjectRoot() {
+    return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+}
 
 function isMainWindowSender(event) {
     return Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
@@ -87,6 +93,47 @@ ipcMain.on('leslie:moments:status', (event, message) => {
         pendingCount: Math.max(0, Number(message?.pendingCount) || 0),
     };
     updateTrayMenu();
+});
+
+ipcMain.handle('leslie:services:status', (event) => {
+    if (!isMainWindowSender(event)) {
+        throw new Error('Only the LeslieTavern window can inspect desktop services.');
+    }
+    return getLocalServiceStatus(getProjectRoot(), { busyServices: new Set(localServiceTasks.keys()) });
+});
+
+ipcMain.handle('leslie:services:open-models', async (event) => {
+    if (!isMainWindowSender(event)) {
+        throw new Error('Only the LeslieTavern window can open the model directory.');
+    }
+    const directory = path.join(getProjectRoot(), 'models');
+    fs.mkdirSync(directory, { recursive: true });
+    const error = await shell.openPath(directory);
+    if (error) {
+        throw new Error('Could not open the local model directory.');
+    }
+});
+
+ipcMain.handle('leslie:services:action', async (event, message) => {
+    if (!isMainWindowSender(event)) {
+        throw new Error('Only the LeslieTavern window can control desktop services.');
+    }
+    const service = String(message?.service || '');
+    const action = String(message?.action || '');
+    if (localServiceTasks.has(service)) {
+        return getLocalServiceStatus(getProjectRoot(), { busyServices: new Set(localServiceTasks.keys()) });
+    }
+    const root = getProjectRoot();
+    const task = service === 'localModel' && action === 'start'
+        ? startManagedLocalModel(root, String(message?.modelId || getLocalServiceStatus(root).localModels.models[0]?.id || ''))
+        : runLocalServiceAction(root, service, action);
+    localServiceTasks.set(service, task);
+    try {
+        await task;
+    } finally {
+        localServiceTasks.delete(service);
+    }
+    return getLocalServiceStatus(getProjectRoot(), { busyServices: new Set(localServiceTasks.keys()) });
 });
 
 function showMainWindow() {
@@ -231,7 +278,7 @@ function startServer() {
             appUrl = url.toString();
             createSillyTavernWindow();
         });
-        const sillyTavernRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+        const sillyTavernRoot = getProjectRoot();
         process.chdir(sillyTavernRoot);
 
         // Keep Electron on this project's configured data root instead of SillyTavern's global data directory.

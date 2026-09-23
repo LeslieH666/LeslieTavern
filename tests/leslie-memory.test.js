@@ -10,6 +10,7 @@ import { scoreMemoryEvent, selectMemoryEvents } from '../src/leslie-memory/scori
 import { MEMORY_MODEL_PROVIDERS, normalizeMemoryModelSettings } from '../src/leslie-memory/schema.js';
 
 const STORY_BINDING = {
+    worldLine: 'story',
     storyScopeId: '11111111-1111-4111-8111-111111111111',
     personaId: '22222222-2222-4222-8222-222222222222',
     personaSourceKey: '哥哥.png',
@@ -125,7 +126,7 @@ describe('Leslie memory store', () => {
         });
 
         expect(result.identityStatus).toBe('matched');
-        expect(result.memory.manifest.schemaVersion).toBe(3);
+        expect(result.memory.manifest.schemaVersion).toBe(4);
         expect(result.memory.manifest.identityBinding.personaName).toBe('哥哥');
         expect(mismatch.identityStatus).toBe('mismatch');
         expect(() => store.assertStoryScope(result.memory.manifest.id, otherBinding.storyScopeId)).toThrow(/different Persona/);
@@ -142,6 +143,92 @@ describe('Leslie memory store', () => {
         expect(manifest.identityBinding.personaId).toBe(STORY_BINDING.personaId);
         expect(fs.readdirSync(path.join(temporaryRoot, 'leslie', 'memory', result.memory.manifest.id, 'history'))
             .some(file => file.startsWith('manifest-'))).toBe(true);
+    });
+
+    test('shares only a small memory sample from the same character on the opposite world line', () => {
+        const story = store.ensureMemory({
+            chatKey: '妹妹.png::故事线',
+            characterKey: '妹妹.png',
+            identityBinding: STORY_BINDING,
+        }).memory;
+        const reality = store.ensureMemory({
+            chatKey: '妹妹.png::现实线',
+            characterKey: '妹妹.png',
+            identityBinding: {
+                ...STORY_BINDING,
+                worldLine: 'reality',
+                storyScopeId: '44444444-4444-4444-8444-444444444444',
+            },
+        }).memory;
+        const otherCharacter = store.ensureMemory({
+            chatKey: '同学.png::现实线',
+            characterKey: '同学.png',
+            identityBinding: {
+                ...STORY_BINDING,
+                worldLine: 'reality',
+                storyScopeId: '55555555-5555-4555-8555-555555555555',
+                counterpartId: '66666666-6666-4666-8666-666666666666',
+                counterpartSourceKey: '同学.png',
+                counterpartName: '同学',
+            },
+        }).memory;
+        for (const memory of [story, reality, otherCharacter]) {
+            store.updateState(memory.manifest.id, { enabled: true });
+        }
+        store.upsertEvents(reality.manifest.id, [{
+            summary: '现实里，妹妹记得哥哥喜欢清晨散步。',
+            level: 'B',
+            approved: true,
+            source: [{ messageId: 3 }],
+            tags: ['清晨', '散步'],
+        }]);
+        store.upsertEvents(otherCharacter.manifest.id, [{
+            summary: '这条属于另一个角色，不应跨线泄露。',
+            level: 'A',
+            approved: true,
+            source: [{ messageId: 5 }],
+        }]);
+
+        const context = store.selectCrossLineContext(story.manifest.id, {
+            query: '清晨散步',
+            maximum: 2,
+        });
+
+        expect(context.enabled).toBe(true);
+        expect(context.currentWorldLine).toBe('story');
+        expect(context.memories).toHaveLength(1);
+        expect(context.memories[0]).toMatchObject({
+            summary: '现实里，妹妹记得哥哥喜欢清晨散步。',
+            fromWorldLine: 'reality',
+            sourceMemoryId: reality.manifest.id,
+        });
+    });
+
+    test('lists confirmed and legacy memories without pretending legacy data has a story binding', () => {
+        const bound = store.ensureMemory({
+            chatKey: '妹妹.png::主线',
+            characterKey: '妹妹.png',
+            coreSnapshot: { name: '妹妹', avatar: '妹妹.png' },
+            identityBinding: STORY_BINDING,
+        });
+        const legacy = store.ensureMemory({
+            chatKey: 'legacy-chat',
+            characterKey: 'legacy.png',
+            coreSnapshot: { name: '旧角色', avatar: 'legacy.png' },
+        });
+
+        expect(store.listMemorySources()).toEqual(expect.arrayContaining([expect.objectContaining({
+            memoryId: bound.memory.manifest.id,
+            chatKey: '妹妹.png::主线',
+            displayName: '妹妹',
+            identityStatus: 'confirmed',
+            identityBinding: expect.objectContaining({ counterpartName: '妹妹', confirmed: true }),
+        }), expect.objectContaining({
+            memoryId: legacy.memory.manifest.id,
+            displayName: '旧角色',
+            identityStatus: 'unbound',
+            identityBinding: null,
+        })]));
     });
 
     test('clones a bound memory when a chat branch receives a new story-line identity', () => {
@@ -260,7 +347,11 @@ describe('Leslie memory store', () => {
     });
 
     test('migrates legacy state to an independent memory-model setting and keeps a rollback copy', () => {
-        const { memory } = store.ensureMemory({ chatKey: 'legacy-chat', characterKey: 'character' });
+        const { memory } = store.ensureMemory({
+            chatKey: 'legacy-chat',
+            characterKey: 'character',
+            identityBinding: STORY_BINDING,
+        });
         const paths = store.getPaths(memory.manifest.id);
         const legacyState = JSON.parse(fs.readFileSync(paths.state, 'utf8'));
         delete legacyState.settings.memoryModel;
@@ -268,14 +359,16 @@ describe('Leslie memory store', () => {
         legacyState.growth.relationship = 'A preserved legacy relationship.';
         const legacyManifest = JSON.parse(fs.readFileSync(paths.manifest, 'utf8'));
         legacyManifest.schemaVersion = 2;
+        delete legacyManifest.identityBinding.worldLine;
         fs.writeFileSync(paths.state, `${JSON.stringify(legacyState)}\n`);
         fs.writeFileSync(paths.manifest, `${JSON.stringify(legacyManifest)}\n`);
 
         const migrated = store.getMemory(memory.manifest.id);
         const historyFiles = fs.readdirSync(paths.history);
 
-        expect(migrated.manifest.schemaVersion).toBe(3);
-        expect(migrated.state.schemaVersion).toBe(3);
+        expect(migrated.manifest.schemaVersion).toBe(4);
+        expect(migrated.state.schemaVersion).toBe(4);
+        expect(migrated.manifest.identityBinding.worldLine).toBe('story');
         expect(migrated.state.settings.memoryModel.provider).toBe('chat');
         expect(migrated.state.growth.relationship).toBe('A preserved legacy relationship.');
         expect(historyFiles.some(file => file.startsWith('state-migration-v2-'))).toBe(true);

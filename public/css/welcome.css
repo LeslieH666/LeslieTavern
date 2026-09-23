@@ -237,3 +237,691 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
         display: none;
     }
 }
+
+/* Leslie desktop home. The upstream welcome panel remains available when the
+   modern two-column layout is disabled. */
+body.leslie-modern.leslie-home-open:not(.leslie-chat-layout-disabled) #form_sheld {
+    display: none;
+}
+
+body.leslie-modern.leslie-home-open:not(.leslie-chat-layout-disabled) #chat {
+    padding: 0;
+    scroll-padding: 24px;
+}
+
+body.leslie-modern.leslie-home-open:not(.leslie-chat-layout-disabled) .leslie-world-line-switch,
+body.leslie-modern.leslie-home-open:not(.leslie-chat-layout-disabled) #leslie-chat-actions > :not([data-leslie-privacy-quick-toggle]),
+body.leslie-modern.leslie-home-open:not(.leslie-chat-layout-disabled) #leslie-chat-more-menu {
+    display: none !important;
+}
+
+body.leslie-modern.leslie-home-open:not(.leslie-chat-layout-disabled) .leslie-chat-identity {
+    cursor: default;
+}
+
+body.leslie-modern .leslieHomePanel,
+body.leslie-modern .leslieHomePanel * {
+    box-sizing: border-box;
+}
+
+body.leslie-modern .leslieHomePanel {
+    display: flex;
+    width: min(920px, 100%);
+    min-height: 100%;
+    margin: 0 auto;
+    padding: clamp(28px, 5vw, 64px) clamp(22px, 4vw, 46px) 54px;
+    flex-direction: column;
+    gap: 30px;
+    color: var(--leslie-shell-text, var(--SmartThemeBodyColor));
+    font-family: Inter, "Noto Sans SC", "Microsoft YaHei UI", system-ui, sans-serif;
+    text-shadow: none;
+}
+
+body.leslie-modern .leslieHomePanel button {
+    margin: 0;
+    color: inherit;
+    font: inherit;
+    text-shadow: none;
+}
+
+.leslieHomeIntro {
+    display: flex;
+    max-width: 720px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.leslieHomeEyebrow,
+.leslieHomeSectionKicker {
+    color: var(--leslie-shell-accent, #2481cc);
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.leslieHomeEyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.leslieHomeIntro h1 {
+    margin: 2px 0 0;
+    color: var(--leslie-shell-text, var(--SmartThemeBodyColor));
+    font-size: clamp(28px, 4vw, 38px);
+    font-weight: 760;
+    letter-spacing: -0.035em;
+    line-height: 1.18;
+}
+
+.leslieHomeIntro > p,
+.leslieHomeOnboarding p {
+    margin: 0;
+    color: var(--leslie-shell-muted, var(--SmartThemeEmColor));
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+.leslieHomeConnection {
+    display: grid;
+    width: min(520px, 100%);
+    min-height: 54px;
+    margin-top: 10px !important;
+    padding: 8px 12px;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+    background: color-mix(in srgb, var(--leslie-shell-accent, #2481cc) 8%, var(--leslie-shell-surface, #fff));
+    border: 1px solid color-mix(in srgb, var(--leslie-shell-accent, #2481cc) 24%, var(--leslie-shell-border, #d9e2ec));
+    border-radius: 12px;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+.leslieHomeConnection > span:first-child {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    color: var(--leslie-shell-accent, #2481cc);
+    background: var(--leslie-shell-accent-soft, rgba(51, 144, 236, 0.13));
+    border-radius: 50%;
+}
+
+.leslieHomeConnection > span:nth-child(2),
+.leslieHomeMomentList button > span:nth-child(2),
+.leslieHomeMomentEmpty > span:nth-child(2) {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.leslieHomeConnection strong,
+.leslieHomeConnection small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leslieHomeConnection strong {
+    font-size: 13px;
+}
+
+.leslieHomeConnection small {
+    color: var(--leslie-shell-muted, var(--SmartThemeEmColor));
+    font-size: 11px;
+}
+
+.leslieHomeSection {
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+}
+
+.leslieHomeSection + .leslieHomeSection {
+    padding-top: 28px;
+    border-top: 1px solid var(--leslie-shell-border, var(--SmartThemeBorderColor));
+}
+
+.leslieHomeSectionHeading {
+    display: flex;
+    min-height: 36px;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+}
+
+.leslieHomeSectionHeading > div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.leslieHomeSectionHeading h2,
+.leslieHomeOnboarding h2 {
+    margin: 0;
+    color: var(--leslie-shell-text, var(--SmartThemeBodyColor));
+    font-size: 19px;
+    font-weight: 720;
+    letter-spacing: -0.015em;
+    line-height: 1.3;
+}
+
+.leslieHomeSectionHeading time,
+.leslieHomeSectionHeading > button {
+    flex: 0 0 auto;
+    color: var(--leslie-shell-muted, var(--SmartThemeEmColor));
+    font-size: 12px;
+}
+
+.leslieHomeSectionHeading > button {
+    display: inline-flex;
+    min-height: 36px;
+    padding: 0 8px;
+    align-items: center;
+    gap: 7px;
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.leslieHomeSectionHeading > button:hover,
+.leslieHomeSectionHeading > button:focus-visible {
+    color: var(--leslie-shell-accent, #2481cc);
+    background: var(--leslie-shell-accent-soft, rgba(51, 144, 236, 0.13));
+}
+
+.leslieHomeContinueCard {
+    display: grid;
+    width: 100%;
+    min-height: 92px;
+    padding: 14px 16px;
+    grid-template-columns: 58px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 14px;
+    text-align: left;
+    background: var(--leslie-shell-surface, #fff);
+    border: 1px solid var(--leslie-shell-border, #d9e2ec);
+    border-radius: 16px;
+    box-shadow: 0 8px 26px color-mix(in srgb, var(--leslie-shell-bg, #dfe7ef) 52%, transparent);
+    cursor: pointer;
+    transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.leslieHomeContinueCard:hover,
+.leslieHomeContinueCard:focus-visible {
+    background: var(--leslie-shell-hover, #edf3f8);
+    border-color: color-mix(in srgb, var(--leslie-shell-accent, #2481cc) 42%, var(--leslie-shell-border, #d9e2ec));
+    transform: translateY(-1px);
+}
+
+.leslieHomeContinueAvatar,
+.leslieHomeCharacterAvatar,
+.leslieHomeMomentAvatar {
+    position: relative;
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    overflow: hidden;
+    color: var(--leslie-shell-accent, #2481cc);
+    background: var(--leslie-shell-accent-soft, rgba(51, 144, 236, 0.13));
+    border-radius: 50%;
+}
+
+.leslieHomeContinueAvatar {
+    width: 58px;
+    height: 58px;
+    font-size: 20px;
+}
+
+.leslieHomeContinueAvatar img,
+.leslieHomeCharacterAvatar img,
+.leslieHomeMomentAvatar img {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.leslieHomePanel img.is-broken {
+    display: none;
+}
+
+.leslieHomeContinueCopy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.leslieHomeContinueMeta {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 9px;
+}
+
+.leslieHomeContinueMeta strong {
+    overflow: hidden;
+    font-size: 16px;
+    font-weight: 720;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leslieHomeContinueMeta small {
+    padding: 3px 7px;
+    flex: 0 0 auto;
+    color: var(--leslie-shell-accent, #2481cc);
+    background: var(--leslie-shell-accent-soft, rgba(51, 144, 236, 0.13));
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.leslieHomeContinuePreview {
+    overflow: hidden;
+    color: var(--leslie-shell-muted, var(--SmartThemeEmColor));
+    font-size: 13px;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leslieHomeContinueButton {
+    display: inline-flex;
+    min-height: 38px;
+    padding: 0 13px;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+    background: var(--leslie-shell-accent, #2481cc);
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.leslieHomeCharacterGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+    gap: 8px;
+}
+
+.leslieHomeCharacter {
+    position: relative;
+    min-width: 0;
+}
+
+.leslieHomeCharacterOpen {
+    display: flex;
+    width: 100%;
+    min-height: 126px;
+    padding: 14px 9px 11px;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 13px;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+.leslieHomeCharacterOpen:hover,
+.leslieHomeCharacterOpen:focus-visible,
+.leslieHomeCharacter.is-pinned .leslieHomeCharacterOpen {
+    background: var(--leslie-shell-hover, #edf3f8);
+    border-color: var(--leslie-shell-border, #d9e2ec);
+}
+
+.leslieHomeCharacterAvatar {
+    width: 58px;
+    height: 58px;
+    font-size: 18px;
+}
+
+.leslieHomeCharacterOpen > span:last-child {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.leslieHomeCharacterOpen strong,
+.leslieHomeCharacterOpen small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leslieHomeCharacterOpen strong {
+    font-size: 13px;
+    font-weight: 680;
+}
+
+.leslieHomeCharacterOpen small {
+    color: var(--leslie-shell-muted, var(--SmartThemeEmColor));
+    font-size: 10px;
+}
+
+.leslieHomeCharacterPin {
+    position: absolute;
+    z-index: 3;
+    top: 6px;
+    right: 6px;
+    display: grid;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    place-items: center;
+    color: var(--leslie-shell-muted, var(--SmartThemeEmColor)) !important;
+    background: var(--leslie-shell-surface, #fff) !important;
+    border: 1px solid var(--leslie-shell-border, #d9e2ec) !important;
+    border-radius: 50%;
+    box-shadow: none;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 140ms ease, color 140ms ease, background-color 140ms ease;
+}
+
+.leslieHomeCharacter:hover .leslieHomeCharacterPin,
+.leslieHomeCharacterPin:focus-visible,
+.leslieHomeCharacterPin.is-pinned {
+    opacity: 1;
+}
+
+.leslieHomeCharacterPin.is-pinned {
+    color: #fff !important;
+    background: var(--leslie-shell-accent, #2481cc) !important;
+    border-color: var(--leslie-shell-accent, #2481cc) !important;
+}
+
+.leslieHomeMomentList {
+    display: flex;
+    flex-direction: column;
+}
+
+.leslieHomeMomentList button,
+.leslieHomeMomentEmpty {
+    display: grid;
+    width: 100%;
+    min-height: 58px;
+    padding: 8px 6px;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 11px;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--leslie-shell-border, #d9e2ec);
+    border-radius: 0;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+.leslieHomeMomentList button:hover,
+.leslieHomeMomentList button:focus-visible,
+.leslieHomeMomentEmpty:hover,
+.leslieHomeMomentEmpty:focus-visible {
+    background: var(--leslie-shell-hover, #edf3f8);
+}
+
+.leslieHomeMomentAvatar,
+.leslieHomeMomentEmpty > span:first-child {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    color: var(--leslie-shell-accent, #2481cc);
+    background: var(--leslie-shell-accent-soft, rgba(51, 144, 236, 0.13));
+    border-radius: 50%;
+}
+
+.leslieHomeMomentList strong,
+.leslieHomeMomentEmpty strong {
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leslieHomeMomentList small,
+.leslieHomeMomentEmpty small {
+    color: var(--leslie-shell-muted, var(--SmartThemeEmColor));
+    font-size: 11px;
+}
+
+.leslieHomeMomentList button > i,
+.leslieHomeMomentEmpty > i {
+    color: var(--leslie-shell-muted, var(--SmartThemeEmColor));
+    font-size: 11px;
+}
+
+.leslieHomeQuickActions > div:last-child {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 9px;
+}
+
+.leslieHomeQuickActions > div:last-child > button,
+.leslieHomePrimaryActions button {
+    display: flex;
+    min-height: 66px;
+    padding: 10px 13px;
+    align-items: center;
+    gap: 11px;
+    text-align: left;
+    background: var(--leslie-shell-surface, #fff);
+    border: 1px solid var(--leslie-shell-border, #d9e2ec);
+    border-radius: 12px;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+.leslieHomeQuickActions > div:last-child > button:hover,
+.leslieHomeQuickActions > div:last-child > button:focus-visible,
+.leslieHomePrimaryActions button:hover,
+.leslieHomePrimaryActions button:focus-visible {
+    background: var(--leslie-shell-hover, #edf3f8);
+    border-color: color-mix(in srgb, var(--leslie-shell-accent, #2481cc) 36%, var(--leslie-shell-border, #d9e2ec));
+}
+
+.leslieHomeQuickActions > div:last-child > button > i {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--leslie-shell-accent, #2481cc);
+    background: var(--leslie-shell-accent-soft, rgba(51, 144, 236, 0.13));
+    border-radius: 10px;
+}
+
+.leslieHomeQuickActions > div:last-child > button > span {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.leslieHomeQuickActions strong {
+    font-size: 13px;
+}
+
+.leslieHomeQuickActions small {
+    overflow: hidden;
+    color: var(--leslie-shell-muted, var(--SmartThemeEmColor));
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leslieHomeOnboarding {
+    display: grid;
+    width: min(680px, 100%);
+    padding: 24px;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 18px;
+    background: var(--leslie-shell-surface, #fff);
+    border: 1px solid var(--leslie-shell-border, #d9e2ec);
+    border-radius: 17px;
+}
+
+.leslieHomeOnboardingIcon {
+    display: grid;
+    width: 64px;
+    height: 64px;
+    grid-row: span 2;
+    place-items: center;
+    color: #fff;
+    background: var(--leslie-shell-accent, #2481cc);
+    border-radius: 18px;
+    font-size: 24px;
+}
+
+.leslieHomeOnboarding > div:nth-child(2) {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.leslieHomeOnboarding ol {
+    display: flex;
+    margin: 4px 0 0;
+    padding: 0;
+    grid-column: 1 / -1;
+    flex-direction: column;
+    gap: 4px;
+    list-style: none;
+}
+
+.leslieHomeOnboarding li {
+    display: grid;
+    min-height: 54px;
+    padding: 8px 4px;
+    grid-template-columns: 32px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--leslie-shell-border, #d9e2ec);
+}
+
+.leslieHomeOnboarding li > span {
+    display: grid;
+    width: 26px;
+    height: 26px;
+    place-items: center;
+    color: var(--leslie-shell-accent, #2481cc);
+    background: var(--leslie-shell-accent-soft, rgba(51, 144, 236, 0.13));
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 750;
+}
+
+.leslieHomeOnboarding li > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.leslieHomeOnboarding li strong {
+    font-size: 13px;
+}
+
+.leslieHomeOnboarding li small {
+    color: var(--leslie-shell-muted, var(--SmartThemeEmColor));
+    font-size: 11px;
+}
+
+.leslieHomePrimaryActions {
+    display: flex;
+    grid-column: 1 / -1;
+    gap: 8px;
+}
+
+.leslieHomePrimaryActions button {
+    min-height: 44px;
+}
+
+.leslieHomePrimaryActions button.is-primary {
+    color: #fff;
+    background: var(--leslie-shell-accent, #2481cc);
+    border-color: var(--leslie-shell-accent, #2481cc);
+}
+
+@media (max-width: 920px) {
+    body.leslie-modern .leslieHomePanel {
+        padding: 32px 22px 44px;
+        gap: 26px;
+    }
+
+    .leslieHomeQuickActions > div:last-child {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 620px) {
+    body.leslie-modern .leslieHomePanel {
+        padding: 24px 14px 36px;
+    }
+
+    .leslieHomeContinueCard {
+        min-height: 82px;
+        padding: 12px;
+        grid-template-columns: 50px minmax(0, 1fr);
+    }
+
+    .leslieHomeContinueAvatar {
+        width: 50px;
+        height: 50px;
+    }
+
+    .leslieHomeContinueButton {
+        display: none;
+    }
+
+    .leslieHomeCharacterGrid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .leslieHomeCharacterPin {
+        opacity: 1;
+    }
+
+    .leslieHomeOnboarding {
+        padding: 18px;
+        grid-template-columns: 52px minmax(0, 1fr);
+    }
+
+    .leslieHomeOnboardingIcon {
+        width: 52px;
+        height: 52px;
+        border-radius: 15px;
+        font-size: 20px;
+    }
+
+    .leslieHomePrimaryActions {
+        flex-direction: column;
+    }
+
+    .leslieHomeQuickActions > div:last-child {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .leslieHomeContinueCard,
+    .leslieHomeCharacterPin {
+        transition: none;
+    }
+}

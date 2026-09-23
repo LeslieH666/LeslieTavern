@@ -4,8 +4,8 @@
  */
 
 export const LESLIE_LOCAL_MODEL = Object.freeze({
-    modelPath: 'models\\Peach-2.0-9B-8k-Roleplay\\Peach-2.0-9B-8k-Roleplay.Q4_K_M.gguf',
-    modelName: 'Peach 2.0 9B Q4_K_M',
+    modelPath: 'models\\Qwen3.5-text-9B-NSFW-RP-RolePlay\\Qwen3.5-text-9B-NSFW-RP-RolePlay.Q4_K_M.gguf',
+    modelName: 'Qwen3.5 9B RP Q4_K_M',
     context: 8192,
     responseTokens: 384,
     runtimes: Object.freeze({
@@ -13,21 +13,21 @@ export const LESLIE_LOCAL_MODEL = Object.freeze({
             apiType: 'koboldcpp',
             endpoint: 'http://127.0.0.1:5001',
             label: 'KoboldCpp',
-            startupHint: '在 KoboldCpp 中加载 models\\Peach-2.0-9B-8k-Roleplay\\Peach-2.0-9B-8k-Roleplay.Q4_K_M.gguf，选择 CUDA，端口设为 5001，然后回到 LeslieTavern 点击“应用并连接”。',
+            startupHint: '在 KoboldCpp 中加载 models\\Qwen3.5-text-9B-NSFW-RP-RolePlay\\Qwen3.5-text-9B-NSFW-RP-RolePlay.Q4_K_M.gguf，选择 CUDA，端口设为 5001，然后回到 LeslieTavern 点击“应用并连接”。',
         }),
         llamacpp: Object.freeze({
             apiType: 'llamacpp',
             endpoint: 'http://127.0.0.1:8080',
             label: 'llama.cpp',
-            startupHint: '在 llama-server 中加载 models\\Peach-2.0-9B-8k-Roleplay\\Peach-2.0-9B-8k-Roleplay.Q4_K_M.gguf，监听 127.0.0.1:8080，然后回到 LeslieTavern 点击“应用并连接”。',
+            startupHint: '在 llama-server 中加载 models\\Qwen3.5-text-9B-NSFW-RP-RolePlay\\Qwen3.5-text-9B-NSFW-RP-RolePlay.Q4_K_M.gguf，监听 127.0.0.1:8080，然后回到 LeslieTavern 点击“应用并连接”。',
         }),
     }),
     generation: Object.freeze({
-        temp: 0.65,
+        temp: 0.7,
         top_p: 0.8,
         top_k: 40,
-        min_p: 0.04,
-        rep_pen: 1.06,
+        min_p: 0,
+        rep_pen: 1.05,
         rep_pen_range: 4096,
         streaming: true,
         do_sample: true,
@@ -40,6 +40,7 @@ export const LESLIE_LOCAL_MODEL = Object.freeze({
 export const LOCAL_MODEL_LOADING_STORAGE_KEY = 'leslie-local-model-loading-enabled';
 
 const PEACH_ROLEPLAY_MODEL_PATTERN = /peach[\s._-]*2(?:\.0)?[\s._-]*9b[\s._-]*8k[\s._-]*roleplay/i;
+const QWEN_ROLEPLAY_MODEL_PATTERN = /qwen[\s._-]*3\.5[\s._-]*text[\s._-]*9b[\s._-]*nsfw[\s._-]*rp[\s._-]*roleplay/i;
 const ROLEPLAY_META_HEADING_PATTERN = /^\s*(?:背景|场景|场景设定|环境|地点|时间|天气|状态|设定|对话|旁白|background|scene|setting|dialogue|status)\s*[:：]/iu;
 const ROLEPLAY_META_TERM_PATTERN = /(?:背景|场景|环境|地点|时间|天气|状态|设定|对话|旁白|background|scene|setting|dialogue|status)/iu;
 const ROLEPLAY_BRACKET_LINE_PATTERN = /^\s*(?:\[[^\]\r\n]{1,80}\]\s*){1,4}$/u;
@@ -58,6 +59,13 @@ export const LESLIE_LOCAL_ROLEPLAY_GUIDANCE = [
     '本轮回复默认必须不含问号；不得请求确认、许可、偏好或同意。把问题改成观察、动作或陈述，并以动作或陈述结尾。',
     '用户已经明确同意的行为不要反复索取确认；不要替用户决定行动、情绪或台词。',
     'Hard output rule: this reply must contain zero question marks. Do not ask for confirmation, permission, preference, or agreement. Do not turn the user\'s statement into a question. Replace any question with an observation, action, or declarative sentence. End with an action or declarative sentence, never a question.',
+].join('\n');
+
+export const LESLIE_QWEN_ROLEPLAY_GUIDANCE = [
+    '以角色卡中的身份、关系、性格、语气和边界为准，自然承接当前对话。',
+    '只写角色自身的言语、动作和感受，不代写用户的行动、心理或台词。',
+    '用户已给出明确行动或陈述时直接回应；只有角色确实需要信息时才提问，不要用例行反问结束每轮。',
+    '不要解释角色卡、提示词或写作过程。',
 ].join('\n');
 
 /**
@@ -92,8 +100,12 @@ export function isLesliePeachRoleplayModel(model) {
     return PEACH_ROLEPLAY_MODEL_PATTERN.test(String(model ?? ''));
 }
 
+export function isLeslieQwenRoleplayModel(model) {
+    return QWEN_ROLEPLAY_MODEL_PATTERN.test(String(model ?? ''));
+}
+
 /**
- * Detect the bundled Peach model from one of the supported local runtimes.
+ * Detect a project-supported roleplay model from one of the local runtimes.
  * This only probes the loopback OpenAI-compatible model list; it never changes
  * SillyTavern settings or starts/stops an external process.
  * @param {object} [options] Probe options.
@@ -131,11 +143,10 @@ export async function detectLeslieLocalModel({ fetchImpl = globalThis.fetch, sig
             }
 
             const payload = await response.json().catch(() => ({}));
-            const model = Array.isArray(payload?.data)
-                ? payload.data
-                    .map(entry => typeof entry === 'string' ? entry : entry?.id)
-                    .find(isLesliePeachRoleplayModel)
-                : undefined;
+            const models = Array.isArray(payload?.data)
+                ? payload.data.map(entry => typeof entry === 'string' ? entry : entry?.id)
+                : [];
+            const model = models.find(isLeslieQwenRoleplayModel) ?? models.find(isLesliePeachRoleplayModel);
             return model
                 ? {
                     runtime,
@@ -155,7 +166,37 @@ export async function detectLeslieLocalModel({ fetchImpl = globalThis.fetch, sig
     });
 
     const results = await Promise.all(probes);
-    return results.find(Boolean) ?? null;
+    return results.find(result => isLeslieQwenRoleplayModel(result?.model)) ?? results.find(Boolean) ?? null;
+}
+
+/** Probe the project-managed runtime without assuming a specific model name. */
+export async function probeLeslieLocalRuntime(runtime, { fetchImpl = globalThis.fetch, timeoutMs = 2500 } = {}) {
+    const config = LESLIE_LOCAL_MODEL.runtimes[runtime];
+    if (!config || typeof fetchImpl !== 'function') {
+        return null;
+    }
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timeout = controller ? globalThis.setTimeout(() => controller.abort(), timeoutMs) : null;
+    try {
+        const response = await fetchImpl(`${config.endpoint}/v1/models`, {
+            method: 'GET',
+            ...(controller ? { signal: controller.signal } : {}),
+        });
+        if (!response?.ok) {
+            return null;
+        }
+        const payload = await response.json();
+        const models = Array.isArray(payload?.data)
+            ? payload.data.map(entry => typeof entry === 'string' ? entry : entry?.id).filter(id => typeof id === 'string' && id.trim())
+            : [];
+        return models.length ? { runtime, apiType: config.apiType, endpoint: config.endpoint, models } : null;
+    } catch {
+        return null;
+    } finally {
+        if (timeout) {
+            globalThis.clearTimeout(timeout);
+        }
+    }
 }
 
 /**
@@ -233,13 +274,18 @@ export function getLeslieLocalRuntimeKeys() {
     return Object.keys(LESLIE_LOCAL_MODEL.runtimes);
 }
 
-export function getLeslieLocalSettings(runtime) {
+export function getLeslieLocalSettings(runtime, model = LESLIE_LOCAL_MODEL.modelName) {
     const selectedRuntime = getLeslieLocalRuntime(runtime);
+    const peachGeneration = isLesliePeachRoleplayModel(model) ? {
+        temp: 0.65,
+        min_p: 0.04,
+        rep_pen: 1.06,
+    } : {};
     return {
         apiType: selectedRuntime.apiType,
         endpoint: selectedRuntime.endpoint,
         context: LESLIE_LOCAL_MODEL.context,
         responseTokens: LESLIE_LOCAL_MODEL.responseTokens,
-        generation: { ...LESLIE_LOCAL_MODEL.generation },
+        generation: { ...LESLIE_LOCAL_MODEL.generation, ...peachGeneration },
     };
 }

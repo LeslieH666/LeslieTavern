@@ -215,7 +215,7 @@ router.post('/save', function (request, response) {
     try {
         const pathToSettings = path.join(request.user.directories.root, SETTINGS_FILE);
         writeFileAtomicSync(pathToSettings, JSON.stringify(request.body, null, 4), 'utf8');
-        triggerAutoSave(request.user.profile.handle);
+        triggerAutoSave(request.user.storageHandle || request.user.profile.handle);
         response.send({ result: 'ok' });
     } catch (err) {
         console.error(err);
@@ -306,7 +306,7 @@ router.post('/get', (request, response) => {
 router.post('/get-snapshots', async (request, response) => {
     try {
         const snapshots = fs.readdirSync(request.user.directories.backups);
-        const userFilesPattern = getSettingsBackupFilePrefix(request.user.profile.handle);
+        const userFilesPattern = getSettingsBackupFilePrefix(request.user.storageHandle || request.user.profile.handle);
         const userSnapshots = snapshots.filter(x => x.startsWith(userFilesPattern));
 
         const result = userSnapshots.map(x => {
@@ -323,7 +323,7 @@ router.post('/get-snapshots', async (request, response) => {
 
 router.post('/load-snapshot', getFileNameValidationFunction('name'), async (request, response) => {
     try {
-        const userFilesPattern = getSettingsBackupFilePrefix(request.user.profile.handle);
+        const userFilesPattern = getSettingsBackupFilePrefix(request.user.storageHandle || request.user.profile.handle);
 
         if (!request.body.name || !request.body.name.startsWith(userFilesPattern)) {
             return response.status(400).send({ error: 'Invalid snapshot name' });
@@ -347,7 +347,7 @@ router.post('/load-snapshot', getFileNameValidationFunction('name'), async (requ
 
 router.post('/make-snapshot', async (request, response) => {
     try {
-        backupUserSettings(request.user.profile.handle, false);
+        backupUserSettings(request.user.storageHandle || request.user.profile.handle, false);
         response.sendStatus(204);
     } catch (error) {
         console.error(error);
@@ -357,7 +357,7 @@ router.post('/make-snapshot', async (request, response) => {
 
 router.post('/restore-snapshot', getFileNameValidationFunction('name'), async (request, response) => {
     try {
-        const userFilesPattern = getSettingsBackupFilePrefix(request.user.profile.handle);
+        const userFilesPattern = getSettingsBackupFilePrefix(request.user.storageHandle || request.user.profile.handle);
 
         if (!request.body.name || !request.body.name.startsWith(userFilesPattern)) {
             return response.status(400).send({ error: 'Invalid snapshot name' });

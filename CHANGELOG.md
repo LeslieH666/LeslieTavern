@@ -6,11 +6,23 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 
 ### Added
 
+- Four Leslie color palettes (Jade, Iris, Clay, and Slate), each with coordinated light and dark surfaces, accessible chat-bubble contrast, a shared appearance-menu picker, and a settings-page selector saved in the current browser.
+- A dedicated new-chat action for the current character and world line, including multiple reality chats with generated instant-message openings and a line-labelled history picker with confirmed chat deletion.
+- An online-only Moments model picker sourced from configured DeepSeek, OpenAI, OpenRouter, Claude, or Google AI Studio connections, using the account's saved model and credentials without duplicate API fields.
+- A unified chat header with the former composer chat tools grouped under its menu; the unused original-layout toggle and duplicate old chat controls are removed from the visible interface.
+- Purposeful Cupertino motion for direct control feedback, menus, chat changes, newly inserted messages, mobile navigation, and large overlays, with a system Reduce Motion path that removes spatial transforms.
+- A Cupertino design language for the conversation list, chat header, message bubbles, and composer, plus a persistent in-app switch back to the previous classic presentation.
+- A presentation-only design-language preference with unit coverage and a documented pre-refactor Git recovery point.
+- A session-scoped demo mode that switches each account to an isolated `_demo` storage namespace without copying normal chats, characters, memories, or credentials.
 - Persistent Leslie Moments background activity with genuine per-character read receipts, selective AI likes and comments, bounded retry/rate controls, and sidecar storage that leaves the original timeline intact.
 - A persisted three-level Leslie Moments enthusiasm slider that adjusts public-interaction probability, participating character count, and initial response delay while retaining the hourly model-call limit.
 - Threaded Leslie Moments replies that let Personas and AI characters continue conversations across repeated background selections, plus a clickable liker list with character identity and timestamps.
 - Explicit per-character AI publishing permissions for both recently used and library-only characters, with text-only character-authored Moments, frequency controls, optional read-only chat-memory access, and delete-only user moderation.
+- Per-character Moments comment/reply permissions beside the existing publishing controls, with likes remaining available even when a role is muted from conversations.
+- Persona-authored Moments likes and unlikes for AI character posts, with the heart action separated from the clickable liker-count control.
+- Persona-authored Moments replies now stay bound to the Persona that published the post, including a backed-up, idempotent repair for older cross-Persona comment authors.
 - An isolated per-character Moments memory store with Persona/story-scope boundaries, cross-post retrieval, source invalidation, current-chat memory-topic import, and a disabled-by-default future prompt-injection adapter.
+- An independent Moments content-role picker for story ownership and approved-memory topic import, separate from the audience visibility picker.
 - A LeslieTavern system tray with background Moments status, pause/resume controls, window restoration, and an explicit application exit action.
 - Semantic Leslie reply modes that inject a fail-open presentation instruction before foreground character replies without modifying character cards, memories, sampling temperature, or stored chats.
 - Electron desktop workflow and Windows portable-package tooling.
@@ -20,16 +32,22 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 - AIRI chat model gateway with streaming, cancellation, active LeslieTavern model discovery, and stored provider credentials.
 - Authoritative AIRI companion turns that follow the active LeslieTavern character and use its normal card, World Info, Persona, memory, chat persistence, model, and Volcengine voice.
 - Automatic AIRI voice input through LeslieTavern's local speech-recognition model, with no additional API key.
-- Windows launch center for LeslieTavern-only and LeslieTavern + AIRI sessions, including automatic Bridge token generation, AIRI discovery, diagnostics, rebuild, logs, and tracked shutdown.
+- Windows desktop launch orchestration with automatic Bridge token generation, AIRI discovery, diagnostics, rebuild, logs, and tracked shutdown.
 - Leslie chat-menu exports for a CCV3 PNG character card, the current SillyTavern JSONL chat, or a ZIP containing the shareable card and all of that character's JSONL chats.
 - Optional interactive-guidance chat mode that uses the active model, character context, World Info, Persona, and Leslie memory to offer three live replies explicitly authored by the current user Persona while preserving free-form input and ordinary JSONL messages.
 - One-click local Peach 2.0 GGUF setup in Leslie's model-connection settings, with KoboldCpp and llama.cpp endpoints plus 8GB-friendly RP defaults.
 - Character workshop generation can now switch between the existing DeepSeek/current chat API and the local Peach 2.0 KoboldCpp API; local runs stay as an in-memory preview until the user explicitly applies them.
 - Role memory automation can now use a separate DeepSeek API connection with the same OpenAI Chat Completions request format as the chat API.
 - Added an in-memory DeepSeek safety-test workbench that reuses the active character card prompt, runs authorized line-by-line checks, and exports results without writing to normal chats.
+- Added separate story and reality chat lines for solo characters. Reality chats use the device clock and elapsed offline interval, while confirmed memories can cross through the same character only as a two-item, tightly budgeted echo from the opposite line.
+- Reworked reality-line generation around a one-time de-fictionalized personality profile. New reality chats now receive model-generated openings, all foreground replies bypass story-only card fields and World Info, and a strict plain-message validator retries decorated role-play output before anything is stored.
+- Reworked reality-line generation around a one-time de-fictionalized personality profile. New reality chats now receive model-generated openings, all foreground replies bypass story-only card fields and World Info, and a strict plain-message validator retries decorated role-play output before anything is stored.
+- Added a desktop-first two-pane Moments layout with role and world-line navigation, plus a compact single-column mobile fallback.
+- Added Electron-only settings controls for starting and stopping AIRI and the tracked Peach local-model process without exposing process launch over HTTP or LAN access.
 
 ### Changed
 
+- Refined Moments with Cupertino grouped controls, matched like/comment counters, correctly bounded liker avatars, adapted reply/thread UI, selected-first choice lists, complete bound and legacy memory-source discovery, A–B–C or newest-first memory-topic sorting, fixed-layer dialogs that do not shift the desktop timeline, independently editable story visibility, and one read count per character on each post revision.
 - Moments timeline, activity, and queue stores now migrate legacy data through preserved pre-migration copies. Legacy unread posts are scheduled for genuine background reads, while posts with existing reads or comments retain their activity and gain reply support without being replayed.
 - Every authenticated local user has the same reversible delete/restore permission for Persona-authored and AI-authored Moments; only the originating Persona may edit a user post, and AI text cannot be edited.
 - Closing the Electron window now hides LeslieTavern to the system tray so approved Moments activity can continue until the user explicitly exits the process.
@@ -45,14 +63,16 @@ All notable LeslieTavern-specific changes are documented in this file. The forma
 - Separated source-controlled files from local data, runtimes, caches, logs, and backups.
 - Made the local Windows launcher verify the listener resolved from its actual configuration and report available LAN URLs when allowlisted LAN access is explicitly enabled.
 - Simplified the dedicated AIRI frontend to auto-configure Leslie chat and speech, skip onboarding, hide provider and profile choices, and show only connection and display-model settings.
-- Made the combined launcher rebuild AIRI automatically when its source is newer than the existing desktop build.
-- Made the combined launcher build AIRI workspace dependencies before the desktop app, preventing missing package exports after branch switches or clean checkouts.
+- Made the desktop AIRI launch workflow rebuild AIRI automatically when its source is newer than the existing desktop build.
+- Made the desktop AIRI launch workflow build AIRI workspace dependencies before the desktop app, preventing missing package exports after branch switches or clean checkouts.
 - Removed cross-window `DataCloneError` failures from automatic Leslie provider setup.
 - Made character-avatar replacement preserve the existing character card and refresh character state, thumbnails, chat images, and editor previews without stale browser caches.
 - Made AIRI Live2D startup fail open when local IndexedDB hydration stalls, restored the bundled Hiyori model when the companion selection is empty, kept the companion renderer active in the background, and stopped opening DevTools during ordinary local launches.
 - Kept bundled Live2D loading independent of OPFS and moved custom-model cache persistence behind the visible model pipeline so a stalled browser storage backend cannot lock the stage and shortcut controls on “Loading”.
 - Removed the unused eager DuckDB/WASM bootstrap from the character stage; the placeholder initialization consumed hundreds of megabytes and could monopolize the renderer before the Live2D frame became interactive.
 - Made the Windows launcher accept only a complete, successfully stamped AIRI build so a failed partial rebuild cannot mix new main-process code with a stale renderer.
+- Consolidated the root Windows launch surface into `启动 Leslie Heaven.cmd`; AIRI and local-model lifecycle controls now live in LeslieTavern settings.
+- Reality-line entry now reopens the latest matching JSONL and upgrades older metadata in place instead of creating a successor chat. Each deliberate entry produces one non-duplicated proactive greeting before the conversation continues, and reality memory snapshots no longer retain scenario, example-dialogue, or creator-note fields.
 
 ### Security
 

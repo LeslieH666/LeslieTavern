@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Menu', 'Leslie', 'All', 'Stop', 'Doctor', 'Model', 'ModelStop')]
+    [ValidateSet('Menu', 'Leslie', 'All', 'Airi', 'AiriStop', 'Stop', 'Doctor', 'Model', 'ModelStop')]
     [string]$Mode = 'Menu',
     [switch]$RebuildAiri
 )
@@ -322,12 +322,12 @@ function Start-LeslieOnly {
 }
 
 function Start-LocalModelOnly {
-    Write-Section 'Starting local Peach model'
+    Write-Section 'Starting local Qwen3.5 model'
     & $StartLocalModelScript
 }
 
 function Stop-LocalModelOnly {
-    Write-Section 'Stopping local Peach model'
+    Write-Section 'Stopping local Qwen3.5 model'
     & $StopLocalModelScript
 }
 
@@ -376,6 +376,25 @@ function Start-All([bool]$ForceBuild) {
     }
 }
 
+function Start-AiriOnly {
+    Write-Section 'Starting AIRI companion'
+    if (-not (Get-TrackedProcess $LesliePidPath)) {
+        throw 'LeslieTavern must be running before AIRI can be started from settings.'
+    }
+    if (Get-AiriTrackedProcess) {
+        Write-Host 'AIRI is already running.' -ForegroundColor Yellow
+        return
+    }
+    if (-not $env:LESLIE_BRIDGE_TOKEN) {
+        throw 'This LeslieTavern session has no companion token. Restart it with the Leslie Heaven launcher.'
+    }
+    $airiRoot = Resolve-AiriRoot
+    $baseUrl = if ($env:LESLIE_BRIDGE_BASE_URL) { $env:LESLIE_BRIDGE_BASE_URL } else { "http://127.0.0.1:$(Get-LesliePort)/api/leslie/bridge/v1/" }
+    Wait-LeslieBridge $baseUrl $env:LESLIE_BRIDGE_TOKEN
+    Ensure-AiriBuild $airiRoot $false
+    Start-Airi $airiRoot $baseUrl
+}
+
 function Stop-All {
     Write-Section 'Stopping AIRI + LeslieTavern'
     Stop-Airi
@@ -410,8 +429,8 @@ function Show-Menu {
     Write-Host '3. Stop AIRI + LeslieTavern'
     Write-Host '4. Run launcher diagnostics'
     Write-Host '5. Rebuild AIRI, then start both'
-    Write-Host '6. Start local Peach model'
-    Write-Host '7. Stop local Peach model'
+    Write-Host '6. Start local Qwen3.5 model'
+    Write-Host '7. Stop local Qwen3.5 model'
     Write-Host '0. Exit'
     $selection = Read-Host 'Select an option'
 
@@ -432,6 +451,8 @@ switch ($Mode) {
     'Menu' { Show-Menu }
     'Leslie' { Start-LeslieOnly }
     'All' { Start-All ([bool]$RebuildAiri) }
+    'Airi' { Start-AiriOnly }
+    'AiriStop' { Stop-Airi }
     'Stop' { Stop-All }
     'Doctor' { Show-Doctor }
     'Model' { Start-LocalModelOnly }

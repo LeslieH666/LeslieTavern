@@ -2,12 +2,15 @@ import { jest } from '@jest/globals';
 import {
     LESLIE_LOCAL_MODEL,
     LESLIE_LOCAL_ROLEPLAY_GUIDANCE,
+    LESLIE_QWEN_ROLEPLAY_GUIDANCE,
     cleanLeslieLocalRoleplayOutput,
     detectLeslieLocalModel,
     getLeslieLocalRuntime,
     getLeslieLocalRuntimeKeys,
     getLeslieLocalSettings,
+    isLeslieQwenRoleplayModel,
     isLocalModelLoadingEnabled,
+    probeLeslieLocalRuntime,
     setLocalModelLoadingEnabled,
 } from '../public/scripts/leslie-local-model-core.js';
 
@@ -27,12 +30,14 @@ describe('Leslie local model setup', () => {
         expect(settings.context).toBe(8192);
         expect(settings.responseTokens).toBe(384);
         expect(settings.generation.streaming).toBe(true);
-        expect(settings.generation.temp).toBe(0.65);
+        expect(settings.generation.temp).toBe(0.7);
         expect(settings.generation.top_p).toBe(0.8);
-        expect(settings.generation.min_p).toBe(0.04);
-        expect(settings.generation.rep_pen).toBe(1.06);
+        expect(settings.generation.min_p).toBe(0);
+        expect(settings.generation.rep_pen).toBe(1.05);
         expect(settings.generation.include_reasoning).toBe(false);
-        expect(LESLIE_LOCAL_MODEL.modelPath).toContain('Peach-2.0-9B-8k-Roleplay.Q4_K_M.gguf');
+        expect(LESLIE_LOCAL_MODEL.modelPath).toContain('Qwen3.5-text-9B-NSFW-RP-RolePlay.Q4_K_M.gguf');
+        expect(isLeslieQwenRoleplayModel('koboldcpp/Qwen3.5-text-9B-NSFW-RP-RolePlay.Q4_K_M.gguf')).toBe(true);
+        expect(getLeslieLocalSettings('koboldcpp', 'Peach-2.0-9B-8k-Roleplay').generation.temp).toBe(0.65);
     });
 
     test('includes a focused roleplay guidance contract for the adapted model', () => {
@@ -43,12 +48,18 @@ describe('Leslie local model setup', () => {
         expect(LESLIE_LOCAL_ROLEPLAY_GUIDANCE).toContain('不要替用户决定行动、情绪或台词');
     });
 
-    test('detects the adapted Peach model from a running local runtime', async () => {
+    test('guides Qwen toward card fidelity without banning in-character questions', () => {
+        expect(LESLIE_QWEN_ROLEPLAY_GUIDANCE).toContain('角色卡中的身份');
+        expect(LESLIE_QWEN_ROLEPLAY_GUIDANCE).toContain('只有角色确实需要信息时才提问');
+        expect(LESLIE_QWEN_ROLEPLAY_GUIDANCE).not.toContain('不含问号');
+    });
+
+    test('detects Qwen3.5 from the OpenAI-compatible model-list API', async () => {
         const fetchImpl = jest.fn(async url => {
             if (url === 'http://127.0.0.1:5001/v1/models') {
                 return {
                     ok: true,
-                    json: async () => ({ data: [{ id: 'Peach-2.0-9B-8k-Roleplay.Q4_K_M.gguf' }] }),
+                    json: async () => ({ data: [{ id: 'Qwen3.5-text-9B-NSFW-RP-RolePlay.Q4_K_M.gguf' }] }),
                 };
             }
             return { ok: false, json: async () => ({}) };
@@ -58,10 +69,33 @@ describe('Leslie local model setup', () => {
             runtime: 'koboldcpp',
             apiType: 'koboldcpp',
             endpoint: 'http://127.0.0.1:5001',
-            model: 'Peach-2.0-9B-8k-Roleplay.Q4_K_M.gguf',
+            model: 'Qwen3.5-text-9B-NSFW-RP-RolePlay.Q4_K_M.gguf',
         });
         expect(fetchImpl).toHaveBeenCalledWith('http://127.0.0.1:5001/v1/models', expect.objectContaining({ method: 'GET' }));
         expect(fetchImpl).toHaveBeenCalledWith('http://127.0.0.1:8080/v1/models', expect.objectContaining({ method: 'GET' }));
+    });
+
+    test('keeps the previous Peach model detectable as a fallback', async () => {
+        const fetchImpl = jest.fn(async () => ({
+            ok: true,
+            json: async () => ({ data: [{ id: 'Peach-2.0-9B-8k-Roleplay.Q4_K_M.gguf' }] }),
+        }));
+        await expect(detectLeslieLocalModel({ fetchImpl })).resolves.toMatchObject({
+            model: 'Peach-2.0-9B-8k-Roleplay.Q4_K_M.gguf',
+        });
+    });
+
+    test('prefers Qwen when one runtime lists both local models', async () => {
+        const fetchImpl = jest.fn(async () => ({
+            ok: true,
+            json: async () => ({ data: [
+                { id: 'Peach-2.0-9B-8k-Roleplay.Q4_K_M.gguf' },
+                { id: 'Qwen3.5-text-9B-NSFW-RP-RolePlay.Q4_K_M.gguf' },
+            ] }),
+        }));
+        await expect(detectLeslieLocalModel({ fetchImpl })).resolves.toMatchObject({
+            model: 'Qwen3.5-text-9B-NSFW-RP-RolePlay.Q4_K_M.gguf',
+        });
     });
 
     test('does not identify an unrelated local model as the adapted model', async () => {
@@ -71,6 +105,19 @@ describe('Leslie local model setup', () => {
         }));
 
         await expect(detectLeslieLocalModel({ fetchImpl, timeoutMs: 100 })).resolves.toBeNull();
+    });
+
+    test('accepts another GGUF model reported by the managed runtime', async () => {
+        const fetchImpl = jest.fn(async () => ({
+            ok: true,
+            json: async () => ({ data: [{ id: 'another-roleplay-model.gguf' }] }),
+        }));
+        await expect(probeLeslieLocalRuntime('koboldcpp', { fetchImpl })).resolves.toMatchObject({
+            runtime: 'koboldcpp',
+            models: ['another-roleplay-model.gguf'],
+        });
+        await expect(probeLeslieLocalRuntime('unknown', { fetchImpl })).resolves.toBeNull();
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
     });
 
     test('stores a reversible local-model loading gate independently of model settings', () => {

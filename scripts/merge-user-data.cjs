@@ -123,9 +123,11 @@ function mergeRegistry(developmentFile, portableFile) {
     };
 }
 
-function mergeSecrets(developmentFile, portableFile) {
-    const development = readJson(developmentFile);
-    const portable = readJson(portableFile);
+async function mergeSecrets(developmentFile, portableFile) {
+    const { getDefaultSecretProtector, parseSecretDocument, serializeSecretDocument } = await import('../src/secret-protection.js');
+    const protector = getDefaultSecretProtector();
+    const development = parseSecretDocument(fs.readFileSync(developmentFile, 'utf8'), protector).secrets;
+    const portable = parseSecretDocument(fs.readFileSync(portableFile, 'utf8'), protector).secrets;
     let imported = 0;
 
     for (const [key, portableEntries] of Object.entries(portable)) {
@@ -158,7 +160,9 @@ function mergeSecrets(developmentFile, portableFile) {
         }
     }
 
-    writeJsonAtomic(developmentFile, development);
+    const temporary = `${developmentFile}.merge-${process.pid}.tmp`;
+    fs.writeFileSync(temporary, serializeSecretDocument(development, protector), 'utf8');
+    fs.renameSync(temporary, developmentFile);
     return imported;
 }
 
@@ -269,60 +273,67 @@ function validateCharacterPngs(root) {
     return files;
 }
 
-const { development, portable } = parseArguments(process.argv.slice(2));
-assertDataRoot(development, 'Development');
-assertDataRoot(portable, 'Portable');
+async function main() {
+    const { development, portable } = parseArguments(process.argv.slice(2));
+    assertDataRoot(development, 'Development');
+    assertDataRoot(portable, 'Portable');
 
-const portableFiles = listFiles(portable);
-let copiedMissingFiles = 0;
-for (const source of portableFiles) {
-    const relative = path.relative(portable, source);
-    const target = path.join(development, relative);
-    if (!fs.existsSync(target)) {
-        copyFilePreservingTimes(source, target);
-        copiedMissingFiles += 1;
+    const portableFiles = listFiles(portable);
+    let copiedMissingFiles = 0;
+    for (const source of portableFiles) {
+        const relative = path.relative(portable, source);
+        const target = path.join(development, relative);
+        if (!fs.existsSync(target)) {
+            copyFilePreservingTimes(source, target);
+            copiedMissingFiles += 1;
+        }
     }
+
+    const userRelative = 'default-user';
+    const developmentUser = path.join(development, userRelative);
+    const portableUser = path.join(portable, userRelative);
+    const registry = mergeRegistry(
+        path.join(developmentUser, 'leslie', 'identity', 'registry.json'),
+        path.join(portableUser, 'leslie', 'identity', 'registry.json'),
+    );
+    const importedSecrets = await mergeSecrets(
+        path.join(developmentUser, 'secrets.json'),
+        path.join(portableUser, 'secrets.json'),
+    );
+    const importedVoiceMappings = mergeSettings(
+        path.join(developmentUser, 'settings.json'),
+        path.join(portableUser, 'settings.json'),
+    );
+    mergeStats(
+        path.join(developmentUser, 'stats.json'),
+        path.join(portableUser, 'stats.json'),
+    );
+
+    const seraphinaRelative = path.join(
+        'default-user',
+        'chats',
+        'default_Seraphina',
+        'Seraphina - 2023-5-12 @21h 32m 29s 224ms.jsonl',
+    );
+    copyFilePreservingTimes(
+        path.join(portable, seraphinaRelative),
+        path.join(development, seraphinaRelative),
+    );
+
+    const jsonLines = validateJsonLines(development);
+    const characterPngs = validateCharacterPngs(development);
+
+    console.log(JSON.stringify({
+        copiedMissingFiles,
+        importedSecrets,
+        importedVoiceMappings,
+        registry,
+        jsonLines,
+        characterPngs,
+    }, null, 2));
 }
 
-const userRelative = 'default-user';
-const developmentUser = path.join(development, userRelative);
-const portableUser = path.join(portable, userRelative);
-const registry = mergeRegistry(
-    path.join(developmentUser, 'leslie', 'identity', 'registry.json'),
-    path.join(portableUser, 'leslie', 'identity', 'registry.json'),
-);
-const importedSecrets = mergeSecrets(
-    path.join(developmentUser, 'secrets.json'),
-    path.join(portableUser, 'secrets.json'),
-);
-const importedVoiceMappings = mergeSettings(
-    path.join(developmentUser, 'settings.json'),
-    path.join(portableUser, 'settings.json'),
-);
-mergeStats(
-    path.join(developmentUser, 'stats.json'),
-    path.join(portableUser, 'stats.json'),
-);
-
-const seraphinaRelative = path.join(
-    'default-user',
-    'chats',
-    'default_Seraphina',
-    'Seraphina - 2023-5-12 @21h 32m 29s 224ms.jsonl',
-);
-copyFilePreservingTimes(
-    path.join(portable, seraphinaRelative),
-    path.join(development, seraphinaRelative),
-);
-
-const jsonLines = validateJsonLines(development);
-const characterPngs = validateCharacterPngs(development);
-
-console.log(JSON.stringify({
-    copiedMissingFiles,
-    importedSecrets,
-    importedVoiceMappings,
-    registry,
-    jsonLines,
-    characterPngs,
-}, null, 2));
+void main().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+});

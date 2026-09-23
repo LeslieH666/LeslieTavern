@@ -23,6 +23,7 @@ import { getContentOfType } from './endpoints/content-manager.js';
 import { serverDirectory } from './server-directory.js';
 import { filterValidIpPatterns, getIpFromRequest } from './express-common.js';
 import { extensionsEnabledFeatureGuard } from './endpoints/extensions.js';
+import { resolveLeslieSessionStorage, resolveLeslieStorageRoot } from './leslie-demo-mode.js';
 
 export const KEY_PREFIX = 'user:';
 const AVATAR_PREFIX = 'avatar:';
@@ -119,14 +120,21 @@ export async function ensurePublicDirectoriesExist() {
 
     const userHandles = await getAllUserHandles();
     const directoriesList = userHandles.map(handle => getUserDirectories(handle));
-    for (const userDirectories of directoriesList) {
-        for (const dir of Object.values(userDirectories)) {
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true });
-            }
+    directoriesList.forEach(ensureUserDirectoriesExist);
+    return directoriesList;
+}
+
+/**
+ * Ensures that every directory for one storage namespace exists.
+ * @param {UserDirectoryList} userDirectories User or demo directories.
+ * @returns {void}
+ */
+export function ensureUserDirectoriesExist(userDirectories) {
+    for (const dir of Object.values(userDirectories)) {
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
         }
     }
-    return directoriesList;
 }
 
 /**
@@ -689,8 +697,9 @@ export function getUserDirectories(handle) {
     }
 
     const directories = structuredClone(USER_DIRECTORY_TEMPLATE);
+    const storageRoot = resolveLeslieStorageRoot(globalThis.DATA_ROOT, handle);
     for (const key in directories) {
-        directories[key] = path.join(globalThis.DATA_ROOT, handle, USER_DIRECTORY_TEMPLATE[key]);
+        directories[key] = path.join(storageRoot, USER_DIRECTORY_TEMPLATE[key]);
     }
     DIRECTORIES_CACHE.set(handle, directories);
     return directories;
@@ -956,10 +965,13 @@ export async function setUserDataMiddleware(request, response, next) {
     // If user accounts are disabled, use the default user
     if (!ENABLE_ACCOUNTS) {
         const handle = DEFAULT_USER.handle;
-        const directories = getUserDirectories(handle);
+        const { demoMode, storageHandle } = resolveLeslieSessionStorage(request.session, handle);
+        const directories = getUserDirectories(storageHandle);
         request.user = {
             profile: DEFAULT_USER,
-            directories: directories,
+            directories,
+            storageHandle,
+            demoMode,
         };
         return next();
     }
@@ -1004,10 +1016,13 @@ export async function setUserDataMiddleware(request, response, next) {
         request.session.version = getAccountVersion(user);
     }
 
-    const directories = getUserDirectories(handle);
+    const { demoMode, storageHandle } = resolveLeslieSessionStorage(request.session, handle);
+    const directories = getUserDirectories(storageHandle);
     request.user = {
         profile: user,
-        directories: directories,
+        directories,
+        storageHandle,
+        demoMode,
     };
 
     // Touch the session if loading the home page

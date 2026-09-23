@@ -99,8 +99,8 @@ body.leslie-moments-page-open {
 .leslie-moments-header button,
 .leslie-moments-audience-dialog header button {
     display: grid;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     place-items: center;
     color: var(--tg-text-secondary, #9aabba);
@@ -163,10 +163,203 @@ body.leslie-moments-page-open {
 
 .leslie-moments-main {
     position: relative;
+    overflow: hidden;
+    min-height: 0;
+    padding: 0;
+    scroll-behavior: smooth;
+}
+
+.leslie-moments-desktop-layout {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    grid-template-columns: clamp(250px, 23vw, 320px) minmax(0, 1fr);
+}
+
+.leslie-moments-rail {
+    display: flex;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+    padding: 18px 12px 14px;
+    flex-direction: column;
+    gap: 14px;
+    color: var(--tg-text-primary, #f5f5f5);
+    background: var(--tg-layer-1, #17212b);
+    border-right: 1px solid var(--tg-border, rgb(255 255 255 / 8%));
+    box-sizing: border-box;
+}
+
+.leslie-moments-rail-persona {
+    display: grid;
+    min-height: 54px;
+    padding: 6px 8px;
+    grid-template-columns: 44px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+}
+
+.leslie-moments-rail-persona > span,
+.leslie-moments-rail-roles button > span:last-child {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+
+.leslie-moments-rail-persona strong,
+.leslie-moments-rail-roles strong {
+    overflow: hidden;
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leslie-moments-rail-persona small,
+.leslie-moments-rail-roles small {
+    overflow: hidden;
+    color: var(--tg-text-secondary, #9aabba);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leslie-moments-rail-compose {
+    display: flex;
+    min-height: 44px;
+    padding: 0 14px;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    color: #fff;
+    background: var(--tg-accent, #3390ec);
+    border: 0;
+    border-radius: 11px;
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--tg-accent, #3390ec) 24%, transparent);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.leslie-moments-rail-nav,
+.leslie-moments-rail-roles {
+    display: grid;
+    min-width: 0;
+    gap: 4px;
+}
+
+.leslie-moments-rail-nav > span,
+.leslie-moments-rail-roles > div:first-child > span {
+    padding: 0 9px 5px;
+    color: var(--tg-text-tertiary, #7f91a4);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+.leslie-moments-rail-nav button,
+.leslie-moments-rail-roles button {
+    display: grid;
+    width: 100%;
+    min-height: 42px;
+    padding: 6px 9px;
+    grid-template-columns: 32px minmax(0, 1fr);
+    align-items: center;
+    gap: 9px;
+    color: var(--tg-text-secondary, #9aabba);
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-radius: 10px;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+.leslie-moments-rail-nav button > i,
+.leslie-moments-role-all {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    color: var(--tg-text-secondary, #9aabba);
+    background: color-mix(in srgb, var(--tg-text-primary, #f5f5f5) 6%, transparent);
+    border-radius: 9px;
+}
+
+.leslie-moments-rail-nav button:hover,
+.leslie-moments-rail-nav button:focus-visible,
+.leslie-moments-rail-roles button:hover,
+.leslie-moments-rail-roles button:focus-visible,
+.leslie-moments-rail-nav button.is-active,
+.leslie-moments-rail-roles button.is-active {
+    color: var(--tg-text-primary, #f5f5f5);
+    background: color-mix(in srgb, var(--tg-accent, #3390ec) 13%, transparent);
+    outline: none;
+}
+
+.leslie-moments-rail-nav button.is-active > i,
+.leslie-moments-rail-roles button.is-active .leslie-moments-role-all {
+    color: #fff;
+    background: var(--tg-accent, #3390ec);
+}
+
+.leslie-moments-rail-roles {
     overflow: auto;
     min-height: 0;
-    padding: 22px max(18px, calc((100vw - 760px) / 2)) 72px;
+    padding-right: 2px;
+    align-content: start;
+}
+
+.leslie-moments-rail-roles > div:first-child {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.leslie-moments-rail-roles > div:first-child small {
+    padding-right: 8px;
+}
+
+.leslie-moments-rail-foot {
+    display: flex;
+    margin-top: auto;
+    padding: 10px 8px 2px;
+    align-items: center;
+    gap: 7px;
+    color: var(--tg-text-tertiary, #7f91a4);
+    border-top: 1px solid var(--tg-border, rgb(255 255 255 / 8%));
+    font-size: 9px;
+}
+
+.leslie-moments-rail-foot i {
+    color: var(--tg-accent, #3390ec);
+}
+
+.leslie-moments-content-pane {
+    overflow: auto;
+    min-width: 0;
+    min-height: 0;
     scroll-behavior: smooth;
+}
+
+.leslie-moments-content-inner {
+    width: 100%;
+    max-width: 980px;
+    min-height: 100%;
+    margin: 0 auto;
+    padding: 22px clamp(18px, 3vw, 42px) 72px;
+    box-sizing: border-box;
+}
+
+.leslie-moments-dialog-host {
+    position: fixed;
+    z-index: 10;
+    inset: 0;
+    pointer-events: none;
+}
+
+.leslie-moments-dialog-host > * {
+    pointer-events: auto;
 }
 
 .leslie-moments-notice,
@@ -345,7 +538,7 @@ body.leslie-moments-page-open {
 .leslie-moments-composer,
 .leslie-moments-timeline {
     width: 100%;
-    max-width: 760px;
+    max-width: 900px;
     margin: 0 auto;
     box-sizing: border-box;
 }
@@ -380,6 +573,89 @@ body.leslie-moments-page-open {
 .leslie-moments-timeline-title small {
     color: var(--tg-text-secondary, #9aabba);
     font-size: 11px;
+}
+
+.leslie-moments-content-source {
+    display: grid;
+    margin-top: 14px;
+    overflow: hidden;
+    background: var(--tg-layer-2, #182533);
+    border: 1px solid var(--tg-border, rgb(255 255 255 / 8%));
+    border-radius: 12px;
+}
+
+.leslie-moments-content-source > div {
+    display: flex;
+    min-height: 44px;
+    padding: 8px 11px;
+    align-items: center;
+    gap: 9px;
+    border-bottom: 1px solid var(--tg-border-soft, rgb(255 255 255 / 5%));
+}
+
+.leslie-moments-content-source > div > span:first-child {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    place-items: center;
+    color: #fff;
+    background: var(--tg-accent, #3390ec);
+    border-radius: 8px;
+    font-size: 12px;
+}
+
+.leslie-moments-content-source > div > span:last-child,
+.leslie-moments-content-source-copy {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+
+.leslie-moments-content-source small,
+.leslie-moments-content-source-copy small {
+    overflow: hidden;
+    color: var(--tg-text-secondary, #9aabba);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leslie-moments-content-source > button {
+    display: grid;
+    min-height: 58px;
+    padding: 8px 11px;
+    grid-template-columns: 38px minmax(0, 1fr) 18px;
+    align-items: center;
+    gap: 9px;
+    color: var(--tg-text-primary, #f5f5f5);
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+.leslie-moments-content-source > button:hover,
+.leslie-moments-content-source > button:focus-visible {
+    background: color-mix(in srgb, var(--tg-text-primary, #f5f5f5) 5%, transparent);
+    outline: none;
+}
+
+.leslie-moments-content-source > button > i:last-child {
+    color: var(--tg-text-tertiary, #7f91a4);
+    font-size: 10px;
+}
+
+.leslie-moments-source-placeholder {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    color: var(--tg-accent, #3390ec);
+    background: color-mix(in srgb, var(--tg-accent, #3390ec) 12%, transparent);
+    border-radius: 50%;
 }
 
 .leslie-moments-avatar {
@@ -421,7 +697,7 @@ body.leslie-moments-page-open {
 .leslie-moments-mode-picker button {
     display: flex;
     min-width: 0;
-    min-height: 42px;
+    min-height: 44px;
     padding: 8px 10px;
     align-items: center;
     justify-content: center;
@@ -529,7 +805,7 @@ body.leslie-moments-page-open {
     display: flex;
     overflow: hidden;
     min-width: 0;
-    min-height: 38px;
+    min-height: 44px;
     margin-right: auto;
     padding: 7px 10px;
     align-items: center;
@@ -560,7 +836,7 @@ body.leslie-moments-page-open {
 
 .leslie-moments-button {
     display: inline-flex;
-    min-height: 38px;
+    min-height: 44px;
     padding: 8px 14px;
     align-items: center;
     justify-content: center;
@@ -825,6 +1101,29 @@ body.leslie-moments-page-open {
     font-size: 10px;
 }
 
+.leslie-moments-reactions > .leslie-moments-like-button,
+.leslie-moments-reactions > .leslie-moments-like-count-button,
+.leslie-moments-reactions > .leslie-moments-comment-count {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 32px;
+    padding: 4px 9px;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    color: var(--tg-text-tertiary, #7f91a4);
+    background: color-mix(in srgb, var(--tg-text-primary, #f5f5f5) 6%, transparent);
+    border: 0;
+    border-radius: 999px;
+    box-shadow: none;
+    font-size: 10px;
+    line-height: 1;
+}
+
+.leslie-moments-reactions > .leslie-moments-like-button {
+    min-width: 58px;
+}
+
 .leslie-moments-reactions .leslie-moments-read-receipt {
     color: var(--tg-accent, #3390ec);
 }
@@ -834,6 +1133,8 @@ body.leslie-moments-page-open {
 }
 
 .leslie-moments-post-actions button {
+    min-width: 44px;
+    min-height: 44px;
     cursor: pointer;
 }
 
@@ -848,98 +1149,211 @@ body.leslie-moments-page-open {
     color: var(--tg-danger, #ef6b73);
 }
 
-.leslie-moments-reactions .leslie-moments-like-button {
-    border: 0;
-    background: transparent;
-    color: inherit;
+.leslie-moments-reactions .leslie-moments-like-button,
+.leslie-moments-reactions .leslie-moments-like-count-button {
     cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0;
 }
 
+.leslie-moments-reactions .leslie-moments-like-button.is-liked,
 .leslie-moments-reactions .leslie-moments-like-button:hover,
 .leslie-moments-reactions .leslie-moments-like-button:focus-visible {
     color: #ef476f;
+    background: color-mix(in srgb, #ef476f 12%, transparent);
+    outline: none;
+}
+
+.leslie-moments-reactions .leslie-moments-like-count-button:hover,
+.leslie-moments-reactions .leslie-moments-like-count-button:focus-visible {
+    color: var(--tg-accent, #3390ec);
+    background: color-mix(in srgb, var(--tg-accent, #3390ec) 10%, transparent);
+    outline: none;
+}
+
+.leslie-moments-reactions .leslie-moments-like-button:disabled {
+    cursor: default;
+    opacity: 0.55;
 }
 
 .leslie-moments-comment strong span {
-    color: var(--SmartThemeQuoteColor);
+    color: var(--tg-text-secondary, #9aabba);
     font-weight: 500;
 }
 
-.leslie-moments-comment button {
+.leslie-moments-comment-meta {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.leslie-moments-comment-meta button {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px 9px;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
     border: 0;
-    background: transparent;
-    color: var(--SmartThemeQuoteColor);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--tg-accent, #3390ec) 10%, transparent);
+    color: var(--tg-accent, #3390ec);
     cursor: pointer;
-    padding: 0.2rem 0;
+    font-size: 10px;
+    font-weight: 650;
+    box-shadow: none;
+}
+
+.leslie-moments-comment-meta button:hover,
+.leslie-moments-comment-meta button:focus-visible {
+    background: color-mix(in srgb, var(--tg-accent, #3390ec) 18%, transparent);
+    outline: 2px solid color-mix(in srgb, var(--tg-accent, #3390ec) 32%, transparent);
+    outline-offset: -2px;
 }
 
 .leslie-moments-reply-form {
-    border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 65%, transparent);
-    padding: 0.75rem 0 0;
+    display: grid;
+    padding: 10px;
+    gap: 8px;
+    background: var(--tg-layer-2, #182533);
+    border: 1px solid var(--tg-border, rgb(255 255 255 / 8%));
+    border-radius: 13px;
 }
 
-.leslie-moments-reply-form label,
-.leslie-moments-reply-form textarea {
+.leslie-moments-reply-context {
+    display: grid;
+    min-height: 44px;
+    padding-left: 8px;
+    grid-template-columns: 20px minmax(0, 1fr) 44px;
+    align-items: center;
+    gap: 6px;
+    color: var(--tg-text-secondary, #9aabba);
+    border-left: 3px solid var(--tg-accent, #3390ec);
+    font-size: 10px;
+}
+
+.leslie-moments-reply-context > i,
+.leslie-moments-reply-context strong {
+    color: var(--tg-accent, #3390ec);
+}
+
+.leslie-moments-reply-context button {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    place-items: center;
+    color: var(--tg-text-secondary, #9aabba);
+    background: transparent;
+    border: 0;
+    border-radius: 50%;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+.leslie-moments-reply-context button:hover,
+.leslie-moments-reply-context button:focus-visible {
+    color: var(--tg-text-primary, #f5f5f5);
+    background: color-mix(in srgb, var(--tg-text-primary, #f5f5f5) 8%, transparent);
+    outline: none;
+}
+
+.leslie-moments-reply-composer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    align-items: end;
+    gap: 8px;
+}
+
+.leslie-moments-reply-composer label,
+.leslie-moments-reply-composer textarea {
     display: block;
     width: 100%;
 }
 
-.leslie-moments-reply-form textarea {
-    margin-top: 0.4rem;
+.leslie-moments-reply-composer textarea {
+    min-height: 44px;
+    max-height: 132px;
+    margin: 0;
+    padding: 11px 13px;
     resize: vertical;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 10px;
-    background: var(--SmartThemeBlurTintColor);
-    color: var(--SmartThemeBodyColor);
-    padding: 0.65rem;
+    color: var(--tg-text-primary, #f5f5f5);
+    background: var(--tg-layer-raised, #223043);
+    border: 1px solid var(--tg-border-strong, rgb(255 255 255 / 14%));
+    border-radius: 18px;
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.45;
 }
 
-.leslie-moments-reply-form > div,
+.leslie-moments-reply-composer textarea:focus {
+    border-color: var(--tg-accent, #3390ec);
+    outline: 2px solid color-mix(in srgb, var(--tg-accent, #3390ec) 22%, transparent);
+    outline-offset: -2px;
+}
+
+.leslie-moments-reply-send {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    place-items: center;
+    color: #fff;
+    background: var(--tg-accent, #3390ec);
+    border: 0;
+    border-radius: 50%;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+.leslie-moments-reply-send:disabled {
+    color: var(--tg-text-tertiary, #7f91a4);
+    background: color-mix(in srgb, var(--tg-text-secondary, #9aabba) 14%, transparent);
+    cursor: default;
+}
+
 .leslie-moments-memory-import {
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    gap: 0.6rem;
-    margin-top: 0.55rem;
+    gap: 8px;
+    margin-top: 8px;
 }
 
 .leslie-moments-memory-import > span {
-    color: var(--SmartThemeQuoteColor);
-    font-size: 0.85rem;
+    color: var(--tg-text-secondary, #9aabba);
+    font-size: 10px;
 }
 
 .leslie-moments-publisher-control {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 1rem;
-    padding: 0.9rem 1rem;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, transparent);
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--tg-border, rgb(255 255 255 / 8%));
+    border-radius: 13px;
+    background: var(--tg-layer-1, #17212b);
 }
 
 .leslie-moments-publisher-control > span,
 .leslie-moments-publisher-control > span > span {
     display: flex;
     align-items: center;
-    gap: 0.7rem;
+    gap: 10px;
 }
 
 .leslie-moments-publisher-control > span > span {
     align-items: flex-start;
     flex-direction: column;
-    gap: 0.15rem;
+    gap: 2px;
 }
 
 .leslie-moments-publisher-control small,
 .leslie-moments-publisher-list small,
 .leslie-moments-like-list small {
-    color: var(--SmartThemeQuoteColor);
+    color: var(--tg-text-secondary, #9aabba);
 }
 
 .leslie-moments-compact-dialog {
@@ -950,7 +1364,7 @@ body.leslie-moments-page-open {
 .leslie-moments-publisher-list,
 .leslie-moments-memory-list {
     overflow: auto;
-    padding: 0.8rem 1rem;
+    padding: 10px 14px;
 }
 
 .leslie-moments-like-list > div,
@@ -958,18 +1372,26 @@ body.leslie-moments-page-open {
 .leslie-moments-memory-list label {
     display: flex;
     align-items: center;
-    gap: 0.7rem;
-    padding: 0.65rem 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 60%, transparent);
+    min-height: 52px;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--tg-border-soft, rgb(255 255 255 / 5%));
 }
 
-.leslie-moments-like-list > div > span,
+.leslie-moments-like-list > div > .leslie-moments-like-copy,
 .leslie-moments-publisher-list article > div,
 .leslie-moments-memory-list label > span {
     display: flex;
     min-width: 0;
     flex: 1;
     flex-direction: column;
+}
+
+.leslie-moments-like-list > div > .leslie-moments-avatar {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    aspect-ratio: 1;
 }
 
 .leslie-moments-like-list .fa-heart {
@@ -980,10 +1402,66 @@ body.leslie-moments-page-open {
     width: min(900px, 96vw);
 }
 
+.leslie-moments-online-model {
+    display: grid;
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto 14px;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: end;
+    gap: 8px 14px;
+    padding: 13px 15px;
+    color: var(--tg-text-secondary, #9aabba);
+    background: var(--tg-layer-1, #17212b);
+    border: 1px solid var(--tg-border, rgb(255 255 255 / 8%));
+    border-radius: 12px;
+    box-sizing: border-box;
+}
+
+.leslie-moments-online-model > div,
+.leslie-moments-online-model-status {
+    grid-column: 1 / -1;
+}
+
+.leslie-moments-online-model > div {
+    display: grid;
+    gap: 3px;
+}
+
+.leslie-moments-online-model small {
+    color: var(--tg-text-tertiary, #7f91a4);
+}
+
+.leslie-moments-online-model > label {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.leslie-moments-online-model select {
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 10px;
+    color: var(--tg-text-primary, #f5f5f5);
+    background: var(--tg-layer-1, #152131);
+    border: 1px solid var(--tg-border-strong, rgb(255 255 255 / 14%));
+    border-radius: 9px;
+}
+
+@media (max-width: 700px) {
+    .leslie-moments-online-model {
+        grid-template-columns: 1fr;
+    }
+}
+
 .leslie-moments-global-publisher {
     display: flex;
-    gap: 0.7rem;
-    padding: 1rem;
+    min-height: 54px;
+    gap: 10px;
+    padding: 12px 14px;
+    align-items: center;
+    background: var(--tg-layer-2, #182533);
+    border-bottom: 1px solid var(--tg-border, rgb(255 255 255 / 8%));
 }
 
 .leslie-moments-global-publisher > span {
@@ -993,15 +1471,80 @@ body.leslie-moments-page-open {
 
 .leslie-moments-publisher-list article {
     display: grid;
-    grid-template-columns: auto minmax(140px, 1fr) auto auto auto;
+    grid-template-columns: auto minmax(140px, 1fr) auto auto auto auto;
 }
 
 .leslie-moments-publisher-list select {
     min-width: 90px;
+    min-height: 36px;
+    color: var(--tg-text-primary, #f5f5f5);
+    background: var(--tg-layer-2, #182533);
+    border: 1px solid var(--tg-border-strong, rgb(255 255 255 / 14%));
+    border-radius: 9px;
 }
 
 .leslie-moments-memory-list label {
+    position: relative;
     cursor: pointer;
+}
+
+.leslie-moments-memory-list label > i {
+    display: grid;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    place-items: center;
+    color: transparent;
+    border: 1px solid var(--tg-border-strong, rgb(255 255 255 / 18%));
+    border-radius: 50%;
+    font-size: 10px;
+}
+
+.leslie-moments-memory-list label:has(input:checked) > i {
+    color: #fff;
+    background: var(--tg-accent, #3390ec);
+    border-color: var(--tg-accent, #3390ec);
+}
+
+.leslie-moments-memory-list input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.leslie-moments-memory-sort {
+    display: grid;
+    margin: 10px 14px 0;
+    padding: 3px;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px;
+    background: color-mix(in srgb, var(--tg-layer-2, #182533) 90%, transparent);
+    border: 1px solid var(--tg-border, rgb(255 255 255 / 8%));
+    border-radius: 10px;
+}
+
+.leslie-moments-memory-sort button {
+    min-height: 44px;
+    padding: 7px 10px;
+    color: var(--tg-text-secondary, #9aabba);
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    box-shadow: none;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.leslie-moments-memory-sort button.is-active {
+    color: var(--tg-text-primary, #f5f5f5);
+    background: var(--tg-layer-raised, #223043);
+    box-shadow: 0 1px 4px rgb(0 0 0 / 16%);
+    font-weight: 650;
+}
+
+.leslie-moments-memory-sort button:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--tg-accent, #3390ec) 45%, transparent);
+    outline-offset: -2px;
 }
 
 @media (max-width: 700px) {
@@ -1088,6 +1631,7 @@ body.leslie-moments-page-open {
     place-items: center;
     background: rgb(5 10 16 / 56%);
     backdrop-filter: blur(5px);
+    overscroll-behavior: contain;
 }
 
 .leslie-moments-audience-dialog {
@@ -1101,6 +1645,32 @@ body.leslie-moments-page-open {
     border: 1px solid var(--tg-border, rgb(255 255 255 / 8%));
     border-radius: 15px;
     box-shadow: 0 22px 70px rgb(0 0 0 / 34%);
+    animation: leslie-moments-dialog-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    overscroll-behavior: contain;
+}
+
+.leslie-moments-audience-dialog.leslie-moments-publisher-dialog {
+    width: min(820px, 100%);
+}
+
+.leslie-moments-source-dialog {
+    grid-template-rows: auto auto minmax(120px, 1fr) auto;
+}
+
+.leslie-moments-memory-dialog {
+    grid-template-rows: auto auto minmax(120px, 1fr) auto;
+}
+
+@keyframes leslie-moments-dialog-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.985);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .leslie-moments-audience-dialog > header {
@@ -1186,7 +1756,7 @@ body.leslie-moments-page-open {
 
 .leslie-moments-audience-search {
     display: grid;
-    min-height: 42px;
+    min-height: 44px;
     margin: 0 12px 8px;
     padding: 0 11px;
     grid-template-columns: 22px minmax(0, 1fr);
@@ -1216,6 +1786,7 @@ body.leslie-moments-page-open {
 .leslie-moments-audience-list {
     overflow: auto;
     padding: 0 12px 8px;
+    overscroll-behavior: contain;
 }
 
 .leslie-moments-audience-list.is-disabled {
@@ -1235,6 +1806,15 @@ body.leslie-moments-page-open {
 
 .leslie-moments-audience-list label:hover {
     background: color-mix(in srgb, var(--tg-text-primary, #f5f5f5) 5%, transparent);
+}
+
+.leslie-moments-source-list label.is-unavailable {
+    opacity: 0.48;
+    cursor: not-allowed;
+}
+
+.leslie-moments-source-list label.is-unavailable:hover {
+    background: transparent;
 }
 
 .leslie-moments-audience-list input {
@@ -1330,6 +1910,25 @@ body.leslie-moments-page-open {
     }
 
     .leslie-moments-main {
+        overflow: auto;
+        padding: 0;
+    }
+
+    .leslie-moments-desktop-layout {
+        display: block;
+        height: auto;
+        min-height: 100%;
+    }
+
+    .leslie-moments-rail {
+        display: none;
+    }
+
+    .leslie-moments-content-pane {
+        overflow: visible;
+    }
+
+    .leslie-moments-content-inner {
         padding: 12px max(8px, env(safe-area-inset-right)) max(48px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
     }
 
@@ -1372,7 +1971,7 @@ body.leslie-moments-page-open {
     }
 
     .leslie-moments-mode-picker button {
-        min-height: 38px;
+        min-height: 44px;
         justify-content: flex-start;
     }
 
@@ -1467,7 +2066,12 @@ body.leslie-moments-page-open {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .leslie-moments-main {
+    .leslie-moments-main,
+    .leslie-moments-content-pane {
         scroll-behavior: auto;
+    }
+
+    .leslie-moments-audience-dialog {
+        animation: none;
     }
 }

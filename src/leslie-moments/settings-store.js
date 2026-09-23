@@ -4,8 +4,21 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
 import { normalizeMomentIdentity } from './schema.js';
 
-export const MOMENTS_SETTINGS_SCHEMA_VERSION = 1;
+export const MOMENTS_SETTINGS_SCHEMA_VERSION = 2;
 const FREQUENCIES = Object.freeze(['occasional', 'normal', 'active']);
+export const MOMENTS_ONLINE_PROVIDERS = Object.freeze(['deepseek', 'openai', 'openrouter', 'claude', 'makersuite']);
+
+export function normalizeMomentsOnlineModel(value) {
+    const provider = String(value?.provider ?? '').trim();
+    const model = String(value?.model ?? '').trim();
+    if (provider && !MOMENTS_ONLINE_PROVIDERS.includes(provider)) {
+        throw new TypeError('Select a supported online Moments provider.');
+    }
+    if (model.length > 150 || /[\r\n\x00-\x1f]/.test(model)) {
+        throw new TypeError('The Moments model name is invalid.');
+    }
+    return { provider, model };
+}
 
 function createInitialSettings(now = new Date().toISOString()) {
     return {
@@ -13,6 +26,7 @@ function createInitialSettings(now = new Date().toISOString()) {
         revision: 0,
         globalAiPostingEnabled: false,
         characterPolicies: [],
+        onlineModel: { provider: '', model: '' },
         createdAt: now,
         updatedAt: now,
     };
@@ -35,7 +49,7 @@ function normalizePolicy(value) {
 
 function validateSettings(value) {
     if (!value || typeof value !== 'object'
-        || Number(value.schemaVersion) !== MOMENTS_SETTINGS_SCHEMA_VERSION
+        || ![1, MOMENTS_SETTINGS_SCHEMA_VERSION].includes(Number(value.schemaVersion))
         || typeof value.globalAiPostingEnabled !== 'boolean'
         || !Array.isArray(value.characterPolicies)) {
         throw new TypeError('The Leslie moments settings file is invalid.');
@@ -45,7 +59,9 @@ function validateSettings(value) {
     }
     return {
         ...value,
+        schemaVersion: MOMENTS_SETTINGS_SCHEMA_VERSION,
         characterPolicies: value.characterPolicies.map(normalizePolicy),
+        onlineModel: normalizeMomentsOnlineModel(value.onlineModel),
     };
 }
 
@@ -80,11 +96,12 @@ export class LeslieMomentsSettingsStore {
             revision: Number(previous.revision ?? 0) + 1,
             globalAiPostingEnabled: value?.globalAiPostingEnabled === true,
             characterPolicies: uniquePolicies,
+            onlineModel: normalizeMomentsOnlineModel(value?.onlineModel ?? previous.onlineModel),
             updatedAt: new Date().toISOString(),
         };
         fs.mkdirSync(this.historyDirectory, { recursive: true });
         if (fs.existsSync(this.settingsPath)) {
-            writeJson(path.join(this.historyDirectory, `settings-r${previous.revision}-${Date.now()}.json`), previous);
+            fs.copyFileSync(this.settingsPath, path.join(this.historyDirectory, `settings-r${previous.revision}-${Date.now()}.json`));
         }
         writeJson(this.settingsPath, next);
         return next;

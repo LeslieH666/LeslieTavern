@@ -1,0 +1,11 @@
+{
+    "display_name": "Leslie 现实世界线",
+    "loading_order": 80,
+    "requires": [],
+    "optional": [],
+    "generate_interceptor": "LeslieRealityGenerate",
+    "js": "index.js",
+    "author": "Leslie Project",
+    "version": "0.2.0",
+    "homePage": "https://github.com/SillyTavern/SillyTavern"
+}

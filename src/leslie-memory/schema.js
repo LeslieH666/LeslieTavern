@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-export const MEMORY_SCHEMA_VERSION = 3;
+export const MEMORY_SCHEMA_VERSION = 4;
 export const MEMORY_LEVELS = Object.freeze(['A', 'B', 'C']);
 export const MEMORY_STATUSES = Object.freeze(['active', 'pending', 'archived', 'invalid', 'superseded']);
 export const MEMORY_MODEL_PROVIDERS = Object.freeze(['chat', 'local', 'deepseek', 'openai-compatible']);
@@ -85,6 +85,7 @@ export function normalizeIdentityBinding(value) {
     }
     return {
         domain: 'story',
+        worldLine: value.worldLine === 'reality' ? 'reality' : 'story',
         storyScopeId: value.storyScopeId,
         personaId: value.personaId,
         personaSourceKey: cleanString(value.personaSourceKey, 500),
@@ -182,6 +183,8 @@ export function createInitialState() {
             memoryBudgetTokens: 1200,
             contextShare: 0.12,
             maxMemories: 8,
+            crossLineMemoryEnabled: true,
+            crossLineMaxMemories: 2,
             bDecayTurns: 40,
             cDecayTurns: 8,
             memoryModel: createInitialMemoryModelSettings(),
@@ -217,6 +220,8 @@ export function normalizeMemoryState(value) {
             memoryBudgetTokens: Math.round(clampNumber(settings.memoryBudgetTokens, 128, 8000, initial.settings.memoryBudgetTokens)),
             contextShare: clampNumber(settings.contextShare, 0.02, 0.3, initial.settings.contextShare),
             maxMemories: Math.round(clampNumber(settings.maxMemories, 1, 30, initial.settings.maxMemories)),
+            crossLineMemoryEnabled: settings.crossLineMemoryEnabled !== false,
+            crossLineMaxMemories: Math.round(clampNumber(settings.crossLineMaxMemories, 1, 3, initial.settings.crossLineMaxMemories)),
             bDecayTurns: Math.round(clampNumber(settings.bDecayTurns, 4, 500, initial.settings.bDecayTurns)),
             cDecayTurns: Math.round(clampNumber(settings.cDecayTurns, 1, 100, initial.settings.cDecayTurns)),
             memoryModel: normalizeMemoryModelSettings(settings.memoryModel),
@@ -271,6 +276,12 @@ export function mergeState(current, patch) {
         }
         if (settings.maxMemories !== undefined) {
             next.settings.maxMemories = Math.round(clampNumber(settings.maxMemories, 1, 30, next.settings.maxMemories));
+        }
+        if (settings.crossLineMemoryEnabled !== undefined) {
+            next.settings.crossLineMemoryEnabled = settings.crossLineMemoryEnabled !== false;
+        }
+        if (settings.crossLineMaxMemories !== undefined) {
+            next.settings.crossLineMaxMemories = Math.round(clampNumber(settings.crossLineMaxMemories, 1, 3, next.settings.crossLineMaxMemories));
         }
         if (settings.bDecayTurns !== undefined) {
             next.settings.bDecayTurns = Math.round(clampNumber(settings.bDecayTurns, 4, 500, next.settings.bDecayTurns));

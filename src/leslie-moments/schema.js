@@ -1,4 +1,4 @@
-export const MOMENTS_SCHEMA_VERSION = 2;
+export const MOMENTS_SCHEMA_VERSION = 3;
 export const MOMENT_MODES = Object.freeze(['reality', 'story', 'aside', 'character']);
 
 const IDENTITY_TYPES = Object.freeze(['persona', 'character', 'group']);
@@ -67,10 +67,24 @@ export function normalizeMomentSourceContext(value) {
     const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
     return {
         importedMemories: normalizeImportedMemories(source.importedMemories),
+        contentRole: source.contentRole ? normalizeMomentIdentity(source.contentRole, ['character', 'group']) : null,
     };
 }
 
-export function normalizeMomentVisibility(value, { storyBinding = null } = {}) {
+function normalizeWorldLine(value, mode) {
+    if (value === 'story' || value === 'reality') {
+        return value;
+    }
+    if (mode === 'story') {
+        return 'story';
+    }
+    if (mode === 'reality' || mode === 'character') {
+        return 'reality';
+    }
+    return null;
+}
+
+export function normalizeMomentVisibility(value) {
     const type = String(value?.type ?? 'all').trim();
     if (!['all', 'selected'].includes(type)) {
         throw new TypeError('visibility.type must be all or selected.');
@@ -83,11 +97,6 @@ export function normalizeMomentVisibility(value, { storyBinding = null } = {}) {
     }
     if (type === 'selected' && !uniqueTargets.length) {
         throw new TypeError('At least one visible role must be selected.');
-    }
-    if (storyBinding) {
-        if (type !== 'selected' || uniqueTargets.length !== 1 || uniqueTargets[0].entityId !== storyBinding.counterpartId) {
-            throw new TypeError('A story moment must only target its bound character or group.');
-        }
     }
     return { type, targets: type === 'all' ? [] : uniqueTargets };
 }
@@ -120,10 +129,11 @@ export function createMomentPost(value, { id, now = new Date().toISOString() }) 
         revision: 1,
         status: 'active',
         mode,
+        worldLine: normalizeWorldLine(value?.worldLine, mode),
         origin,
         content: cleanText(value?.content, 'content', 5000),
         author,
-        visibility: normalizeMomentVisibility(value?.visibility, { storyBinding }),
+        visibility: normalizeMomentVisibility(value?.visibility),
         storyBinding,
         sourceContext: normalizeMomentSourceContext(value?.sourceContext),
         reactions: {
@@ -145,7 +155,7 @@ export function migrateMomentsTimeline(value) {
     if (version === MOMENTS_SCHEMA_VERSION) {
         return { value, migrated: false, fromVersion: version };
     }
-    if (version !== 1) {
+    if (![1, 2].includes(version)) {
         throw new TypeError(`Unsupported Leslie moments schema version: ${value.schemaVersion}.`);
     }
     const migrated = structuredClone(value);
@@ -153,6 +163,7 @@ export function migrateMomentsTimeline(value) {
     migrated.posts = migrated.posts.map(post => ({
         ...post,
         origin: post.origin === 'ai' || post.author?.type === 'character' ? 'ai' : 'user',
+        worldLine: normalizeWorldLine(post.worldLine, post.mode),
         sourceContext: normalizeMomentSourceContext(post.sourceContext),
     }));
     for (const post of migrated.posts) {

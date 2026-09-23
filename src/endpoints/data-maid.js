@@ -676,11 +676,12 @@ router.post('/report', async (req, res) => {
             return res.sendStatus(403);
         }
 
-        const dataMaid = new DataMaidService(req.user.profile.handle, req.user.directories);
+        const storageHandle = req.user.storageHandle || req.user.profile.handle;
+        const dataMaid = new DataMaidService(storageHandle, req.user.directories);
         const rawReport = await dataMaid.generateReport();
 
         const report = await dataMaid.sanitizeReport(rawReport);
-        const token = DataMaidService.generateToken(req.user.profile.handle, rawReport);
+        const token = DataMaidService.generateToken(storageHandle, rawReport);
 
         return res.json({ report, token });
     } catch (error) {
@@ -705,7 +706,8 @@ router.post('/finalize', async (req, res) => {
         }
 
         const tokenEntry = DataMaidService.TOKENS.get(token);
-        if (!tokenEntry || tokenEntry.handle !== req.user.profile.handle) {
+        const storageHandle = req.user.storageHandle || req.user.profile.handle;
+        if (!tokenEntry || tokenEntry.handle !== storageHandle) {
             return res.sendStatus(403);
         }
 
@@ -736,7 +738,8 @@ router.get('/view', async (req, res) => {
         }
 
         const tokenEntry = DataMaidService.TOKENS.get(token);
-        if (!tokenEntry || tokenEntry.handle !== req.user.profile.handle) {
+        const storageHandle = req.user.storageHandle || req.user.profile.handle;
+        if (!tokenEntry || tokenEntry.handle !== storageHandle) {
             return res.sendStatus(403);
         }
 
@@ -783,7 +786,8 @@ router.post('/delete', async (req, res) => {
         }
 
         const tokenEntry = DataMaidService.TOKENS.get(token);
-        if (!tokenEntry || tokenEntry.handle !== req.user.profile.handle) {
+        const storageHandle = req.user.storageHandle || req.user.profile.handle;
+        if (!tokenEntry || tokenEntry.handle !== storageHandle) {
             return res.sendStatus(403);
         }
 

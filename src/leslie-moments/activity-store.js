@@ -215,6 +215,11 @@ function normalizeActor(value) {
     }
 }
 
+function identitiesMatch(left, right) {
+    return ['entityId', 'type', 'sourceKey', 'label', 'avatar']
+        .every(field => String(left?.[field] ?? '') === String(right?.[field] ?? ''));
+}
+
 function saveVersioned({ previous, next, filePath, historyDirectory, prefix, schemaVersion, snapshot = true }) {
     fs.mkdirSync(historyDirectory, { recursive: true });
     if (snapshot && fs.existsSync(filePath)) {
@@ -247,6 +252,21 @@ function mergeActivityItems(legacyItems, sidecarItems) {
         merged.set(key, item);
     }
     return [...merged.values()];
+}
+
+function mergeReadReceipts(legacyItems, sidecarItems, currentRevision) {
+    const receipts = mergeActivityItems(legacyItems, sidecarItems);
+    const unique = new Map();
+    for (const receipt of receipts) {
+        const revision = Number(receipt?.postRevision ?? currentRevision);
+        const actorId = String(receipt?.actor?.entityId ?? '').trim();
+        const key = actorId ? `${revision}:${actorId}` : `legacy:${receipt?.id ?? unique.size}`;
+        const existing = unique.get(key);
+        if (!existing || String(receipt?.readAt ?? '').localeCompare(String(existing?.readAt ?? '')) < 0) {
+            unique.set(key, receipt);
+        }
+    }
+    return [...unique.values()];
 }
 
 function pruneQueueJobs(jobs) {
@@ -344,7 +364,7 @@ export class LeslieMomentsActivityStore {
             const comments = postActivity.comments.filter(item => Number(item.postRevision) === currentRevision);
             return {
                 ...post,
-                readReceipts: mergeActivityItems(post.readReceipts, receipts),
+                readReceipts: mergeReadReceipts(post.readReceipts, receipts, currentRevision),
                 reactions: {
                     likes: mergeActivityItems(post.reactions?.likes, likes),
                     comments: mergeActivityItems(post.reactions?.comments, comments),
@@ -352,6 +372,40 @@ export class LeslieMomentsActivityStore {
                 activityRevision: activity.revision,
             };
         });
+    }
+
+    alignPersonaCommentAuthors(posts) {
+        if (!fs.existsSync(this.activityPath)) {
+            return { changedComments: 0, activity: createInitialActivity() };
+        }
+        const personaAuthors = new Map((Array.isArray(posts) ? posts : [])
+            .filter(post => post?.author?.type === 'persona')
+            .map(post => [post.id, post.author]));
+        const previous = this.readActivity();
+        const next = structuredClone(previous);
+        let changedComments = 0;
+
+        for (const [postId, postActivity] of Object.entries(next.posts)) {
+            const postAuthor = personaAuthors.get(postId);
+            if (!postAuthor) {
+                continue;
+            }
+            for (const comment of postActivity.comments) {
+                if (comment.actor?.type === 'persona' && !identitiesMatch(comment.actor, postAuthor)) {
+                    comment.actor = structuredClone(postAuthor);
+                    changedComments += 1;
+                }
+            }
+        }
+
+        if (!changedComments) {
+            return { changedComments: 0, activity: previous };
+        }
+        validateActivity(next);
+        return {
+            changedComments,
+            activity: this.saveActivity(previous, next),
+        };
     }
 
     planPost(post, candidates, { now = new Date().toISOString(), random = Math.random, enthusiasm = 'medium' } = {}) {
@@ -477,6 +531,51 @@ export class LeslieMomentsActivityStore {
         next.jobs = pruneQueueJobs(next.jobs);
         next.status.state = next.paused ? 'paused' : 'running';
         return { jobs: planned, queue: this.saveQueue(previous, next) };
+    }
+
+    setLike(post, actorValue, likedValue, { now = new Date().toISOString() } = {}) {
+        const actor = (() => {
+            try {
+                return normalizeMomentIdentity(actorValue, ['persona']);
+            } catch (error) {
+                throw new LeslieMomentsActivityStoreError('INVALID_INPUT', error.message);
+            }
+        })();
+        const liked = likedValue === true;
+        const previous = this.readActivity();
+        const next = structuredClone(previous);
+        const postActivity = getPostActivity(next, post.id);
+        const postRevision = Number(post.revision ?? 1);
+        const existingIndex = postActivity.likes.findIndex(item => item.actor?.entityId === actor.entityId
+            && Number(item.postRevision) === postRevision
+            && item.source === 'user');
+        const existing = existingIndex >= 0 ? postActivity.likes[existingIndex] : null;
+        if (liked === Boolean(existing)) {
+            return { liked, like: existing, changed: false };
+        }
+        if (liked) {
+            const currentLikeCount = (post.reactions?.likes ?? [])
+                .filter(item => Number(item.postRevision ?? postRevision) === postRevision).length
+                + postActivity.likes.filter(item => Number(item.postRevision) === postRevision).length;
+            if (currentLikeCount >= 1000) {
+                throw new LeslieMomentsActivityStoreError('LIMIT_REACHED', 'This moment has reached the like storage limit.');
+            }
+            const id = randomUUID();
+            const like = {
+                id,
+                jobId: `manual:${id}`,
+                actor,
+                postRevision,
+                createdAt: now,
+                source: 'user',
+            };
+            postActivity.likes.push(like);
+            this.saveActivity(previous, next);
+            return { liked: true, like, changed: true };
+        }
+        postActivity.likes.splice(existingIndex, 1);
+        this.saveActivity(previous, next);
+        return { liked: false, like: null, changed: true };
     }
 
     addComment(post, actorValue, contentValue, { parentCommentId = null, now = new Date().toISOString(), source = 'user' } = {}) {
@@ -637,6 +736,25 @@ export class LeslieMomentsActivityStore {
         return changed ? this.saveQueue(previous, next) : previous;
     }
 
+    cancelCommentJobs(disallowedActorIds = [], { now = new Date().toISOString() } = {}) {
+        const disallowed = new Set(Array.isArray(disallowedActorIds) ? disallowedActorIds : []);
+        const previous = this.readQueue();
+        const next = structuredClone(previous);
+        let changed = false;
+        for (const job of next.jobs) {
+            if (job.type === 'review_thread'
+                && (job.status === 'pending' || job.status === 'running')
+                && disallowed.has(job.actor?.entityId)) {
+                job.status = 'cancelled';
+                job.leaseUntil = null;
+                job.cancelledAt = now;
+                job.updatedAt = now;
+                changed = true;
+            }
+        }
+        return changed ? this.saveQueue(previous, next) : previous;
+    }
+
     cancelPost(postId, { now = new Date().toISOString() } = {}) {
         const previous = this.readQueue();
         const next = structuredClone(previous);
@@ -720,10 +838,13 @@ export class LeslieMomentsActivityStore {
         };
     }
 
-    completeJob(jobId, value, { now = new Date().toISOString(), knownComments = [] } = {}) {
+    completeJob(jobId, value, { now = new Date().toISOString(), knownComments = [], allowComments = true } = {}) {
         let action = cleanOptionalText(value?.action, 40);
         if (!ACTIONS.includes(action)) {
             throw new LeslieMomentsActivityStoreError('INVALID_INPUT', 'Unsupported Leslie moments interaction action.');
+        }
+        if (!allowComments) {
+            action = action === 'like_and_comment' ? 'like' : ['comment', 'reply'].includes(action) ? 'read' : action;
         }
         const comment = cleanOptionalText(value?.comment, 500);
         if ((action === 'comment' || action === 'reply' || action === 'like_and_comment') && !comment) {
@@ -746,17 +867,22 @@ export class LeslieMomentsActivityStore {
         const previousActivity = this.readActivity();
         const nextActivity = structuredClone(previousActivity);
         const postActivity = getPostActivity(nextActivity, job.postId);
-        const existingReceipt = postActivity.readReceipts.find(item => item.jobId === job.id);
-        if (!existingReceipt) {
-            const receipt = {
-                id: randomUUID(),
-                jobId: job.id,
-                actor: job.actor,
-                postRevision: job.postRevision,
-                action,
-                readAt: now,
-            };
-            postActivity.readReceipts.push(receipt);
+        const jobAlreadyApplied = postActivity.readReceipts.some(item => item.jobId === job.id)
+            || postActivity.likes.some(item => item.jobId === job.id)
+            || postActivity.comments.some(item => item.jobId === job.id);
+        if (!jobAlreadyApplied) {
+            const actorAlreadyRead = postActivity.readReceipts.some(item => item.actor?.entityId === job.actor.entityId
+                && Number(item.postRevision) === Number(job.postRevision));
+            if (!actorAlreadyRead) {
+                postActivity.readReceipts.push({
+                    id: randomUUID(),
+                    jobId: job.id,
+                    actor: job.actor,
+                    postRevision: job.postRevision,
+                    action,
+                    readAt: now,
+                });
+            }
             if (action === 'like' || action === 'like_and_comment') {
                 const existingLike = postActivity.likes.some(item => item.actor?.entityId === job.actor.entityId
                     && Number(item.postRevision) === Number(job.postRevision));

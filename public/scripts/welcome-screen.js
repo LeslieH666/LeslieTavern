@@ -33,6 +33,16 @@ import { deleteGroupChatByName, getGroupAvatar, groups, is_group_generating, ope
 import { t } from './i18n.js';
 import { callGenericPopup, POPUP_TYPE } from './popup.js';
 import { getMessageTimeStamp } from './RossAscends-mods.js';
+import { getLeslieConnectionState } from './leslie-connection-state.js';
+import {
+    buildHomeMomentActivities,
+    getLeslieHomeGreeting,
+    LESLIE_HOME_CHARACTER_LIMIT,
+    migratePinnedCharacterAvatar,
+    normalizePinnedCharacterAvatars,
+    rankHomeCharacters,
+    selectHomeContinueChat,
+} from './leslie-home-core.js';
 import { renderTemplateAsync } from './templates.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { clamp, flashHighlight, isElementInViewport, sortMoments, timestampToMoment } from './utils.js';
@@ -40,6 +50,7 @@ import { clamp, flashHighlight, isElementInViewport, sortMoments, timestampToMom
 const assistantAvatarKey = 'assistant';
 const pinnedChatsKey = 'pinnedChats';
 const recentChatsSettingsKey = 'recentChatsSettings';
+const pinnedHomeCharactersKey = 'leslieHomePinnedCharacters';
 const defaultAssistantAvatar = 'default_Assistant.png';
 
 const DEFAULT_MAX_DISPLAYED = 15;
@@ -201,6 +212,57 @@ class PinnedChatsManager {
     }
 }
 
+class PinnedHomeCharactersManager {
+    static getAll() {
+        let value = [];
+        try {
+            value = JSON.parse(accountStorage.getItem(pinnedHomeCharactersKey) || '[]');
+        } catch (error) {
+            console.warn('Failed to parse Leslie home character pins.', error);
+        }
+        const normalized = normalizePinnedCharacterAvatars(value, getHomeAvailableCharacters());
+        if (JSON.stringify(value) !== JSON.stringify(normalized)) {
+            this.setAll(normalized);
+        }
+        return normalized;
+    }
+
+    static setAll(avatars) {
+        const normalized = normalizePinnedCharacterAvatars(avatars, getHomeAvailableCharacters());
+        accountStorage.setItem(pinnedHomeCharactersKey, JSON.stringify(normalized));
+    }
+
+    static toggle(avatar) {
+        const pins = this.getAll();
+        const index = pins.indexOf(avatar);
+        if (index >= 0) {
+            pins.splice(index, 1);
+        } else if (pins.length < LESLIE_HOME_CHARACTER_LIMIT) {
+            pins.push(avatar);
+        } else {
+            toastr.info(t`You can pin up to ${LESLIE_HOME_CHARACTER_LIMIT} characters.`);
+            return false;
+        }
+        this.setAll(pins);
+        return true;
+    }
+
+    static rename(oldAvatar, newAvatar) {
+        let pins = [];
+        try {
+            pins = JSON.parse(accountStorage.getItem(pinnedHomeCharactersKey) || '[]');
+        } catch (error) {
+            console.warn('Failed to parse Leslie home character pins during rename.', error);
+        }
+        const migrated = migratePinnedCharacterAvatar(pins, oldAvatar, newAvatar);
+        accountStorage.setItem(pinnedHomeCharactersKey, JSON.stringify(migrated));
+    }
+}
+
+function getHomeAvailableCharacters() {
+    return characters.filter(character => character?.avatar && character.avatar !== defaultAssistantAvatar);
+}
+
 export function getPermanentAssistantAvatar() {
     const assistantAvatar = accountStorage.getItem(assistantAvatarKey);
     if (assistantAvatar === null) {
@@ -225,27 +287,57 @@ export function getPermanentAssistantAvatar() {
  */
 export async function openWelcomeScreen({ force = false, expand = false } = {}) {
     const currentChatId = getCurrentChatId();
-    if (currentChatId !== undefined || (chat.length > 0 && !force)) {
+    const useLeslieHome = document.body.classList.contains('leslie-modern')
+        && !document.body.classList.contains('leslie-chat-layout-disabled');
+    if (currentChatId !== undefined) {
+        setLeslieHomeOpen(false);
+        return;
+    }
+    if (useLeslieHome && document.querySelector('#chat > .leslieHomePanel') && !force) {
+        setLeslieHomeOpen(true);
+        return;
+    }
+    if (!useLeslieHome && chat.length > 0 && !force) {
+        setLeslieHomeOpen(false);
         return;
     }
 
-    const recentChats = await getRecentChats();
+    const [recentChats, momentActivities] = await Promise.all([
+        getRecentChats({ metadata: useLeslieHome }),
+        useLeslieHome ? getRecentMomentActivities() : Promise.resolve([]),
+    ]);
     const chatAfterFetch = getCurrentChatId();
     if (chatAfterFetch !== currentChatId) {
         console.debug('Chat changed while fetching recent chats.');
+        setLeslieHomeOpen(false);
         return;
     }
 
-    if (chatAfterFetch === undefined && force) {
+    if (chatAfterFetch === undefined && (force || useLeslieHome)) {
         console.debug('Forcing welcome screen open.');
         chat.splice(0, chat.length);
         $('#chat').empty();
     }
 
+    if (useLeslieHome) {
+        setLeslieHomeOpen(true);
+        await sendLeslieHomePanel(recentChats, momentActivities);
+        return;
+    }
+
+    setLeslieHomeOpen(false);
     await sendWelcomePanel(recentChats, expand);
     await unshallowPermanentAssistant();
     sendAssistantMessage();
     sendWelcomePrompt();
+}
+
+function setLeslieHomeOpen(open) {
+    const wasOpen = document.body.classList.contains('leslie-home-open');
+    document.body.classList.toggle('leslie-home-open', open);
+    if (wasOpen !== open || open) {
+        document.dispatchEvent(new CustomEvent('leslie:home-state-changed', { detail: { open } }));
+    }
 }
 
 /**
@@ -305,6 +397,241 @@ function sendWelcomePrompt() {
     const message = getSystemMessageByType(system_message_types.WELCOME_PROMPT);
     chat.push(message);
     addOneMessage(message, { scroll: false });
+}
+
+function getHomeMessagePreview(value) {
+    const preview = String(value || '')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return preview || t`Continue this conversation`;
+}
+
+function getHomeWorldLineLabel(recentChat) {
+    if (recentChat?.is_group) {
+        return t`Group chat`;
+    }
+    return recentChat?.chat_metadata?.leslie_world_line?.kind === 'reality'
+        ? '现实世界线'
+        : '故事线';
+}
+
+function getLatestChatForAvatar(chats, avatar) {
+    return chats
+        .filter(item => !item.is_group && item.avatar === avatar)
+        .sort((left, right) => timestampToMoment(right.last_mes).valueOf() - timestampToMoment(left.last_mes).valueOf())[0] ?? null;
+}
+
+async function getRecentMomentActivities() {
+    try {
+        const response = await fetch('/api/leslie/moments', {
+            method: 'GET',
+            headers: getRequestHeaders(),
+            cache: 'no-cache',
+        });
+        if (!response.ok) {
+            return [];
+        }
+        const result = await response.json();
+        return buildHomeMomentActivities(result?.posts, 3).map(activity => ({
+            ...activity,
+            icon: activity.kind === 'comment' ? 'fa-comment-dots' : 'fa-camera-retro',
+            date: activity.createdAt ? timestampToMoment(activity.createdAt).fromNow() : '',
+        }));
+    } catch (error) {
+        console.debug('Leslie home could not load Moments activities.', error);
+        return [];
+    }
+}
+
+function buildLeslieHomeData(chats, momentActivities) {
+    const availableCharacters = getHomeAvailableCharacters();
+    const pins = PinnedHomeCharactersManager.getAll();
+    const homeCharacters = rankHomeCharacters(availableCharacters, chats, pins)
+        .map((character) => {
+            const latestChat = getLatestChatForAvatar(chats, character.avatar);
+            return {
+                avatar: character.avatar,
+                avatarUrl: getThumbnailUrl('avatar', character.avatar),
+                name: character.name || t`Unnamed character`,
+                fileName: latestChat?.chat_name || '',
+                pinned: character.homePinned,
+                pinLabel: character.homePinned ? '取消首页置顶' : '置顶到首页',
+                activityLabel: character.homePinned
+                    ? '已置顶'
+                    : character.homeSessions > 0 ? `${character.homeSessions} 个最近会话` : '开始第一段对话',
+            };
+        });
+    const newestChat = selectHomeContinueChat(chats);
+    const continueChat = newestChat ? {
+        avatar: newestChat.avatar || '',
+        group: newestChat.group || '',
+        fileName: newestChat.chat_name,
+        name: newestChat.char_name,
+        avatarUrl: newestChat.is_group ? '' : newestChat.char_thumbnail,
+        isGroup: newestChat.is_group,
+        lineLabel: getHomeWorldLineLabel(newestChat),
+        preview: getHomeMessagePreview(newestChat.mes),
+        date: timestampToMoment(newestChat.last_mes).fromNow(),
+    } : null;
+    const connection = getLeslieConnectionState();
+    const connectionNotice = connection.connected ? null : {
+        title: connection.checking ? '正在检测模型连接' : connection.configured ? '模型还没有连接' : '先完成模型连接',
+        detail: connection.checking ? '完成后就可以开始聊天' : connection.configured ? '打开模型设置并检查连接' : '选择在线 API 或本地模型',
+    };
+    const emptyCharacters = availableCharacters.length === 0;
+    return {
+        greeting: getLeslieHomeGreeting(),
+        subtitle: emptyCharacters
+            ? '添加第一位角色，把这里变成属于你的本地陪伴空间。'
+            : continueChat ? '继续熟悉的故事，或者看看角色们最近在做什么。' : '选择一位角色，开始第一段对话。',
+        emptyCharacters,
+        continueChat,
+        connectionNotice,
+        characterSectionTitle: continueChat ? '常用角色' : '选择一位角色',
+        homeCharacters,
+        hasMomentActivities: momentActivities.length > 0,
+        momentActivities,
+    };
+}
+
+async function openHomeCharacterPinManager() {
+    const availableCharacters = getHomeAvailableCharacters()
+        .slice()
+        .sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), 'zh-CN'));
+    const pins = PinnedHomeCharactersManager.getAll();
+    const customInputs = availableCharacters.map((character, index) => ({
+        id: `leslie-home-pin-${index}`,
+        type: 'checkbox',
+        label: character.name || t`Unnamed character`,
+        tooltip: '置顶后会优先显示在首页常用角色中。',
+        defaultState: pins.includes(character.avatar),
+    }));
+    let nextPins = null;
+    const result = await callGenericPopup(
+        `<h3>管理首页置顶角色</h3><p>最多置顶 ${LESLIE_HOME_CHARACTER_LIMIT} 位。未置顶的位置会根据最近会话频率自动补充。</p>`,
+        POPUP_TYPE.CONFIRM,
+        null,
+        {
+            okButton: t`Save`,
+            cancelButton: t`Cancel`,
+            allowVerticalScrolling: true,
+            customInputs,
+            onClosing: (popup) => {
+                if (!popup.result) {
+                    return true;
+                }
+                const selected = customInputs
+                    .map((input, index) => popup.inputResults.get(input.id) ? availableCharacters[index].avatar : null)
+                    .filter(Boolean);
+                if (selected.length > LESLIE_HOME_CHARACTER_LIMIT) {
+                    toastr.warning(`最多只能置顶 ${LESLIE_HOME_CHARACTER_LIMIT} 位角色。`);
+                    return false;
+                }
+                nextPins = selected;
+                return true;
+            },
+        },
+    );
+    if (result && nextPins) {
+        PinnedHomeCharactersManager.setAll(nextPins);
+        await refreshWelcomeScreen();
+    }
+}
+
+async function openHomeCharacter(avatar, fileName) {
+    if (fileName) {
+        await openRecentCharacterChat(avatar, fileName);
+        return;
+    }
+    const characterId = characters.findIndex(character => character.avatar === avatar);
+    if (characterId >= 0) {
+        await selectCharacterById(characterId);
+    }
+}
+
+function focusHomeCharacterList() {
+    const characterFilter = document.querySelector('#leslie-conversation-sidebar [data-filter="character"]');
+    if (characterFilter instanceof HTMLButtonElement) {
+        characterFilter.click();
+    }
+    const search = document.getElementById('leslie-conversation-search');
+    if (search instanceof HTMLInputElement) {
+        search.focus();
+    }
+}
+
+async function startHomeTemporaryChat() {
+    await newAssistantChat({ temporary: true });
+    const sendTextArea = document.getElementById('send_textarea');
+    if (sendTextArea instanceof HTMLTextAreaElement) {
+        sendTextArea.focus();
+    }
+}
+
+function openHomeMoments() {
+    document.getElementById('leslie-moments-launcher')?.click();
+}
+
+function bindLeslieHomeActions(root) {
+    root.addEventListener('click', (event) => {
+        const button = event.target instanceof Element ? event.target.closest('[data-home-action]') : null;
+        if (!(button instanceof HTMLButtonElement)) {
+            return;
+        }
+        const action = button.dataset.homeAction;
+        if (action === 'open-chat') {
+            const avatar = button.dataset.avatar;
+            const group = button.dataset.group;
+            const fileName = button.dataset.file;
+            if (avatar && fileName) {
+                void openRecentCharacterChat(avatar, fileName);
+            } else if (group && fileName) {
+                void openRecentGroupChat(group, fileName);
+            }
+        } else if (action === 'open-character' && button.dataset.avatar) {
+            void openHomeCharacter(button.dataset.avatar, button.dataset.file || '');
+        } else if (action === 'toggle-character-pin' && button.dataset.avatar) {
+            event.stopPropagation();
+            if (PinnedHomeCharactersManager.toggle(button.dataset.avatar)) {
+                void refreshWelcomeScreen();
+            }
+        } else if (action === 'manage-pins') {
+            void openHomeCharacterPinManager();
+        } else if (action === 'focus-characters') {
+            focusHomeCharacterList();
+        } else if (action === 'temporary-chat') {
+            void startHomeTemporaryChat();
+        } else if (action === 'open-moments') {
+            openHomeMoments();
+        } else if (action === 'open-workshop') {
+            document.getElementById('rm_button_create')?.click();
+        } else if (action === 'configure-model') {
+            document.querySelector('#leslie-conversation-sidebar .leslie-connection-card')?.click();
+        }
+    });
+}
+
+async function sendLeslieHomePanel(chats, momentActivities) {
+    try {
+        const chatElement = document.getElementById('chat');
+        if (!chatElement) {
+            return;
+        }
+        const template = await renderTemplateAsync('leslieHomePanel', buildLeslieHomeData(chats, momentActivities));
+        const fragment = document.createRange().createContextualFragment(template);
+        const panel = fragment.querySelector('.leslieHomePanel');
+        if (!panel) {
+            return;
+        }
+        bindLeslieHomeActions(panel);
+        panel.querySelectorAll('img').forEach((image) => {
+            image.addEventListener('error', () => image.classList.add('is-broken'), { once: true });
+        });
+        chatElement.append(panel);
+    } catch (error) {
+        console.error('Leslie home error:', error);
+    }
 }
 
 /**
@@ -760,12 +1087,12 @@ async function openRecentChatsSettingsPopup() {
  * @property {boolean} hidden Chat will be hidden by default
  * @property {boolean} pinned Indicates if the chat is pinned
  */
-async function getRecentChats() {
+async function getRecentChats({ metadata = false } = {}) {
     const settings = getRecentChatsSettings();
     const response = await fetch('/api/chats/recent', {
         method: 'POST',
         headers: getRequestHeaders(),
-        body: JSON.stringify({ max: settings.maxDisplayed, pinned: PinnedChatsManager.getAll() }),
+        body: JSON.stringify({ max: settings.maxDisplayed, pinned: PinnedChatsManager.getAll(), metadata }),
         cache: 'no-cache',
     });
 
@@ -941,6 +1268,7 @@ export function initWelcomeScreen() {
         if (oldAvatar === getPermanentAssistantAvatar()) {
             accountStorage.setItem(assistantAvatarKey, newAvatar);
         }
+        PinnedHomeCharactersManager.rename(oldAvatar, newAvatar);
     });
 
     eventSource.on(event_types.CHAT_RENAMED, async ({ avatarId, groupId, oldFileName, newFileName }) => {
